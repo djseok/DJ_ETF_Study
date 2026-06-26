@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/Project-Noonnu/noonfonts_2107@1.1/Pretendard-Regular.woff') format('woff');
+    font-weight: 400; font-style: normal;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/Project-Noonnu/noonfonts_2107@1.1/Pretendard-Bold.woff') format('woff');
+    font-weight: 700; font-style: normal;
+}
+body { font-family: 'Pretendard', -apple-system, sans-serif; background-color: #fcf8f2; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.signal-buy-strong { background-color: #fef2f2; border-left: 8px solid #dc2626; color: #7f1d1d; }
+.signal-buy-weak { background-color: #fff7ed; border-left: 8px solid #f97316; color: #9a3412; }
+.signal-sell-strong { background-color: #eff6ff; border-left: 8px solid #1d4ed8; color: #1e3a8a; }
+.signal-sell-weak { background-color: #f0fdf4; border-left: 8px solid #16a34a; color: #14532d; }
+.signal-hold { background-color: #f8fafc; border-left: 8px solid #64748b; color: #334155; }
+.corgi-bg { 
+    background-image: url('https://img.icons8.com/color/96/corgi.png'); 
+    background-repeat: no-repeat; 
+    background-position: right -10px bottom -10px; 
+    background-size: 120px; 
+    opacity: 0.1; 
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
+    pointer-events: none; 
+}
+input[type="number"]::-webkit-inner-spin-button, 
+input[type="number"]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; margin: 0; 
+}
