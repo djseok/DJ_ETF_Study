@@ -52,7 +52,6 @@ function switchTab(tabName) {
     if(['port', 'calc', 'conc', 'div'].includes(tabName)) loadPortfolioData(tabName);
 }
 
-// CSV 파싱 공통 함수
 function parseCsvToMatrix(text) {
     return text.split('\n').map(row => {
         let match = row.match(/(".*?"|[^",\r\n]+)(?=\s*,|\s*$|\r|$)/g);
@@ -60,15 +59,19 @@ function parseCsvToMatrix(text) {
     }).filter(row => row.length > 0);
 }
 
-// 초기화 함수
+// 초기화 함수: 수정됨 (데이터 로딩 순서 보장)
 async function initDashboard() {
     try {
         const response = await fetch(QUANT_CSV_URL);
         masterRawData = parseCsvToMatrix(await response.text());
         extractGlobalMacroVariables();
         populateAssetDropdownSelector();
+        
         if(masterRawData.length > 0) renderTargetAssetDashboard(document.getElementById('assetSelector').value);
         
+        // 데이터 동기화 강제
+        await loadPortfolioData('init'); 
+
         document.getElementById('assetSelector').addEventListener('change', (e) => renderTargetAssetDashboard(e.target.value));
         document.getElementById('inputCash').addEventListener('input', () => {
             if(!document.getElementById('viewCalc').classList.contains('hidden')) calculateRebalancing();
