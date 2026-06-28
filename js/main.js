@@ -108,7 +108,7 @@ window.onload = initDashboard;
 // =========================================================
 
 // 동진님이 발급받은 실제 URL이 들어갔습니다!
-const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyCLLoj2eDum8mFpT8xcUA9blXeWEOIt48tAViFXuZhzkHVbjtrf6yVCFOdyR9h0JH0/exec"; 
+const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzzS3Wb2R3bC_P9AkA8Eq1KWLYRFk8o1w5VhTApnQQyPpT29wS1HLTfo4cOyT8AWPYl/exec"; 
 
 async function submitTransactionLog() {
     if(!GAS_WEBHOOK_URL || GAS_WEBHOOK_URL.includes("여기에")) return alert("구글 스크립트 주소(URL)가 아직 연결되지 않았습니다!");
@@ -147,3 +147,4 @@ async function submitTransactionLog() {
         btn.disabled = false;
     }
 }
+
