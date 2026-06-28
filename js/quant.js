@@ -1,21 +1,29 @@
+// =========================================================
+// 📈 퀀트 예측 엔진 (공백 제거 정제 로직 탑재)
+// =========================================================
+
 function extractGlobalMacroVariables() {
     masterRawData.forEach(row => {
-        if(row[0] === '지표') {
+        // 공백 제거 및 대문자 변환으로 비교 로직 강화
+        let label = row[0] ? row[0].replace(/\s+/g, '').toUpperCase() : "";
+        let name = row[1] ? row[1].replace(/\s+/g, '').toUpperCase() : "";
+        
+        if(label === '지표') {
             let prev = parseFloat(String(row[3]).replace(/,/g, ''))||0;
             let live = parseFloat(String(row[4]).replace(/,/g, ''))||0;
             let pct = prev > 0 ? ((live - prev) / prev * 100) : 0;
             let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
             let sign = pct >= 0 ? '▲' : '▼';
 
-            if(row[1] === '나스닥') {
+            if(name === '나스닥') {
                 document.getElementById('macro-nasdaq').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toLocaleString()}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-            } else if(row[1] === '환율') {
+            } else if(name === '환율') {
                 globalFxDelta = prev > 0 ? (live - prev) / prev : 0;
                 document.getElementById('macro-fx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">₩${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-            } else if(row[1].toUpperCase() === 'VIX') {
+            } else if(name === 'VIX') {
                 globalVixValue = live;
                 document.getElementById('macro-vix').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-            } else if(row[1].replace(/\s+/g, '').includes('TNX')) {
+            } else if(name.includes('TNX')) {
                 document.getElementById('macro-tnx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}%</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
             }
         }
@@ -24,21 +32,32 @@ function extractGlobalMacroVariables() {
 
 function populateAssetDropdownSelector() {
     const selector = document.getElementById('assetSelector');
+    // 헤더(기준)만 필터링하여 유니크한 종목 리스트 생성
     const uniqueAssets = [...new Set(masterRawData.filter(row => row[0] === '기준').map(row => row[1]))];
     selector.innerHTML = uniqueAssets.map(asset => `<option value="${asset}">${asset}</option>`).join('');
 }
 
 function renderTargetAssetDashboard(target) {
+    if(!target) return;
+    
     let tBuy = -2.5, tSell = 3.0, beta = 1.0, bPrev = 0, bLive = 0, comps = [];
+    let cleanTarget = target.replace(/\s+/g, '').toUpperCase();
+
     masterRawData.forEach(r => {
-        if(r[1] !== target && r[0] !== target) return;
+        let r0 = r[0] ? r[0].replace(/\s+/g, '').toUpperCase() : "";
+        let r1 = r[1] ? r[1].replace(/\s+/g, '').toUpperCase() : "";
+        
+        // 종목 매칭 검사
+        if (r0 !== cleanTarget && r1 !== cleanTarget) return;
+
         let val3 = parseFloat(String(r[3]).replace(/,/g, ''))||0;
         let val4 = parseFloat(String(r[4]).replace(/,/g, ''))||0;
         let val5 = parseFloat(String(r[5]).replace(/,/g, ''))||0;
-        if(r[0] === '기준') { tBuy = val3; tSell = val4; }
-        else if(r[0] === '베타') { beta = val3; }
-        else if(r[0] === '본체') { bPrev = val3; bLive = val4; }
-        else if(r[0] === target) { comps.push({ name: r[1], ticker: r[2], prev: val3, live: val4, w: val5 }); }
+
+        if(r0 === '기준') { tBuy = val3; tSell = val4; }
+        else if(r0 === '베타') { beta = val3; }
+        else if(r0 === '본체') { bPrev = val3; bLive = val4; }
+        else { comps.push({ name: r[1], ticker: r[2], prev: val3, live: val4, w: val5 }); }
     });
 
     document.getElementById('threshBuyUI').innerText = `${tBuy}%`; 
