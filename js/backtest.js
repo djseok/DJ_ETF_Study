@@ -1,7 +1,12 @@
+// =====================================================
+// 🧪 동진 투자 공부실 타임머신 백테스팅 시뮬레이터 Engine
+// =====================================================
+
 function runBacktest() {
     const startCash = parseFloat(document.getElementById('btCash').value) || 10000000;
     const targetAsset = document.getElementById('btAsset').value;
     
+    // masterRawData(1번 시트 과거 이력)에서 해당 자산의 과거 데이터 추출
     let historicalRows = masterRawData.filter(row => row[1] === targetAsset);
     
     if(historicalRows.length === 0) {
@@ -9,7 +14,7 @@ function runBacktest() {
         return;
     }
 
-    // 🚀 수정됨: b.date -> b[0] 로 교체 완료
+    // 💡 오류 수정 완료: b.date 가 아니라 배열 인덱스 b[0] 로 날짜를 정확히 불러옵니다!
     historicalRows.sort((a, b) => new Date(a[0]) - new Date(b[0]));
 
     let cash = startCash;
@@ -39,7 +44,7 @@ function runBacktest() {
             <div class="text-xs text-slate-400">시뮬레이션 완료 정산서</div>
             <div>💰 최종 자산: ₩${Math.round(totalAsset).toLocaleString()}</div>
             <div>📈 누적 수익률: <span class="${profitPct>=0?'text-red-400':'text-blue-400'}">${profitPct.toFixed(2)}%</span></div>
-            <div class="text-[11px] text-slate-500">* 본 시뮬레이션은 대시보드 알고리즘 규칙에 따른 기계적 매매 결과입니다.</div>
+            <div class="text-[11px] text-slate-500">* 본 시뮬레이션은 대시보드 알고리즘 규칙에 따른 기계적 분할 매매 결과입니다.</div>
         </div>
     `;
 }
