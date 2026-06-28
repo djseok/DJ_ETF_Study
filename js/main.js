@@ -68,13 +68,14 @@ function parseCsvToMatrix(text) {
     }).filter(row => row.length > 0);
 }
 
+// =========================================================
 // 🚀 [4] 시스템 최초 시동 (에러 무시 장갑차 모드 + 1번 탭 고정)
+// =========================================================
 async function initDashboard() {
     try {
         const response = await fetch(QUANT_CSV_URL);
         masterRawData = parseCsvToMatrix(await response.text());
 
-        // 🛡️ 방어막: quant.js가 비어있어도 관제탑이 멈추지 않고 부드럽게 패스합니다!
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
 
@@ -83,7 +84,6 @@ async function initDashboard() {
             renderTargetAssetDashboard(selector.value);
         }
 
-        // 🌟 핵심: 위에서 무슨 일이 있었든 간에, 배당과 포트폴리오 데이터는 무조건 멱살 잡고 끌고 옵니다!
         if (typeof loadPortfolioData === 'function') {
             await loadPortfolioData('init'); 
         }
@@ -94,7 +94,6 @@ async function initDashboard() {
             });
         }
 
-        // 🎯 [이 부분이 범인 검거!] 사이트가 켜지자마자 무조건 '예측 엔진' 탭을 엽니다.
         switchTab('quant');
 
     } catch (err) { 
@@ -103,3 +102,48 @@ async function initDashboard() {
 }
 
 window.onload = initDashboard;
+
+// =========================================================
+// 📡 [5] 구글 시트 원장 실시간 송신 (매수/매도)
+// =========================================================
+
+// 동진님이 발급받은 실제 URL이 들어갔습니다!
+const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyCLLoj2eDum8mFpT8xcUA9blXeWEOIt48tAViFXuZhzkHVbjtrf6yVCFOdyR9h0JH0/exec"; 
+
+async function submitTransactionLog() {
+    if(!GAS_WEBHOOK_URL || GAS_WEBHOOK_URL.includes("여기에")) return alert("구글 스크립트 주소(URL)가 아직 연결되지 않았습니다!");
+
+    const user = document.getElementById('inputLogUser').value;
+    const type = document.getElementById('inputLogType').value;
+    const stock = document.getElementById('inputLogStock').value;
+    const price = document.getElementById('inputLogPrice').value;
+    let qty = document.getElementById('inputLogQty').value;
+
+    if(!price || !qty) return alert("단가와 수량을 정확히 입력해주세요!");
+
+    // 핵심: 매도(Sell)일 경우 수량을 마이너스(-)로 변환하여 전송
+    if(type === "매도") qty = -Math.abs(qty);
+
+    const btn = document.getElementById('btnSubmitLog');
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 전송 중...`;
+    btn.disabled = true;
+
+    try {
+        // 구글 서버로 데이터 전송 (no-cors 모드로 브라우저 차단 에러 방지)
+        await fetch(`${GAS_WEBHOOK_URL}?user=${user}&type=${type}&stock=${stock}&price=${price}&qty=${qty}`, {
+            method: 'GET',
+            mode: 'no-cors'
+        });
+        
+        alert(`✅ [${user}]님의 [${stock}] ${type} 기록이 원장에 저장되었습니다!\n(반영을 위해 웹사이트를 1분 뒤 새로고침 해주세요)`);
+        
+        // 전송 완료 후 입력칸 깔끔하게 비우기
+        document.getElementById('inputLogPrice').value = "";
+        document.getElementById('inputLogQty').value = "";
+    } catch(e) {
+        alert("❌ 전송 실패: 네트워크 상태를 확인하세요.");
+    } finally {
+        btn.innerHTML = `<i class="fas fa-paper-plane mr-1"></i> 전송`;
+        btn.disabled = false;
+    }
+}
