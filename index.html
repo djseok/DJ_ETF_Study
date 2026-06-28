@@ -27,7 +27,6 @@
             <button id="btnTabConc" onclick="switchTab('conc')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">🧩 집중도 분석</button>
         </div>
 
-        <!-- 1️⃣ 예측 엔진 -->
         <div id="viewQuant" class="space-y-6 block">
             <div id="macroPanel" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
@@ -99,7 +98,6 @@
             </div>
         </div>
 
-        <!-- 2️⃣ 클럽 현황 -->
         <div id="viewPort" class="hidden space-y-6">
             <div class="bg-gradient-to-r from-orange-100 to-amber-50 p-6 rounded-2xl shadow-sm border border-orange-200 relative overflow-hidden">
                 <div class="corgi-bg"></div>
@@ -112,7 +110,6 @@
             <div id="personalCardsContainer" class="space-y-6"></div>
         </div>
 
-        <!-- 3️⃣ 구매 계산기 (+ 실시간 원장 폼 이사 완료!) -->
         <div id="viewCalc" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-calculator text-orange-500 mr-2"></i> 스마트 매수 시뮬레이터</h2>
@@ -163,8 +160,30 @@
                 <h3 class="font-extrabold text-blue-900 mb-3 flex items-center"><i class="fas fa-coins text-blue-500 mr-2"></i>💡 잔돈으로 1주 더!</h3>
                 <div id="extraBuyGuide" class="space-y-2"></div>
             </div>
+
+            <div class="bg-slate-800 p-6 rounded-2xl shadow-md text-white border border-slate-700 mt-6">
+                <h4 class="font-black text-lg mb-4 text-emerald-400"><i class="fas fa-history mr-2"></i>타임머신 백테스팅 시뮬레이터</h4>
+                <div class="flex flex-col md:flex-row gap-4 mb-4">
+                    <div class="w-full md:w-1/2">
+                        <label class="block text-xs font-bold text-slate-400 mb-1">초기 자본금 (₩)</label>
+                        <input type="number" id="btCash" value="10000000" class="w-full p-3 bg-slate-700 border border-slate-600 rounded-xl text-white font-mono">
+                    </div>
+                    <div class="w-full md:w-1/2">
+                        <label class="block text-xs font-bold text-slate-400 mb-1">테스트 종목</label>
+                        <select id="btAsset" class="w-full p-3 bg-slate-700 border border-slate-600 rounded-xl text-white font-bold">
+                            <option value="KODEX 미국반도체">KODEX 미국반도체</option>
+                            <option value="TIGER 미국배당다우존스">TIGER 미국배당다우존스</option>
+                            <option value="RISE 미국나스닥100">RISE 미국나스닥100</option>
+                            <option value="TIME 글로벌AI인공지능액티브">TIME 글로벌AI인공지능액티브</option>
+                        </select>
+                    </div>
+                </div>
+                <button onclick="if(typeof runBacktest === 'function') runBacktest(); else alert('백테스트 모듈 로딩 중입니다.');" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-900 rounded-xl font-black transition-all">
+                    시뮬레이션 가동
+                </button>
+                <div id="btResult" class="mt-4"></div>
+            </div>
             
-            <!-- 🚀 [NEW] 실시간 매매 기록 원장 송신 (매수/매도 장착) -->
             <div class="bg-blue-50 p-6 rounded-2xl shadow-sm border border-blue-200 mt-6">
                 <h4 class="font-black text-lg text-blue-900 mb-4"><i class="fas fa-pen-fancy text-blue-600 mr-2"></i>포트폴리오 실시간 업데이트 (매수/매도)</h4>
                 <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
@@ -212,7 +231,6 @@
             </div>
         </div>
 
-        <!-- 4️⃣ 배당&총알 (이곳에 있던 폼은 삭제되었습니다!) -->
         <div id="viewDiv" class="hidden space-y-6">
             <div class="bg-blue-800 text-white p-8 rounded-2xl shadow-md text-center relative overflow-hidden">
                 <i class="fas fa-piggy-bank absolute -left-4 -bottom-4 text-8xl opacity-10"></i>
@@ -243,7 +261,6 @@
                 </div>
             </div>
 
-            <!-- 다이어리 유지 -->
             <div class="bg-blue-800 rounded-2xl shadow-sm border border-blue-700 overflow-hidden mt-6">
                 <div class="p-5 border-b border-blue-700/50 flex items-center justify-between">
                     <h4 class="font-black text-lg text-white"><i class="fas fa-book text-blue-300 mr-2"></i>배당금 입금 다이어리</h4>
@@ -261,19 +278,18 @@
             </div>
         </div>
 
-        <!-- 5️⃣ 집중도 분석 -->
         <div id="viewConc" class="hidden">
             <div id="concContainer" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-h-[200px] text-center text-slate-400 font-bold flex items-center justify-center">데이터 로딩 중...</div>
         </div>
     </div>
 
-<script src="js/main.js"></script>
+    <script src="js/main.js"></script>
     <script src="js/quant.js"></script>
     <script src="js/port.js"></script>
     <script src="js/calc.js"></script>
     <script src="js/dividend.js"></script>
     <script src="js/conc.js"></script>
-    <script src="js/backtest.js"></script> <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</body>
+    <script src="js/backtest.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
