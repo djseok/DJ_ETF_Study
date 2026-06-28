@@ -1,24 +1,40 @@
+// =====================================================
+// 🏆 포트폴리오 로드 및 렌더링 모듈 (수정판)
+// =====================================================
+
 async function loadPortfolioData(currentTab) {
     try {
         const res = await fetch(PORTFOLIO_CSV_URL);
         const matrix = parseCsvToMatrix(await res.text());
         const users = {};
+        
+        // i=1부터 시작하여 헤더(0행)를 건너뜁니다.
         for(let i=1; i<matrix.length; i++) {
-            if(matrix[i].length < 6) continue;
-            let name = matrix[i][0].trim();
-            let stock = matrix[i][1].trim();
-            let targetWeight = parseFloat(String(matrix[i][2]).replace(/,/g, '')) || 0;
-            let avgPrice = parseFloat(String(matrix[i][3]).replace(/,/g, '')) || 0;
-            let qty = parseFloat(String(matrix[i][4]).replace(/,/g, '')) || 0;
-            let currPrice = parseFloat(String(matrix[i][5]).replace(/,/g, '')) || avgPrice;
+            let row = matrix[i];
+            if(row.length < 6) continue;
+            
+            let name = row[0] ? row[0].trim() : "";
+            // 제목행이 또 나오거나 이름이 비어있으면 건너뜁니다.
+            if(!name || name === "이름" || name === "투자자") continue; 
 
-            if(!name || name === "이름") continue;
+            let stock = row[1] ? row[1].trim() : "";
+            let targetWeight = parseFloat(String(row[2]).replace(/,/g, '')) || 0;
+            let avgPrice = parseFloat(String(row[3]).replace(/,/g, '')) || 0;
+            let qty = parseFloat(String(row[4]).replace(/,/g, '')) || 0;
+            let currPrice = parseFloat(String(row[5]).replace(/,/g, '')) || avgPrice;
+
             if(!users[name]) users[name] = { name: name, totalInvest: 0, totalCurrent: 0, items: [] };
 
             let invest = avgPrice * qty;
             let current = currPrice * qty;
-            if(qty > 0) { users[name].totalInvest += invest; users[name].totalCurrent += current; }
-            if(targetWeight > 0) { users[name].items.push({ stock, targetWeight, avgPrice, currPrice, qty, invest, current }); }
+            
+            // 수량(qty)이 0 이상일 때만 합계에 반영
+            if(qty >= 0) { 
+                users[name].totalInvest += invest; 
+                users[name].totalCurrent += current; 
+            }
+            
+            users[name].items.push({ stock, targetWeight, avgPrice, currPrice, qty, invest, current });
         }
         globalParsedUsers = users;
 
@@ -27,6 +43,7 @@ async function loadPortfolioData(currentTab) {
             return u;
         }).sort((a,b) => b.totalReturnPct - a.totalReturnPct);
 
+        // 탭 상태에 따라 렌더링
         if(currentTab === 'port') renderPortfolioView(rankArray);
         if(currentTab === 'calc') renderCalculatorView();
         if(currentTab === 'conc') initConcentrationView();
@@ -34,12 +51,15 @@ async function loadPortfolioData(currentTab) {
             await loadDividendHistoryData();
             await loadActualDividendData();
         }
-    } catch (e) { console.error("포트폴리오 로드 실패:", e); }
+    } catch (e) { 
+        console.error("포트폴리오 로드 실패:", e); 
+    }
 }
 
 function renderPortfolioView(rankArray) {
     let rankHtml = "", cardsHtml = "";
     const medals = ["🥇", "🥈", "🥉"];
+    
     rankArray.forEach((user, index) => {
         let medal = medals[index] || "🏅";
         let color = user.totalReturnPct >= 0 ? "text-red-500" : "text-blue-500";
@@ -52,6 +72,9 @@ function renderPortfolioView(rankArray) {
         });
         cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4></div><div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}</tbody></table></div></div>`;
     });
-    document.getElementById('rankingContainer').innerHTML = rankHtml;
-    document.getElementById('personalCardsContainer').innerHTML = cardsHtml;
+    
+    const rankCont = document.getElementById('rankingContainer');
+    const cardsCont = document.getElementById('personalCardsContainer');
+    if(rankCont) rankCont.innerHTML = rankHtml;
+    if(cardsCont) cardsCont.innerHTML = cardsHtml;
 }
