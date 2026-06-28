@@ -68,23 +68,34 @@ function parseCsvToMatrix(text) {
     }).filter(row => row.length > 0);
 }
 
-// =========================================================
-// 🚀 [4] 시스템 최초 시동 (안전성 강화)
-// =========================================================
+// 🚀 [4] 시스템 최초 시동 (에러 무시 장갑차 모드)
 async function initDashboard() {
     try {
         const response = await fetch(QUANT_CSV_URL);
         masterRawData = parseCsvToMatrix(await response.text());
-        extractGlobalMacroVariables();
-        populateAssetDropdownSelector();
-        
-        if(masterRawData.length > 0) renderTargetAssetDashboard(document.getElementById('assetSelector').value);
-        
-        // 중요: 사이트 로딩 시 데이터를 미리 받아옴
-        await loadPortfolioData('init'); 
 
-        document.getElementById('assetSelector').addEventListener('change', (e) => renderTargetAssetDashboard(e.target.value));
-    } catch (err) { console.error("데이터 초기화 실패:", err); }
+        // 🛡️ 방어막: quant.js가 비어있어도 관제탑이 멈추지 않고 부드럽게 패스합니다!
+        if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
+        if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
+
+        let selector = document.getElementById('assetSelector');
+        if (masterRawData.length > 0 && selector && typeof renderTargetAssetDashboard === 'function') {
+            renderTargetAssetDashboard(selector.value);
+        }
+
+        // 🌟 핵심: 위에서 무슨 일이 있었든 간에, 배당과 포트폴리오 데이터는 무조건 멱살 잡고 끌고 옵니다!
+        if (typeof loadPortfolioData === 'function') {
+            await loadPortfolioData('init'); 
+        }
+
+        if (selector) {
+            selector.addEventListener('change', (e) => {
+                if (typeof renderTargetAssetDashboard === 'function') renderTargetAssetDashboard(e.target.value);
+            });
+        }
+    } catch (err) { 
+        console.error("데이터 초기화 실패:", err); 
+    }
 }
 
 window.onload = initDashboard;
