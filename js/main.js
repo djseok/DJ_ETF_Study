@@ -68,7 +68,7 @@ function parseCsvToMatrix(text) {
     }).filter(row => row.length > 0);
 }
 
-// 🚀 [4] 시스템 최초 시동 (에러 무시 장갑차 모드)
+// 🚀 [4] 시스템 최초 시동 (에러 무시 장갑차 모드 + 1번 탭 고정)
 async function initDashboard() {
     try {
         const response = await fetch(QUANT_CSV_URL);
@@ -93,6 +93,10 @@ async function initDashboard() {
                 if (typeof renderTargetAssetDashboard === 'function') renderTargetAssetDashboard(e.target.value);
             });
         }
+
+        // 🎯 [이 부분이 범인 검거!] 사이트가 켜지자마자 무조건 '예측 엔진' 탭을 엽니다.
+        switchTab('quant');
+
     } catch (err) { 
         console.error("데이터 초기화 실패:", err); 
     }
