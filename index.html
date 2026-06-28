@@ -29,13 +29,18 @@
         <button id="btnTabConc" onclick="switchTab('conc')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap"><i class="fas fa-puzzle-piece text-green-500 mr-2"></i>집중도 분석</button>
     </div>
 
-    <div id="viewQuant" class="hidden">
-         <div id="quantContainer" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-h-[200px] text-center text-slate-400 font-bold flex items-center justify-center">데이터 로딩 중...</div>
-    </div>
-
-    <div id="viewPort" class="hidden space-y-6">
-        <div id="rankingContainer" class="space-y-4"></div>
-        <div id="personalCardsContainer" class="grid grid-cols-1 gap-6"></div>
+    <div id="viewQuant" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <label class="block text-xs font-bold text-slate-400 mb-2">분석할 자산 선택</label>
+            <select id="assetSelector" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700">
+                <option value="KODEX 미국반도체">KODEX 미국반도체</option>
+                <option value="TIGER 미국배당다우존스">TIGER 미국배당다우존스</option>
+                <option value="RISE 미국나스닥100">RISE 미국나스닥100</option>
+            </select>
+        </div>
+        <div id="quantContainer" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-h-[200px] text-center text-slate-400 font-bold flex items-center justify-center">
+            데이터 로딩 중... (js/quant.js 파일에 코드가 채워지면 화면이 뜹니다)
+        </div>
     </div>
 
     <div id="viewCalc" class="hidden space-y-6">
