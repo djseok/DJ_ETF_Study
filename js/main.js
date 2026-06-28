@@ -1,18 +1,27 @@
-// 🌐 전역 변수 및 시트 주소 설정
+// =========================================================
+// 🌐 [1] 전역 변수 및 4대 시트 주소 설정 (캐시 방지 적용)
+// =========================================================
 const timestamp = new Date().getTime();
+
+// 1. 예측 엔진 탭 (매크로, 현재가)
 const QUANT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=0&single=true&output=csv&t=" + timestamp;
+// 2. 포트폴리오 탭 (멤버별 평단가, 수량)
 const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=539824393&single=true&output=csv&t=" + timestamp;
+// 3. 배당 이력 탭 (종목별 과거 분배금 데이터)
+const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
+// 4. 실수령 내역 탭 (내 통장 입금 내역)
+const ACTUAL_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1276756215&single=true&output=csv&t=" + timestamp;
 
-// 👇 1. 배당 이력 (확인 완료: 1276756215)
-const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1276756215&single=true&output=csv&t=" + timestamp;
-
-// 👇 2. 실수령 내역 (여기에 '4번 시트'를 클릭해서 새로 찾은 번호를 넣으셔야 합니다!)
-const ACTUAL_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=새로찾은번호&single=true&output=csv&t=" + timestamp;
+let masterRawData = [];
+let globalFxDelta = 0;
 let globalVixValue = 15;
 let globalParsedUsers = {}; 
 let globalCalculatedStrategyDividends = {}; 
 let globalActualDividendLogs = [];
 
+// =========================================================
+// 🧠 [2] 퀀트 분석용 핵심 매트릭스
+// =========================================================
 const DIVIDEND_SCHEME_MATRIX = {
     "KODEX 미국나스닥100데일리커버드콜OTM": { strategy: "recent3", payMonths: [1,2,3,4,5,6,7,8,9,10,11,12] },    
     "TIGER 미국배당다우존스": { strategy: "rolling12", payMonths: [1,2,3,4,5,6,7,8,9,10,11,12] }, 
@@ -33,7 +42,9 @@ const ETF_COMPOSITION_MATRIX = {
     "KODEX 미국S&P500": { "Microsoft (MSFT)": 0.07, "Apple (AAPL)": 0.06, "NVIDIA (NVDA)": 0.06 }
 };
 
-// 탭 전환 기능
+// =========================================================
+// 🎛️ [3] 탭 전환 및 데이터 파싱 컨트롤러
+// =========================================================
 function switchTab(tabName) {
     const tabs = ['Quant', 'Port', 'Calc', 'Div', 'Conc'];
     tabs.forEach(t => {
@@ -50,6 +61,7 @@ function switchTab(tabName) {
         else if(tabName === 'conc') activeBtn.className = "flex-1 py-3 bg-purple-700 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
+    // 탭을 누를 때마다 데이터를 불러옴 (최신화)
     if(['port', 'calc', 'conc', 'div'].includes(tabName)) loadPortfolioData(tabName);
 }
 
@@ -60,7 +72,9 @@ function parseCsvToMatrix(text) {
     }).filter(row => row.length > 0);
 }
 
-// 초기화 함수: 수정됨 (데이터 로딩 순서 보장)
+// =========================================================
+// 🚀 [4] 시스템 최초 시동 엔진 (안전성 강화)
+// =========================================================
 async function initDashboard() {
     try {
         const response = await fetch(QUANT_CSV_URL);
@@ -70,7 +84,7 @@ async function initDashboard() {
         
         if(masterRawData.length > 0) renderTargetAssetDashboard(document.getElementById('assetSelector').value);
         
-        // 데이터 동기화 강제
+        // 데이터 레이싱 방지: 포트폴리오 데이터를 뒤에서 몰래 완벽히 불러올 때까지 기다림
         await loadPortfolioData('init'); 
 
         document.getElementById('assetSelector').addEventListener('change', (e) => renderTargetAssetDashboard(e.target.value));
