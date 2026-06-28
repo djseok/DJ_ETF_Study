@@ -69,7 +69,7 @@ function parseCsvToMatrix(text) {
 }
 
 // =========================================================
-// 🚀 [4] 시스템 최초 시동 (에러 무시 장갑차 모드 + 1번 탭 고정)
+// 🚀 [4] 시스템 최초 시동 
 // =========================================================
 async function initDashboard() {
     try {
@@ -104,10 +104,8 @@ async function initDashboard() {
 window.onload = initDashboard;
 
 // =========================================================
-// 📡 [5] 구글 시트 원장 실시간 송신 (매수/매도)
+// 📡 [5] 구글 시트 원장 실시간 송신 (매수/매도) - 자동 새로고침 탑재
 // =========================================================
-
-// 동진님이 발급받은 실제 URL이 들어갔습니다!
 const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzzS3Wb2R3bC_P9AkA8Eq1KWLYRFk8o1w5VhTApnQQyPpT29wS1HLTfo4cOyT8AWPYl/exec"; 
 
 async function submitTransactionLog() {
@@ -119,9 +117,9 @@ async function submitTransactionLog() {
     const price = document.getElementById('inputLogPrice').value;
     let qty = document.getElementById('inputLogQty').value;
 
-    if(!price || !qty) return alert("단가와 수량을 정확히 입력해주세요!");
+    if(!user) return alert("사용자 이름을 입력해주세요!");
+    if(!price || !qty || isNaN(price) || isNaN(qty)) return alert("단가와 수량을 정확히 입력해주세요!");
 
-    // 핵심: 매도(Sell)일 경우 수량을 마이너스(-)로 변환하여 전송
     if(type === "매도") qty = -Math.abs(qty);
 
     const btn = document.getElementById('btnSubmitLog');
@@ -129,22 +127,17 @@ async function submitTransactionLog() {
     btn.disabled = true;
 
     try {
-        // 구글 서버로 데이터 전송 (no-cors 모드로 브라우저 차단 에러 방지)
-        await fetch(`${GAS_WEBHOOK_URL}?user=${user}&type=${type}&stock=${stock}&price=${price}&qty=${qty}`, {
-            method: 'GET',
-            mode: 'no-cors'
-        });
+        const url = `${GAS_WEBHOOK_URL}?user=${encodeURIComponent(user)}&type=${encodeURIComponent(type)}&stock=${encodeURIComponent(stock)}&price=${price}&qty=${qty}`;
+        await fetch(url, { method: 'GET', mode: 'no-cors' });
         
-        alert(`✅ [${user}]님의 [${stock}] ${type} 기록이 원장에 저장되었습니다!\n(반영을 위해 웹사이트를 1분 뒤 새로고침 해주세요)`);
-        
-        // 전송 완료 후 입력칸 깔끔하게 비우기
-        document.getElementById('inputLogPrice').value = "";
-        document.getElementById('inputLogQty').value = "";
+        // 🌟 완료 알림 후, 구글 시트가 연산할 1.5초 여유를 주고 자동으로 웹페이지를 새로고침합니다!
+        alert(`✅ [${user}]님의 기록이 포트폴리오에 성공적으로 반영되었습니다!\n(확인을 위해 최신 데이터를 불러옵니다.)`);
+        setTimeout(() => { location.reload(); }, 1500);
+
     } catch(e) {
+        console.error(e);
         alert("❌ 전송 실패: 네트워크 상태를 확인하세요.");
-    } finally {
         btn.innerHTML = `<i class="fas fa-paper-plane mr-1"></i> 전송`;
         btn.disabled = false;
     }
 }
-
