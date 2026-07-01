@@ -1,10 +1,9 @@
 // =====================================================
-// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V15.0 딥스캔 롤링 캘린더)
+// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V16.0 딥스캔 롤링 캘린더)
 // =====================================================
 
 let myDivChart = null; 
 
-// 배당 ETF별 배당락/지급월 설정
 const DIVIDEND_SCHEME_MATRIX = {
     "TIGER미국배당다우존스": { payMonths: [1,2,3,4,5,6,7,8,9,10,11,12], strategy: "recent3" },
     "ACE미국배당다우존스": { payMonths: [1,2,3,4,5,6,7,8,9,10,11,12], strategy: "recent3" },
@@ -22,9 +21,8 @@ async function loadDividendHistoryData() {
         const matrix = parseCsvToMatrix(await res.text());
         let stockGroupedLogs = {}; 
 
-        // 💡 딥스캔: 위에서 5번째 줄까지 뒤져서 진짜 헤더 위치 찾기
         let headerIdx = 0;
-        for(let i=0; i < Math.min(5, matrix.length); i++) {
+        for(let i=0; i < Math.min(10, matrix.length); i++) {
             let rowStr = matrix[i].join('').replace(/\s+/g, '');
             if(rowStr.includes("종목") && (rowStr.includes("배당") || rowStr.includes("금액"))) {
                 headerIdx = i;
@@ -91,11 +89,10 @@ async function loadActualDividendData() {
         const matrix = parseCsvToMatrix(await res.text());
         let logs = [];
         
-        // 💡 딥스캔: 실수령액 시트도 5번째 줄까지 스캔해서 헤더 찾기
         let headerIdx = 0;
-        for(let i=0; i < Math.min(5, matrix.length); i++) {
+        for(let i=0; i < Math.min(10, matrix.length); i++) {
             let rowStr = matrix[i].join('').replace(/\s+/g, '');
-            if((rowStr.includes("투자자") || rowStr.includes("이름")) && rowStr.includes("종목")) {
+            if(rowStr.includes("종목") && (rowStr.includes("투자자") || rowStr.includes("이름") || rowStr.includes("금액") || rowStr.includes("수령"))) {
                 headerIdx = i;
                 break;
             }
@@ -111,15 +108,22 @@ async function loadActualDividendData() {
             else if(colStr.includes("수령") || colStr.includes("금액")) amountIdx = c;
         }
 
+        let currentUser = ""; // 🔥 실수령액 시트 이름 병합 방어
+
         for(let i = headerIdx + 1; i < matrix.length; i++) {
             let row = matrix[i];
-            let userName = String(row[userIdx] || "").trim();      
+            let nameRaw = String(row[userIdx] || "").trim();      
+            if(nameRaw && !nameRaw.includes("투자자") && !nameRaw.includes("이름") && !nameRaw.includes("No")) {
+                currentUser = nameRaw;
+            }
+            let userName = currentUser;
+
             let date = String(row[dateIdx] || "").trim();          
             let stockName = String(row[stockIdx] || "").trim();     
             let amountStr = String(row[amountIdx] || "").replace(/[^0-9.]/g, '');
             let amount = parseFloat(amountStr) || 0; 
             
-            if(userName && !userName.includes("투자자") && amount > 0) {
+            if(userName && amount > 0) {
                 logs.push({ userName, date, stockName, qty: 0, amount });
             }
         }
@@ -195,8 +199,13 @@ function calculateExpectedDividends() {
     let actualLogsHtml = "";
     let sortedActualLogs = [...globalActualDividendLogs].sort((a,b) => new Date(b.date) - new Date(a.date));
 
+    // 🔥 강력한 이름 매칭 (공백, '님' 글자 무시)
+    let cleanTarget = targetUser.replace(/\s+/g, '').replace('님', '');
+
     sortedActualLogs.forEach(log => {
-        if (log.userName === targetUser) {
+        let cleanLogName = log.userName.replace(/\s+/g, '').replace('님', '');
+        
+        if (cleanLogName === cleanTarget || cleanLogName.includes(cleanTarget) || cleanTarget.includes(cleanLogName)) {
             totalReceived += log.amount;
             actualLogsHtml += `
                 <tr class="hover:bg-blue-50 transition-colors border-b border-blue-50">
@@ -224,7 +233,7 @@ function calculateExpectedDividends() {
     let monthlyCalendar = new Array(12).fill(0); 
 
     userObj.items.forEach(item => {
-        if(item.qty <= 0) return;
+        if(item.qty <= 0) return; // 🔥 수량이 0이면 계산 패스 (이제 1번 패치로 정상 인식됨)
         let baseDividend1Time = 0;
         let payMonths = []; 
 
