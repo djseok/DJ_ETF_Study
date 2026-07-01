@@ -1,8 +1,19 @@
 // =====================================================
-// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V16.1 클린 버전)
+// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V17.0 종목별 스택 차트 패치)
 // =====================================================
 
 let myDivChart = null; 
+
+// 🔥 차트를 예쁘게 꾸며줄 종목별 자동 할당 컬러 팔레트
+const CHART_COLORS = [
+    'rgba(54, 162, 235, 0.7)',  // 파랑
+    'rgba(255, 99, 132, 0.7)',  // 빨강
+    'rgba(255, 206, 86, 0.7)',  // 노랑
+    'rgba(75, 192, 192, 0.7)',  // 초록
+    'rgba(153, 102, 255, 0.7)', // 보라
+    'rgba(255, 159, 64, 0.7)',  // 주황
+    'rgba(199, 199, 199, 0.7)'  // 회색
+];
 
 const DIVIDEND_SCHEME_MATRIX = {
     "TIGER미국배당다우존스": { payMonths: [1,2,3,4,5,6,7,8,9,10,11,12], strategy: "recent3" },
@@ -144,17 +155,38 @@ function initDividendUserSelector() {
     }
 }
 
-function renderDividendChart(monthlyData, currentMonth) {
+// 🔥 차트 렌더링 함수 완벽 개조: 단일 막대 -> 종목별 누적(Stacked) 막대 차트로 변신
+function renderStackedDividendChart(datasetsByStock, currentMonth) {
     const ctx = document.getElementById('dividendChart');
     if(!ctx) return;
 
     let labels = [];
-    let chartData = [];
-    
     for(let i = 0; i < 12; i++) {
         let m = ((currentMonth - 1 + i) % 12) + 1;
         labels.push(m + "월");
-        chartData.push(Math.round(monthlyData[m - 1]));
+    }
+
+    // 💡 차트 데이터셋 조립
+    let finalDatasets = [];
+    let colorIndex = 0;
+    
+    for (let stockName in datasetsByStock) {
+        let monthlyArray = datasetsByStock[stockName];
+        let hasData = monthlyArray.some(val => val > 0);
+        
+        // 데이터가 1원이라도 있는 종목만 차트에 추가
+        if (hasData) {
+            let chartColor = CHART_COLORS[colorIndex % CHART_COLORS.length];
+            finalDatasets.push({
+                label: stockName,
+                data: monthlyArray,
+                backgroundColor: chartColor,
+                borderColor: chartColor.replace('0.7', '1'),
+                borderWidth: 1,
+                borderRadius: 4
+            });
+            colorIndex++;
+        }
     }
 
     if(myDivChart) myDivChart.destroy();
@@ -163,23 +195,29 @@ function renderDividendChart(monthlyData, currentMonth) {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [{
-                label: '예상 배당금 (₩)',
-                data: chartData,
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                borderColor: 'rgba(16, 185, 129, 1)',
-                borderWidth: 2,
-                borderRadius: 8,
-                barPercentage: 0.5
-            }]
+            datasets: finalDatasets
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { 
+                legend: { 
+                    display: true, // 범례 표시 (어떤 색이 어떤 종목인지 보여줌)
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 10 } }
+                } 
+            },
             scales: {
-                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { family: 'monospace' } } },
-                x: { grid: { display: false } }
+                x: { 
+                    stacked: true, // x축 위로 막대 쌓기
+                    grid: { display: false } 
+                },
+                y: { 
+                    stacked: true, // y축 데이터 합산
+                    beginAtZero: true, 
+                    grid: { color: '#f1f5f9' }, 
+                    ticks: { font: { family: 'monospace' } } 
+                }
             }
         }
     });
@@ -229,7 +267,12 @@ function calculateExpectedDividends() {
     if(tableBody) tableBody.innerHTML = actualLogsHtml || `<tr><td colspan="3" class="p-6 text-center text-slate-400 font-bold">입금 내역이 없습니다.</td></tr>`;
 
     let totalAnnualDividend = 0;
-    let monthlyCalendar = new Array(12).fill(0); 
+    let totalMonthlyCalendar = new Array(12).fill(0); 
+    
+    // 🔥 종목별로 배당금 데이터를 분리해서 보관할 바구니 준비
+    let chartDatasetsByStock = {}; 
+
+    let currentMonth = new Date().getMonth() + 1; 
 
     userObj.items.forEach(item => {
         if(item.qty <= 0) return; 
@@ -255,21 +298,35 @@ function calculateExpectedDividends() {
         }
 
         let singlePaymentTotal = item.qty * baseDividend1Time;
-        payMonths.forEach(monthNum => {
-            monthlyCalendar[monthNum - 1] += singlePaymentTotal; 
-            totalAnnualDividend += singlePaymentTotal; 
-        });
+        
+        if (singlePaymentTotal > 0) {
+            // 이 종목 전용 12개월 배열 초기화
+            if (!chartDatasetsByStock[item.stock]) {
+                chartDatasetsByStock[item.stock] = new Array(12).fill(0);
+            }
+            
+            payMonths.forEach(monthNum => {
+                totalMonthlyCalendar[monthNum - 1] += singlePaymentTotal; 
+                totalAnnualDividend += singlePaymentTotal; 
+                
+                // 🔥 차트에 뿌리기 위해 롤링 캘린더 순서(현재월 기준)에 맞춰서 배열에 꽂아 넣기
+                for(let i=0; i<12; i++){
+                    let calMonth = ((currentMonth - 1 + i) % 12) + 1;
+                    if(calMonth === monthNum) {
+                        chartDatasetsByStock[item.stock][i] += Math.round(singlePaymentTotal);
+                    }
+                }
+            });
+        }
     });
 
     const annualPure = document.getElementById("annual-dividend-pure");
     if(annualPure) annualPure.innerText = `₩${Math.round(totalAnnualDividend).toLocaleString()}`;
     
-    let currentMonth = new Date().getMonth() + 1; 
     let calendarHtml = "";
-    
     for (let i = 0; i < 12; i++) {
         let m = ((currentMonth - 1 + i) % 12) + 1;
-        let amount = monthlyCalendar[m - 1];
+        let amount = totalMonthlyCalendar[m - 1];
         let monthStr = `${m}월`;
         let isHighMonth = totalAnnualDividend > 0 && amount > (totalAnnualDividend / 12) * 1.5; 
         let bgClass = amount > 0 ? (isHighMonth ? "bg-emerald-50 border-emerald-300" : "bg-white border-slate-200") : "bg-slate-50 border-slate-100 opacity-60";
@@ -290,5 +347,6 @@ function calculateExpectedDividends() {
     const calendarDiv = document.getElementById("dividend-calendar");
     if(calendarDiv) calendarDiv.innerHTML = calendarHtml;
 
-    renderDividendChart(monthlyCalendar, currentMonth);
+    // 🔥 업그레이드된 종목별 스택 차트 그리기 함수 호출!
+    renderStackedDividendChart(chartDatasetsByStock, currentMonth);
 }
