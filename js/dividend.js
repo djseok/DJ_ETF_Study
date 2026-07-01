@@ -1,5 +1,5 @@
 // =====================================================
-// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V16.0 딥스캔 롤링 캘린더)
+// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V16.1 클린 버전)
 // =====================================================
 
 let myDivChart = null; 
@@ -108,7 +108,7 @@ async function loadActualDividendData() {
             else if(colStr.includes("수령") || colStr.includes("금액")) amountIdx = c;
         }
 
-        let currentUser = ""; // 🔥 실수령액 시트 이름 병합 방어
+        let currentUser = ""; 
 
         for(let i = headerIdx + 1; i < matrix.length; i++) {
             let row = matrix[i];
@@ -199,7 +199,6 @@ function calculateExpectedDividends() {
     let actualLogsHtml = "";
     let sortedActualLogs = [...globalActualDividendLogs].sort((a,b) => new Date(b.date) - new Date(a.date));
 
-    // 🔥 강력한 이름 매칭 (공백, '님' 글자 무시)
     let cleanTarget = targetUser.replace(/\s+/g, '').replace('님', '');
 
     sortedActualLogs.forEach(log => {
@@ -233,7 +232,7 @@ function calculateExpectedDividends() {
     let monthlyCalendar = new Array(12).fill(0); 
 
     userObj.items.forEach(item => {
-        if(item.qty <= 0) return; // 🔥 수량이 0이면 계산 패스 (이제 1번 패치로 정상 인식됨)
+        if(item.qty <= 0) return; 
         let baseDividend1Time = 0;
         let payMonths = []; 
 
