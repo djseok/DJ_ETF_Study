@@ -51,13 +51,12 @@ function renderTargetAssetDashboard(target) {
         let rowAssetName = String(row[2]).replace(/\s+/g, '').toUpperCase();
         
         if (rowAssetName === cleanTarget) {
+            // 🔥 수정 완료: 열 구조에 맞게 3번(전일종가)과 4번(현재가)만 정확하게 가져옵니다.
             let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; 
             let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; 
-            let p5 = parseFloat(String(row[5]).replace(/,/g, '')) || 0; 
-            let p6 = parseFloat(String(row[6]).replace(/,/g, '')) || 0; 
             
-            bPrev = p5 > 0 ? p5 : p3;
-            bLive = p6 > 0 ? p6 : p4;
+            bPrev = p3;
+            bLive = p4;
         }
     });
     
