@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V12.5 무결성 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V12.9 무결성 동기화 패치)
 // =========================================================
 const timestamp = new Date().getTime();
 
@@ -12,7 +12,7 @@ const SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2T
 // 3. 개별 종목 마스터 시트 (MasterData) CSV 링크
 const MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
 
-// 기존 포트폴리오 및 배당금 시트 (유지)
+// 4. 개인 포트폴리오 및 배당금 시트
 const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=539824393&single=true&output=csv&t=" + timestamp;
 const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
 const ACTUAL_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1276756215&single=true&output=csv&t=" + timestamp;
@@ -44,10 +44,12 @@ function switchTab(tabName) {
         else if(tabName === 'conc') activeBtn.className = "flex-1 py-3 bg-purple-700 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
+    // 탭을 전환할 때 데이터 유실 방지 및 자동 타겟 렌더링
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
+    if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
 }
 
-// 🔥 [버그 대수술] 연속된 쉼표(빈 칸)를 건너뛰지 않고 방어하는 표준 CSV 매트릭스 변환 함수
+// 🔥연속된 쉼표(빈 칸)를 건너뛰지 않고 방어하는 표준 CSV 매트릭스 변환 함수
 function parseCsvToMatrix(text) {
     if (!text) return [];
     return text.split('\n').map(line => {
@@ -95,6 +97,12 @@ async function initDashboard() {
                 if (typeof renderTargetAssetDashboard === 'function') renderTargetAssetDashboard(e.target.value);
             });
         }
+        
+        // 🔥 [치명적 버그 해결] 대시보드 구동 시 배경에서 포트폴리오 데이터를 미리 파싱해 둡니다!
+        if (typeof loadPortfolioData === 'function') {
+            await loadPortfolioData('init'); 
+        }
+
         switchTab('quant');
     } catch (err) { 
         console.error("데이터 초기화 실패:", err); 
