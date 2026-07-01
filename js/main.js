@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V12.9 무결성 동기화 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V13.0 배당 탭 트리거 패치)
 // =========================================================
 const timestamp = new Date().getTime();
 
@@ -47,9 +47,15 @@ function switchTab(tabName) {
     // 탭을 전환할 때 데이터 유실 방지 및 자동 타겟 렌더링
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
+    
+    // 🔥 [추가된 부분] 배당 탭 클릭 시 배당 데이터를 자동으로 불러오도록 트리거 설정!
+    if(tabName === 'div') {
+        if(typeof loadDividendHistoryData === 'function') loadDividendHistoryData();
+        if(typeof loadActualDividendData === 'function') loadActualDividendData();
+    }
 }
 
-// 🔥연속된 쉼표(빈 칸)를 건너뛰지 않고 방어하는 표준 CSV 매트릭스 변환 함수
+// 연속된 쉼표(빈 칸)를 건너뛰지 않고 방어하는 표준 CSV 매트릭스 변환 함수
 function parseCsvToMatrix(text) {
     if (!text) return [];
     return text.split('\n').map(line => {
@@ -98,7 +104,7 @@ async function initDashboard() {
             });
         }
         
-        // 🔥 [치명적 버그 해결] 대시보드 구동 시 배경에서 포트폴리오 데이터를 미리 파싱해 둡니다!
+        // 대시보드 구동 시 배경에서 포트폴리오 데이터를 미리 파싱해 둡니다.
         if (typeof loadPortfolioData === 'function') {
             await loadPortfolioData('init'); 
         }
