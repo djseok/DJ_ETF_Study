@@ -1,10 +1,10 @@
 // =====================================================
-// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V13.0 스마트 탐색 & GID 교정판)
+// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V14.0 롤링 12개월 연속 캘린더 패치)
 // =====================================================
 
 let myDivChart = null; 
 
-// 배당 ETF별 배당락/지급월 설정 (기존 하드코딩된 부분 대체용)
+// 배당 ETF별 배당락/지급월 설정
 const DIVIDEND_SCHEME_MATRIX = {
     "TIGER미국배당다우존스": { payMonths: [1,2,3,4,5,6,7,8,9,10,11,12], strategy: "recent3" },
     "ACE미국배당다우존스": { payMonths: [1,2,3,4,5,6,7,8,9,10,11,12], strategy: "recent3" },
@@ -22,9 +22,8 @@ async function loadDividendHistoryData() {
         const matrix = parseCsvToMatrix(await res.text());
         let stockGroupedLogs = {}; 
 
-        // 💡 1. 스마트 탐색: 열의 위치가 바뀌어도 헤더 이름을 통해 위치를 스스로 찾아냅니다.
         let header = matrix[0] || [];
-        let nameIdx = 1, dateIdx = 3, amountIdx = 4; // 기본 세팅값
+        let nameIdx = 1, dateIdx = 3, amountIdx = 4; 
         for(let c=0; c<header.length; c++){
             let colStr = String(header[c]).replace(/\s+/g, '');
             if(colStr.includes("종목")) nameIdx = c;
@@ -36,7 +35,6 @@ async function loadDividendHistoryData() {
             let row = matrix[i];
             let stockName = String(row[nameIdx] || "").trim();
             let date = String(row[dateIdx] || "").trim();
-            // 숫자 외의 문자(원, 콤마, 공백 등) 완벽 차단
             let amountStr = String(row[amountIdx] || "").replace(/[^0-9.]/g, '');
             let amount = parseFloat(amountStr) || 0;
 
@@ -83,9 +81,8 @@ async function loadActualDividendData() {
         const matrix = parseCsvToMatrix(await res.text());
         let logs = [];
         
-        // 💡 2. 스마트 탐색: 실수령액 시트의 열 위치도 이름으로 스스로 찾습니다.
         let header = matrix[0] || [];
-        let userIdx = 1, dateIdx = 2, stockIdx = 3, amountIdx = 4; // 기본 세팅값
+        let userIdx = 1, dateIdx = 2, stockIdx = 3, amountIdx = 4; 
         for(let c=0; c<header.length; c++){
             let colStr = String(header[c]).replace(/\s+/g, '');
             if(colStr.includes("투자자") || colStr.includes("이름")) userIdx = c;
@@ -102,7 +99,6 @@ async function loadActualDividendData() {
             let amountStr = String(row[amountIdx] || "").replace(/[^0-9.]/g, '');
             let amount = parseFloat(amountStr) || 0; 
             
-            // 데이터 무결성 검증 후 Push
             if(userName && !userName.includes("투자자") && amount > 0) {
                 logs.push({ userName, date, stockName, qty: 0, amount });
             }
@@ -119,17 +115,22 @@ function initDividendUserSelector() {
     
     if(selector.options.length !== names.length && names.length > 0) {
         selector.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+        selector.removeEventListener('change', calculateExpectedDividends);
         selector.addEventListener('change', calculateExpectedDividends);
     }
 }
 
+// 📊 배당금 차트 렌더링 함수 (연속 롤링 12개월 반영)
 function renderDividendChart(monthlyData, currentMonth) {
     const ctx = document.getElementById('dividendChart');
     if(!ctx) return;
 
     let labels = [];
     let chartData = [];
-    for(let m = currentMonth; m <= 12; m++) {
+    
+    // 🔥 루프 수정: 단순 12월 컷오프가 아니라 현재월부터 연속 12번 회전
+    for(let i = 0; i < 12; i++) {
+        let m = ((currentMonth - 1 + i) % 12) + 1;
         labels.push(m + "월");
         chartData.push(Math.round(monthlyData[m - 1]));
     }
@@ -165,11 +166,15 @@ function renderDividendChart(monthlyData, currentMonth) {
 function calculateExpectedDividends() {
     const selector = document.getElementById('divUserSelector');
     if(!selector) return;
-    const targetUser = selector.value;
+    
+    // 🔥 방어 코드: 선택 상자가 비어있다면 글로벌 객체의 첫 번째 유저명을 강제로 타겟팅
+    const targetUser = selector.value || Object.keys(globalParsedUsers)[0];
+    if(!targetUser) return;
+    
     const userObj = globalParsedUsers[targetUser];
-
     if(!userObj) return;
 
+    // 1. 실제 수령 내역 (하단 다이어리) 그리기
     let totalReceived = 0;
     let actualLogsHtml = "";
     let sortedActualLogs = [...globalActualDividendLogs].sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -199,6 +204,7 @@ function calculateExpectedDividends() {
     const tableBody = document.getElementById("actual-dividend-table-body");
     if(tableBody) tableBody.innerHTML = actualLogsHtml || `<tr><td colspan="3" class="p-6 text-center text-slate-400 font-bold">입금 내역이 없습니다.</td></tr>`;
 
+    // 2. 향후 예상 배당금 캘린더 & 차트 연산
     let totalAnnualDividend = 0;
     let monthlyCalendar = new Array(12).fill(0); 
 
@@ -226,7 +232,6 @@ function calculateExpectedDividends() {
         }
 
         let singlePaymentTotal = item.qty * baseDividend1Time;
-        
         payMonths.forEach(monthNum => {
             monthlyCalendar[monthNum - 1] += singlePaymentTotal; 
             totalAnnualDividend += singlePaymentTotal; 
@@ -239,7 +244,9 @@ function calculateExpectedDividends() {
     let currentMonth = new Date().getMonth() + 1; 
     let calendarHtml = "";
     
-    for (let m = currentMonth; m <= 12; m++) {
+    // 🔥 달력 렌더링 루프 수정: 현재 월부터 연속 12개월 표출 알고리즘 적용
+    for (let i = 0; i < 12; i++) {
+        let m = ((currentMonth - 1 + i) % 12) + 1;
         let amount = monthlyCalendar[m - 1];
         let monthStr = `${m}월`;
         let isHighMonth = totalAnnualDividend > 0 && amount > (totalAnnualDividend / 12) * 1.5; 
