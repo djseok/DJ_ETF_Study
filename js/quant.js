@@ -1,5 +1,5 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V12.4 마스터 데이터 크로스 매핑 버전)
+// 📈 퀀트 예측 엔진 (V12.5 본체 가격 3종 위젯 오버레이 버전)
 // =========================================================
 
 function extractGlobalMacroVariables() {
@@ -45,18 +45,17 @@ function renderTargetAssetDashboard(target) {
     let cleanTarget = target.replace(/\s+/g, '').toUpperCase();
     let tBuy = -2.0, tSell = 2.0, beta = 1.0;
     
-    // 🔥 [핵심 기능] MasterData 시트에서 현재 선택된 본체 ETF의 가격을 원격 조회합니다.
+    // MasterData 시트에서 본체 가격 크로스 체크 매핑
     let bPrev = 0, bLive = 0;
     masterData.forEach(row => {
         if (!row[2]) return;
         let rowAssetName = String(row[2]).replace(/\s+/g, '').toUpperCase();
         
-        // 종목명이 매칭되면 가격 추출 (원화환산 컬럼이 비어있으면 일반 종가 컬럼 참조)
         if (rowAssetName === cleanTarget) {
-            let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; // 전일종가
-            let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; // 실시간현재가
-            let p5 = parseFloat(String(row[5]).replace(/,/g, '')) || 0; // 원화환산전일가
-            let p6 = parseFloat(String(row[6]).replace(/,/g, '')) || 0; // 원화환산현재가
+            let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; 
+            let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; 
+            let p5 = parseFloat(String(row[5]).replace(/,/g, '')) || 0; 
+            let p6 = parseFloat(String(row[6]).replace(/,/g, '')) || 0; 
             
             bPrev = p5 > 0 ? p5 : p3;
             bLive = p6 > 0 ? p6 : p4;
@@ -66,13 +65,14 @@ function renderTargetAssetDashboard(target) {
     let comps = [];
     let isParsingTarget = false;
 
-    // ETF_Quant_Signals 탭 파싱 (시트가 깔끔해졌으므로 기준, 베타, 구성종목만 판독)
     for (let i = 0; i < signalData.length; i++) {
         let r = signalData[i];
+        if (!r || r.length === 0) continue;
+        
         let r0 = String(r[0] || "").replace(/\s+/g, '').toUpperCase();
 
         if (r0.startsWith('■')) {
-            let currentSectionName = r0.replace('■', '');
+            let currentSectionName = r0.replace('■', '').replace(/\s+/g, '').toUpperCase();
             isParsingTarget = (currentSectionName === cleanTarget); 
             continue;
         }
@@ -135,10 +135,21 @@ function renderTargetAssetDashboard(target) {
     document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;
     document.getElementById('predictedChange').className = `text-4xl font-black mono ${finalRet>=0?'text-red-600':'text-blue-600'}`;
 
-    // MasterData에서 실시간 조회해 온 bPrev와 bLive로 예상가/현재가 완벽 출력!
+    // 변동률 반영 예상가격 수식
     let expectedPrice = bPrev * (1 + finalRet / 100);
-    document.getElementById('predictedPrice').innerText = `오늘 예상가: ₩${bPrev > 0 ? Math.round(expectedPrice).toLocaleString() : '0'}`;
-    document.getElementById('currentLivePrice').innerText = `실시간 현재가: ₩${bLive > 0 ? Math.round(bLive).toLocaleString() : (bPrev > 0 ? Math.round(bPrev).toLocaleString() : '0')}`;
+
+    // 🔥 [요구사항 반영] 전일종가 / 현재가격 / 예상가격을 다중 정보창 형태로 우측 하단에 완벽 송출
+    document.getElementById('predictedPrice').innerHTML = `
+        <div class="text-slate-500 text-xs font-semibold space-y-0.5">
+            <div>• 전일 종가: <span class="mono text-slate-800 font-bold">₩${bPrev > 0 ? Math.round(bPrev).toLocaleString() : '0'}</span></div>
+            <div class="text-blue-600 font-bold text-sm mt-1">▶ 오늘 예상가: <span class="mono text-base font-black text-blue-700">₩${bPrev > 0 ? Math.round(expectedPrice).toLocaleString() : '0'}</span></div>
+        </div>
+    `;
+    document.getElementById('currentLivePrice').innerHTML = `
+        <div class="text-slate-500 text-xs font-semibold">
+            <div>• 실시간 현재가: <span class="mono text-slate-800 font-bold">₩${bLive > 0 ? Math.round(bLive).toLocaleString() : '0'}</span></div>
+        </div>
+    `;
 
     const c = document.getElementById('signalCard'), t = document.getElementById('signalTitle'), d = document.getElementById('signalDesc');
     c.className = "p-6 rounded-2xl shadow-md transition-all duration-300 relative overflow-hidden border border-slate-200 " + (finalRet <= tBuy ? "signal-buy-strong" : (finalRet >= tSell ? "signal-sell-strong" : "signal-hold"));
