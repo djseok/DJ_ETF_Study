@@ -1,5 +1,5 @@
 // =========================================================
-// 🧮 구매 계산기 (목표 비중 0% 필터링 업그레이드 버전)
+// 🧮 구매 계산기 (목표 비중 0% 필터링 완벽 복원 버전)
 // =========================================================
 
 // 예수금 입력값이 바뀔 때마다 즉시 실시간 연산 수행
@@ -46,14 +46,12 @@ function calculateRebalancing() {
 
     let tableHtml = "";
     userObj.items.forEach(item => {
-        // 구글 시트에서 비중이 25% 형태(즉 숫자 25)로 오는지, 0.25로 오는지 판독하여 규격 통일
         let weightRaw = item.targetWeight;
         let actualWeight = weightRaw > 1 ? weightRaw / 100 : weightRaw; 
         
-        // 🚨 [피드백 반영] C열 목표 비중이 0%이거나 비어있다면 장바구니에 띄우지 않고 그냥 건너뜁니다!
+        // C열 목표 비중이 0%이거나 비어있다면 장바구니에 띄우지 않고 건너뜀
         if (actualWeight <= 0) return;
 
-        // 투입 예수금 * 개인 포트폴리오상 목표 비중 = 종목별 할당 금액
         let targetMoney = cashInput * actualWeight;
         let recommendedQty = item.currPrice > 0 ? Math.floor(targetMoney / item.currPrice) : 0;
         
@@ -74,10 +72,8 @@ function calculateRebalancing() {
         </tr>`;
     });
 
-    // 만약 모든 종목 비중이 0%여서 노출할 종목이 아예 없다면 예외 안내 문구 표시
     document.getElementById('calcTableBody').innerHTML = tableHtml || `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">목표 비중(>0%)이 설정된 종목이 없습니다.</td></tr>`;
     
-    // 수동 주수 변경 감지 이벤트 바인딩
     document.querySelectorAll('.calc-manual-qty').forEach(input => {
         input.addEventListener('input', updateManualCalculator);
     });
@@ -96,7 +92,6 @@ function updateManualCalculator() {
         let rowCost = qty * price;
         totalCost += rowCost;
 
-        // 개별 행의 실제 매수 금액 계산
         const parentTr = input.closest('tr');
         if (parentTr) {
             const costEl = parentTr.querySelector('.row-actual-cost');
@@ -110,4 +105,20 @@ function updateManualCalculator() {
     let cashUI = document.getElementById('calcRemainingCash');
     if (cashUI) {
         cashUI.innerText = `₩${Math.round(remainingCash).toLocaleString()}`;
-        cashUI.className = remainingCash < 0 ? "px-6 py-3 text-right text-red-600 font-black mono" : "px
+        cashUI.className = remainingCash < 0 ? "px-6 py-3 text-right text-red-600 font-black mono" : "px-6 py-3 text-right text-orange-600 font-black mono";
+    }
+
+    let guideHtml = "";
+    if(remainingCash < 0) {
+        guideHtml = `<div class="p-3 text-red-600 font-bold text-center"><i class="fas fa-exclamation-triangle mr-1"></i>입력하신 예수금을 초과했습니다! 매수 수량을 줄여주세요.</div>`;
+    } else {
+        guideData.forEach(g => g.needed = g.price - remainingCash);
+        guideData.sort((a,b) => a.needed - b.needed);
+        guideData.forEach((g, idx) => {
+            let badge = g.needed <= 0 ? `<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-black">즉시 1주 추가가능!</span>` : `<span class="text-orange-500 font-bold mono">₩${Math.round(g.needed).toLocaleString()} 추가 필요</span>`;
+            guideHtml += `<div class="flex justify-between items-center bg-white p-3 rounded-lg border border-blue-50 mb-2"><div class="text-sm font-bold text-slate-700"><span class="text-blue-400 font-mono mr-1">${idx+1}.</span> ${g.stock}</div><div class="text-right text-xs"><div class="text-slate-400 mono mb-0.5">1주 가격: ₩${Math.round(g.price).toLocaleString()}</div>${badge}</div></div>`;
+        });
+    }
+    const extraGuide = document.getElementById('extraBuyGuide');
+    if (extraGuide) extraGuide.innerHTML = guideHtml;
+}
