@@ -11,7 +11,7 @@ const SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2T
 
 // 🔥 3. 개별 종목 마스터 시트 (MasterData) CSV 링크 
 // ⚠️ 여기에 동진님의 MasterData 탭 웹게시 CSV 링크를 붙여넣으세요!
-const MASTER_CSV_URL = "여기에_MasterData_CSV링크_넣기&t=" + timestamp;
+const MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv" + timestamp;
 
 // 기존 포트폴리오 및 배당금 시트 (유지)
 const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=539824393&single=true&output=csv&t=" + timestamp;
