@@ -1,10 +1,15 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V12.6 포트비중 뻥튀기 스마트 방어 버전)
+// 📈 퀀트 예측 엔진 (V12.7 거시지표 MasterData 통합 버전)
 // =========================================================
 
 function extractGlobalMacroVariables() {
-    macroData.forEach(row => {
+    // 🔥 거시지표가 MasterData 시트로 통합되었으므로, masterData 배열에서 '지표'를 찾습니다.
+    masterData.forEach(row => {
         if (!row[0] || !row[2]) return;
+        
+        let gubun = String(row[0]).trim();
+        if (gubun !== '지표') return; // 구분 열이 '지표'인 것만 골라냅니다.
+
         let name = String(row[2]).replace(/\s+/g, '');
         
         let prev = parseFloat(String(row[3]).replace(/,/g, '')) || 0;
@@ -51,7 +56,6 @@ function renderTargetAssetDashboard(target) {
         let rowAssetName = String(row[2]).replace(/\s+/g, '').toUpperCase();
         
         if (rowAssetName === cleanTarget) {
-            // 🔥 수정 완료: 열 구조에 맞게 3번(전일종가)과 4번(현재가)만 정확하게 가져옵니다.
             let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; 
             let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; 
             
@@ -84,17 +88,16 @@ function renderTargetAssetDashboard(target) {
                 beta = parseFloat(String(r[2]).replace(/,/g, '')) || beta;
             } 
             else if (r0 === '구성종목') {
-                // 🔥 스마트 비중 파서: 퍼센트 문자 확인 및 소수점 판독
                 let rawWeightStr = String(r[3]).replace(/,/g, '').trim();
                 let parsedNum = parseFloat(rawWeightStr) || 0;
                 let finalWeight = 0;
                 
                 if (rawWeightStr.includes('%')) {
-                    finalWeight = parsedNum; // "8.85%" -> 8.85
+                    finalWeight = parsedNum;
                 } else if (parsedNum > 0 && parsedNum <= 1.0) {
-                    finalWeight = parsedNum * 100; // 0.0885 -> 8.85
+                    finalWeight = parsedNum * 100;
                 } else {
-                    finalWeight = parsedNum; // 8.85 -> 8.85
+                    finalWeight = parsedNum;
                 }
 
                 comps.push({
