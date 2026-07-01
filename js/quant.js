@@ -1,5 +1,5 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V12.5 본체 가격 3종 위젯 오버레이 버전)
+// 📈 퀀트 예측 엔진 (V12.6 포트비중 뻥튀기 스마트 방어 버전)
 // =========================================================
 
 function extractGlobalMacroVariables() {
@@ -45,7 +45,6 @@ function renderTargetAssetDashboard(target) {
     let cleanTarget = target.replace(/\s+/g, '').toUpperCase();
     let tBuy = -2.0, tSell = 2.0, beta = 1.0;
     
-    // MasterData 시트에서 본체 가격 크로스 체크 매핑
     let bPrev = 0, bLive = 0;
     masterData.forEach(row => {
         if (!row[2]) return;
@@ -86,10 +85,23 @@ function renderTargetAssetDashboard(target) {
                 beta = parseFloat(String(r[2]).replace(/,/g, '')) || beta;
             } 
             else if (r0 === '구성종목') {
+                // 🔥 스마트 비중 파서: 퍼센트 문자 확인 및 소수점 판독
+                let rawWeightStr = String(r[3]).replace(/,/g, '').trim();
+                let parsedNum = parseFloat(rawWeightStr) || 0;
+                let finalWeight = 0;
+                
+                if (rawWeightStr.includes('%')) {
+                    finalWeight = parsedNum; // "8.85%" -> 8.85
+                } else if (parsedNum > 0 && parsedNum <= 1.0) {
+                    finalWeight = parsedNum * 100; // 0.0885 -> 8.85
+                } else {
+                    finalWeight = parsedNum; // 8.85 -> 8.85
+                }
+
                 comps.push({
                     name: r[1],
                     ticker: r[2],
-                    w: parseFloat(String(r[3]).replace(/,/g, '')) * 100 || 0, 
+                    w: finalWeight,
                     prev: parseFloat(String(r[4]).replace(/,/g, '')) || 0,
                     live: parseFloat(String(r[5]).replace(/,/g, '')) || 0
                 });
@@ -135,10 +147,8 @@ function renderTargetAssetDashboard(target) {
     document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;
     document.getElementById('predictedChange').className = `text-4xl font-black mono ${finalRet>=0?'text-red-600':'text-blue-600'}`;
 
-    // 변동률 반영 예상가격 수식
     let expectedPrice = bPrev * (1 + finalRet / 100);
 
-    // 🔥 [요구사항 반영] 전일종가 / 현재가격 / 예상가격을 다중 정보창 형태로 우측 하단에 완벽 송출
     document.getElementById('predictedPrice').innerHTML = `
         <div class="text-slate-500 text-xs font-semibold space-y-0.5">
             <div>• 전일 종가: <span class="mono text-slate-800 font-bold">₩${bPrev > 0 ? Math.round(bPrev).toLocaleString() : '0'}</span></div>
