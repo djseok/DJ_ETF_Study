@@ -1,52 +1,56 @@
 // =========================================================
-// 🧮 구매 계산기 (개인 포트폴리오 연동 완벽 복구 버전)
+// 🧮 구매 계산기 (개인 포트폴리오 기반 완벽 복구 버전)
 // =========================================================
 
-document.getElementById('btnTabCalc').addEventListener('click', () => {
-    if (typeof renderCalculatorView === 'function') renderCalculatorView();
-});
-
+// 예수금 입력값이 바뀔 때마다 즉시 실시간 연산 수행
 document.getElementById('inputCash').addEventListener('input', calculateRebalancing);
 
 async function renderCalculatorView() {
-    // 🔥 포트폴리오 데이터가 아직 안 불러와졌다면 강제로 먼저 불러옵니다!
+    const selector = document.getElementById('calcUserSelector');
+    if (!selector) return;
+
+    // 🔥 메모리에 포트폴리오 정보가 없으면 로드 함수 강제 호출
     if (!globalParsedUsers || Object.keys(globalParsedUsers).length === 0) {
         if (typeof loadPortfolioData === 'function') {
-            await loadPortfolioData('calc'); 
-            return; 
+            document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">포트폴리오 데이터를 동기화 중입니다... 🐕</td></tr>`;
+            await loadPortfolioData('calc');
+            return;
         }
     }
 
-    const selector = document.getElementById('calcUserSelector');
     const names = Object.keys(globalParsedUsers);
     
-    // 라벨 원래대로 복구
-    const label = selector.previousElementSibling;
-    if(label) label.innerHTML = "🚀 대상 투자자 선택";
-
+    // 셀렉터 옵션 목록을 포트폴리오에 등록된 실제 투자자 이름(동진, S, D, J)으로 빌드
     if (selector.options.length !== names.length && names.length > 0) {
         selector.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+        // 투자자 선택이 바뀔 때마다 재계산
+        selector.removeEventListener('change', calculateRebalancing);
         selector.addEventListener('change', calculateRebalancing);
     }
+    
     calculateRebalancing();
 }
 
 function calculateRebalancing() {
-    const targetUser = document.getElementById('calcUserSelector').value;
+    const selector = document.getElementById('calcUserSelector');
+    if (!selector || !selector.value) return;
+
+    const targetUser = selector.value;
     const cashInput = parseFloat(document.getElementById('inputCash').value) || 0;
     const userObj = globalParsedUsers[targetUser];
     
     if (!userObj || !userObj.items || userObj.items.length === 0) {
-        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">투자자 데이터가 없습니다.</td></tr>`;
+        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">선택한 투자자의 포트폴리오 데이터가 없습니다.</td></tr>`;
         return;
     }
 
     let tableHtml = "";
     userObj.items.forEach(item => {
-        // 🔥 목표비중 퍼센트 오류 해결 (25.00%를 25로 읽어오므로 100으로 나눔)
+        // 구글 시트에서 비중이 25% 형태(즉 숫자 25)로 오는지, 0.25로 오는지 판독하여 규격 통일
         let weightRaw = item.targetWeight;
         let actualWeight = weightRaw > 1 ? weightRaw / 100 : weightRaw; 
         
+        // 투입 예수금 * 개인 포트폴리오상 목표 비중 = 종목별 할당 금액
         let targetMoney = cashInput * actualWeight;
         let recommendedQty = item.currPrice > 0 ? Math.floor(targetMoney / item.currPrice) : 0;
         
@@ -69,6 +73,7 @@ function calculateRebalancing() {
 
     document.getElementById('calcTableBody').innerHTML = tableHtml;
     
+    // 수동 주수 변경 감지 이벤트 바인딩
     document.querySelectorAll('.calc-manual-qty').forEach(input => {
         input.addEventListener('input', updateManualCalculator);
     });
@@ -87,16 +92,24 @@ function updateManualCalculator() {
         let rowCost = qty * price;
         totalCost += rowCost;
 
-        input.closest('tr').querySelector('.row-actual-cost').innerText = `₩${Math.round(rowCost).toLocaleString()}`;
+        // 개별 행의 실제 매수 금액 계산
+        const parentTr = input.closest('tr');
+        if (parentTr) {
+            const costEl = parentTr.querySelector('.row-actual-cost');
+            if (costEl) costEl.innerText = `₩${Math.round(rowCost).toLocaleString()}`;
+        }
         if (price > 0) guideData.push({ stock: stock, price: price });
     });
 
     let remainingCash = cashInput - totalCost;
     document.getElementById('calcTotalCost').innerText = `₩${Math.round(totalCost).toLocaleString()}`;
     let cashUI = document.getElementById('calcRemainingCash');
-    cashUI.innerText = `₩${Math.round(remainingCash).toLocaleString()}`;
-    cashUI.className = remainingCash < 0 ? "px-6 py-3 text-right text-red-600 font-black mono" : "px-6 py-3 text-right text-orange-600 font-black mono";
+    if (cashUI) {
+        cashUI.innerText = `₩${Math.round(remainingCash).toLocaleString()}`;
+        cashUI.className = remainingCash < 0 ? "px-6 py-3 text-right text-red-600 font-black mono" : "px-6 py-3 text-right text-orange-600 font-black mono";
+    }
 
+    // 하단 잔여 예수금 스캐너 가이드 활성화
     let guideHtml = "";
     if(remainingCash < 0) {
         guideHtml = `<div class="p-3 text-red-600 font-bold text-center"><i class="fas fa-exclamation-triangle mr-1"></i>입력하신 예수금을 초과했습니다! 매수 수량을 줄여주세요.</div>`;
@@ -108,5 +121,6 @@ function updateManualCalculator() {
             guideHtml += `<div class="flex justify-between items-center bg-white p-3 rounded-lg border border-blue-50 mb-2"><div class="text-sm font-bold text-slate-700"><span class="text-blue-400 font-mono mr-1">${idx+1}.</span> ${g.stock}</div><div class="text-right text-xs"><div class="text-slate-400 mono mb-0.5">1주 가격: ₩${Math.round(g.price).toLocaleString()}</div>${badge}</div></div>`;
         });
     }
-    document.getElementById('extraBuyGuide').innerHTML = guideHtml;
+    const extraGuide = document.getElementById('extraBuyGuide');
+    if (extraGuide) extraGuide.innerHTML = guideHtml;
 }
