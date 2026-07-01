@@ -1,87 +1,58 @@
 // =========================================================
-// 🧮 구매 계산기 (V11.0 전략 연동 모듈화 버전)
+// 🧮 구매 계산기 (개인 포트폴리오 연동 완벽 복구 버전)
 // =========================================================
 
-// 계산기 탭 클릭 시 렌더링되도록 이벤트 리스너 추가
 document.getElementById('btnTabCalc').addEventListener('click', () => {
     if (typeof renderCalculatorView === 'function') renderCalculatorView();
 });
 
-// 예수금 입력값이 바뀔 때마다 실시간 재계산
 document.getElementById('inputCash').addEventListener('input', calculateRebalancing);
 
-function renderCalculatorView() {
+async function renderCalculatorView() {
+    // 🔥 포트폴리오 데이터가 아직 안 불러와졌다면 강제로 먼저 불러옵니다!
+    if (!globalParsedUsers || Object.keys(globalParsedUsers).length === 0) {
+        if (typeof loadPortfolioData === 'function') {
+            await loadPortfolioData('calc'); 
+            return; 
+        }
+    }
+
     const selector = document.getElementById('calcUserSelector');
-    const strategies = getStrategiesFromSignal();
-    const names = Object.keys(strategies);
+    const names = Object.keys(globalParsedUsers);
     
-    // 드롭다운 갱신 및 라벨 텍스트 동적 변경
-    if(selector.options.length !== names.length && names.length > 0) {
+    // 라벨 원래대로 복구
+    const label = selector.previousElementSibling;
+    if(label) label.innerHTML = "🚀 대상 투자자 선택";
+
+    if (selector.options.length !== names.length && names.length > 0) {
         selector.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
         selector.addEventListener('change', calculateRebalancing);
-        
-        // HTML 라벨을 '대상 투자자 선택'에서 '목표 전략(ETF) 선택'으로 멋지게 변경해줍니다.
-        const label = selector.previousElementSibling;
-        if(label) label.innerHTML = "🚀 목표 전략(ETF) 선택";
     }
     calculateRebalancing();
 }
 
-// 🔥 퀀트 신호(signalData)에서 ETF 목록과 구성종목/비중/가격을 동적으로 추출하는 함수
-function getStrategiesFromSignal() {
-    let strategies = {};
-    let currentName = null;
-    
-    signalData.forEach(r => {
-        if(!r || r.length === 0) return;
-        let r0 = String(r[0] || "").replace(/\s+/g, '').toUpperCase();
-        
-        if(r0.startsWith('■')) {
-            currentName = r[0].replace('■', '').trim();
-            strategies[currentName] = [];
-        } else if(currentName && r0 === '구성종목') {
-            let rawWeightStr = String(r[3]).replace(/,/g, '').trim();
-            let parsedNum = parseFloat(rawWeightStr) || 0;
-            let w = rawWeightStr.includes('%') ? parsedNum : (parsedNum > 0 && parsedNum <= 1.0 ? parsedNum * 100 : parsedNum);
-            
-            // 실시간 가격을 우선 적용, 없으면 전일 종가 적용
-            let livePrice = parseFloat(String(r[5]).replace(/,/g, ''));
-            if (isNaN(livePrice) || livePrice === 0) {
-                livePrice = parseFloat(String(r[4]).replace(/,/g, '')) || 0;
-            }
-
-            strategies[currentName].push({
-                stock: r[1],             // 종목명
-                targetWeight: w / 100,   // 비중(소수점)
-                currPrice: livePrice     // 실시간 가격
-            });
-        }
-    });
-    return strategies;
-}
-
 function calculateRebalancing() {
-    const targetStrategy = document.getElementById('calcUserSelector').value;
+    const targetUser = document.getElementById('calcUserSelector').value;
     const cashInput = parseFloat(document.getElementById('inputCash').value) || 0;
-    const strategies = getStrategiesFromSignal();
-    const items = strategies[targetStrategy];
+    const userObj = globalParsedUsers[targetUser];
     
-    if(!items || items.length === 0) {
-        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">선택된 전략의 구성 종목 데이터가 없습니다.</td></tr>`;
-        document.getElementById('calcTotalCost').innerText = `₩0`;
-        document.getElementById('calcRemainingCash').innerText = `₩0`;
-        document.getElementById('extraBuyGuide').innerHTML = '';
+    if (!userObj || !userObj.items || userObj.items.length === 0) {
+        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">투자자 데이터가 없습니다.</td></tr>`;
         return;
     }
 
     let tableHtml = "";
-    items.forEach(item => {
-        let targetMoney = cashInput * item.targetWeight; // 예수금 * 전략 비중
+    userObj.items.forEach(item => {
+        // 🔥 목표비중 퍼센트 오류 해결 (25.00%를 25로 읽어오므로 100으로 나눔)
+        let weightRaw = item.targetWeight;
+        let actualWeight = weightRaw > 1 ? weightRaw / 100 : weightRaw; 
+        
+        let targetMoney = cashInput * actualWeight;
         let recommendedQty = item.currPrice > 0 ? Math.floor(targetMoney / item.currPrice) : 0;
         
         tableHtml += `<tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 py-4 font-bold text-slate-800">${item.stock}</td>
-            <td class="px-6 py-4 text-right font-bold text-slate-400">${(item.targetWeight * 100).toFixed(2)}%</td>
+            <td class="px-6 py-4 text-right font-bold text-slate-400">${(actualWeight * 100).toFixed(0)}%</td>
             <td class="px-6 py-4 text-right font-mono text-slate-600">₩${Math.round(item.currPrice).toLocaleString()}</td>
             <td class="px-6 py-4 text-right font-mono text-orange-600 font-bold bg-orange-50/40">₩${Math.round(targetMoney).toLocaleString()}</td>
             <td class="px-6 py-4 text-right bg-blue-50/20 border-l border-blue-100">
