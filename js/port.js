@@ -1,5 +1,5 @@
 // =====================================================
-// 🏆 포트폴리오 로드 및 렌더링 모듈 (V15.0 스마트 병합 추적 패치)
+// 🏆 포트폴리오 로드 및 렌더링 모듈 (V15.1 에러 방어 패치)
 // =====================================================
 
 async function loadPortfolioData(currentTab) {
@@ -8,7 +8,6 @@ async function loadPortfolioData(currentTab) {
         const matrix = parseCsvToMatrix(await res.text());
         const users = {};
 
-        // 💡 1. 헤더 딥스캔: 몇 번째 줄에 '종목', '수량' 글자가 있는지 10번째 줄까지 스스로 찾습니다.
         let headerIdx = 0;
         for(let i=0; i < Math.min(10, matrix.length); i++) {
             let rowStr = matrix[i].join('').replace(/\s+/g, '');
@@ -20,7 +19,6 @@ async function loadPortfolioData(currentTab) {
 
         let header = matrix[headerIdx] || [];
         let nameIdx = 0, stockIdx = 1, weightIdx = 2, avgPriceIdx = 3, qtyIdx = 4, currPriceIdx = 5;
-        // 💡 2. 열 위치 스마트 탐색
         for(let c=0; c<header.length; c++){
             let colStr = String(header[c]).replace(/\s+/g, '');
             if(colStr.includes("투자자") || colStr.includes("이름")) nameIdx = c;
@@ -31,14 +29,13 @@ async function loadPortfolioData(currentTab) {
             else if(colStr.includes("현재")) currPriceIdx = c;
         }
 
-        let currentUser = ""; // 🔥 셀 병합(빈 칸) 방어용 변수
+        let currentUser = ""; 
 
         for(let i = headerIdx + 1; i < matrix.length; i++) {
             let row = matrix[i];
             if(row.length < 3) continue;
 
             let nameRaw = String(row[nameIdx] || "").trim();
-            // 이름 칸이 채워져 있으면 현재 유저 업데이트 (병합된 아래 칸들은 이전 유저 이름 자동 계승)
             if(nameRaw && !nameRaw.includes("투자자") && !nameRaw.includes("이름") && !nameRaw.includes("구분") && !nameRaw.includes("No")) {
                 currentUser = nameRaw;
             }
@@ -79,13 +76,17 @@ async function loadPortfolioData(currentTab) {
             return u;
         }).sort((a,b) => b.totalReturnPct - a.totalReturnPct);
 
-        // 현재 선택된 탭에 맞춰 렌더링 호출
         if(currentTab === 'port') renderPortfolioView(rankArray);
-        if(currentTab === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
-        if(currentTab === 'conc' && typeof initConcentrationView === 'function') initConcentrationView();
+        if(currentTab === 'calc' && typeof window.renderCalculatorView === 'function') window.renderCalculatorView();
+        
+        // 🔥 안전망: 함수가 없으면 무시하고 넘어갑니다!
+        if(currentTab === 'conc') {
+            if(typeof window.initConcentrationView === 'function') window.initConcentrationView();
+        }
+        
         if(currentTab === 'div') {
-            if(typeof loadDividendHistoryData === 'function') await loadDividendHistoryData();
-            if(typeof loadActualDividendData === 'function') await loadActualDividendData();
+            if(typeof window.loadDividendHistoryData === 'function') await window.loadDividendHistoryData();
+            if(typeof window.loadActualDividendData === 'function') await window.loadActualDividendData();
         }
     } catch (e) { console.error("포트폴리오 로드 실패:", e); }
 }
