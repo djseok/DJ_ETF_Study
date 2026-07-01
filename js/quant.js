@@ -1,40 +1,28 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V12.3 데이터 오차 완벽 방어형 아키텍처)
+// 📈 퀀트 예측 엔진 (V12.4 마스터 데이터 크로스 매핑 버전)
 // =========================================================
 
 function extractGlobalMacroVariables() {
-    globalFxDelta = 0;
-    globalVixValue = 15;
-
-    // Characteristic 시트에서 매크로 지표 추출 (열이 밀려도 마지막 두 숫자를 알아서 찾음)
     macroData.forEach(row => {
-        let text = row.join('').replace(/\s+/g, '').toUpperCase();
-        let nums = row.map(x => parseFloat(String(x).replace(/,/g, ''))).filter(x => !isNaN(x));
-        if (nums.length < 2) return;
-
-        let prev = nums[nums.length - 2]; // 무조건 뒤에서 두 번째 숫자가 전일가
-        let live = nums[nums.length - 1]; // 무조건 맨 마지막 숫자가 현재가
+        if (!row[0] || !row[2]) return;
+        let name = String(row[2]).replace(/\s+/g, '');
+        
+        let prev = parseFloat(String(row[3]).replace(/,/g, '')) || 0;
+        let live = parseFloat(String(row[4]).replace(/,/g, '')) || 0;
         let pct = prev > 0 ? ((live - prev) / prev * 100) : 0;
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
-        if (text.includes('나스닥') && !text.includes('KODEX') && !text.includes('TIGER') && !text.includes('RISE')) {
-            let el = document.getElementById('macro-nasdaq');
-            if(el) el.innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toLocaleString()}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-        } 
-        else if ((text.includes('환율') || text.includes('USDKRW')) && !text.includes('엔') && !text.includes('JPY')) {
+        if(name.includes('나스닥')) {
+            document.getElementById('macro-nasdaq').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toLocaleString()}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+        } else if(name.includes('환율') && !name.includes('엔')) {
             globalFxDelta = prev > 0 ? (live - prev) / prev : 0;
-            let el = document.getElementById('macro-fx');
-            if(el) el.innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">₩${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-        } 
-        else if (text.includes('VIX')) {
+            document.getElementById('macro-fx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">₩${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+        } else if(name.includes('VIX')) {
             globalVixValue = live;
-            let el = document.getElementById('macro-vix');
-            if(el) el.innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
-        } 
-        else if (text.includes('TNX')) {
-            let el = document.getElementById('macro-tnx');
-            if(el) el.innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}%</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+            document.getElementById('macro-vix').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+        } else if(name.includes('TNX')) {
+            document.getElementById('macro-tnx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}%</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
         }
     });
 }
@@ -43,12 +31,12 @@ function populateAssetDropdownSelector() {
     const selector = document.getElementById('assetSelector');
     const uniqueAssets = [];
     signalData.forEach(row => {
-        let r0 = String(row[0] || "").trim();
-        if (r0.startsWith('■')) {
-            uniqueAssets.push(r0.replace('■', '').trim());
+        if (row[0] && String(row[0]).startsWith('■')) {
+            let assetName = String(row[0]).replace('■', '').trim();
+            uniqueAssets.push(assetName);
         }
     });
-    if(selector) selector.innerHTML = uniqueAssets.map(asset => `<option value="${asset}">${asset}</option>`).join('');
+    selector.innerHTML = uniqueAssets.map(asset => `<option value="${asset}">${asset}</option>`).join('');
 }
 
 function renderTargetAssetDashboard(target) {
@@ -56,10 +44,29 @@ function renderTargetAssetDashboard(target) {
     
     let cleanTarget = target.replace(/\s+/g, '').toUpperCase();
     let tBuy = -2.0, tSell = 2.0, beta = 1.0;
+    
+    // 🔥 [핵심 기능] MasterData 시트에서 현재 선택된 본체 ETF의 가격을 원격 조회합니다.
+    let bPrev = 0, bLive = 0;
+    masterData.forEach(row => {
+        if (!row[2]) return;
+        let rowAssetName = String(row[2]).replace(/\s+/g, '').toUpperCase();
+        
+        // 종목명이 매칭되면 가격 추출 (원화환산 컬럼이 비어있으면 일반 종가 컬럼 참조)
+        if (rowAssetName === cleanTarget) {
+            let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; // 전일종가
+            let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; // 실시간현재가
+            let p5 = parseFloat(String(row[5]).replace(/,/g, '')) || 0; // 원화환산전일가
+            let p6 = parseFloat(String(row[6]).replace(/,/g, '')) || 0; // 원화환산현재가
+            
+            bPrev = p5 > 0 ? p5 : p3;
+            bLive = p6 > 0 ? p6 : p4;
+        }
+    });
+    
     let comps = [];
     let isParsingTarget = false;
 
-    // ETF_Quant_Signals 시트 파싱 (열 위치에 구애받지 않는 스마트 탐색)
+    // ETF_Quant_Signals 탭 파싱 (시트가 깔끔해졌으므로 기준, 베타, 구성종목만 판독)
     for (let i = 0; i < signalData.length; i++) {
         let r = signalData[i];
         let r0 = String(r[0] || "").replace(/\s+/g, '').toUpperCase();
@@ -72,35 +79,29 @@ function renderTargetAssetDashboard(target) {
 
         if (isParsingTarget) {
             if (r0 === '기준') {
-                let nums = r.map(x => parseFloat(String(x).replace(/,/g, ''))).filter(x => !isNaN(x));
-                if (nums.length >= 2) { tBuy = nums[0]; tSell = nums[1]; }
-                else if (nums.length === 1) { tBuy = nums[0]; }
+                tBuy = parseFloat(String(r[2]).replace(/,/g, '')) || tBuy;
+                tSell = parseFloat(String(r[3]).replace(/,/g, '')) || tSell;
             } 
             else if (r0 === '베타') {
-                let nums = r.map(x => parseFloat(String(x).replace(/,/g, ''))).filter(x => !isNaN(x));
-                if (nums.length >= 1) { beta = nums[0]; }
+                beta = parseFloat(String(r[2]).replace(/,/g, '')) || beta;
             } 
             else if (r0 === '구성종목') {
-                // 비중(%) 입력 방식 완벽 방어: 0.18이든 18.14든 18.14%든 찰떡같이 변환
-                let w_raw = parseFloat(String(r[3]).replace(/%/g, '').replace(/,/g, '')) || 0;
-                let w = (w_raw > 0 && w_raw <= 1.0) ? w_raw * 100 : w_raw; 
-                
                 comps.push({
-                    name: r[1] || "Unknown",
-                    ticker: r[2] || "-",
-                    w: w,
+                    name: r[1],
+                    ticker: r[2],
+                    w: parseFloat(String(r[3]).replace(/,/g, '')) * 100 || 0, 
                     prev: parseFloat(String(r[4]).replace(/,/g, '')) || 0,
                     live: parseFloat(String(r[5]).replace(/,/g, '')) || 0
                 });
             } 
-            else if (r0.includes('합계')) {
+            else if (r0 === '합계') {
                 break; 
             }
         }
     }
 
-    if(document.getElementById('threshBuyUI')) document.getElementById('threshBuyUI').innerText = `${tBuy}%`; 
-    if(document.getElementById('threshSellUI')) document.getElementById('threshSellUI').innerText = `+${tSell}%`;
+    document.getElementById('threshBuyUI').innerText = `${tBuy}%`; 
+    document.getElementById('threshSellUI').innerText = `+${tSell}%`;
 
     let rawDelta = 0, tableHtml = "";
     
@@ -122,27 +123,27 @@ function renderTargetAssetDashboard(target) {
             <td class="px-6 py-4 text-right mono font-black bg-orange-50/30 ${cont>=0?'text-red-600':'text-blue-600'}">${cont>=0?'+':''}${(cont*100).toFixed(2)}%</td>
         </tr>`;
     });
-    
-    if(document.getElementById('componentTableBody')) document.getElementById('componentTableBody').innerHTML = tableHtml;
+    document.getElementById('componentTableBody').innerHTML = tableHtml;
 
     let vMult = (globalVixValue >= 25) ? 1.30 : (globalVixValue >= 20 ? 1.15 : 1.0);
     let finalRet = ((1 + rawDelta * beta) * (1 + globalFxDelta) - 1) * 100 * vMult;
     
-    if(document.getElementById('mathPure')) document.getElementById('mathPure').innerText = `${(rawDelta*100).toFixed(2)}%`;
-    if(document.getElementById('mathBeta')) document.getElementById('mathBeta').innerText = `${beta}x`;
-    if(document.getElementById('mathFx')) document.getElementById('mathFx').innerText = `${(globalFxDelta*100).toFixed(2)}%`;
-    if(document.getElementById('mathVix')) document.getElementById('mathVix').innerText = `${vMult}x`;
-    
-    if(document.getElementById('predictedChange')) {
-        document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;
-        document.getElementById('predictedChange').className = `text-4xl font-black mono ${finalRet>=0?'text-red-600':'text-blue-600'}`;
-    }
+    document.getElementById('mathPure').innerText = `${(rawDelta*100).toFixed(2)}%`;
+    document.getElementById('mathBeta').innerText = `${beta}x`;
+    document.getElementById('mathFx').innerText = `${(globalFxDelta*100).toFixed(2)}%`;
+    document.getElementById('mathVix').innerText = `${vMult}x`;
+    document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;
+    document.getElementById('predictedChange').className = `text-4xl font-black mono ${finalRet>=0?'text-red-600':'text-blue-600'}`;
+
+    // MasterData에서 실시간 조회해 온 bPrev와 bLive로 예상가/현재가 완벽 출력!
+    let expectedPrice = bPrev * (1 + finalRet / 100);
+    document.getElementById('predictedPrice').innerText = `오늘 예상가: ₩${bPrev > 0 ? Math.round(expectedPrice).toLocaleString() : '0'}`;
+    document.getElementById('currentLivePrice').innerText = `실시간 현재가: ₩${bLive > 0 ? Math.round(bLive).toLocaleString() : (bPrev > 0 ? Math.round(bPrev).toLocaleString() : '0')}`;
 
     const c = document.getElementById('signalCard'), t = document.getElementById('signalTitle'), d = document.getElementById('signalDesc');
-    if(c && t && d) {
-        c.className = "p-6 rounded-2xl shadow-md transition-all duration-300 relative overflow-hidden border border-slate-200 " + (finalRet <= tBuy ? "signal-buy-strong" : (finalRet >= tSell ? "signal-sell-strong" : "signal-hold"));
-        if(finalRet <= tBuy) { t.innerHTML = "BUY 🛒🐕"; d.innerHTML = "기계적 매수 구간 통과 중."; }
-        else if(finalRet >= tSell) { t.innerHTML = "SELL 💰🐕"; d.innerHTML = "목표 익절 구간 통과 중."; }
-        else { t.innerHTML = "HOLD 💤🐕"; d.innerHTML = "박스권 안의 안정 자산 복리 관망 구간."; }
-    }
+    c.className = "p-6 rounded-2xl shadow-md transition-all duration-300 relative overflow-hidden border border-slate-200 " + (finalRet <= tBuy ? "signal-buy-strong" : (finalRet >= tSell ? "signal-sell-strong" : "signal-hold"));
+    
+    if(finalRet <= tBuy) { t.innerHTML = "BUY 🛒🐕"; d.innerHTML = "기계적 매수 구간 통과 중."; }
+    else if(finalRet >= tSell) { t.innerHTML = "SELL 💰🐕"; d.innerHTML = "목표 익절 구간 통과 중."; }
+    else { t.innerHTML = "HOLD 💤🐕"; d.innerHTML = "박스권 안의 안정 자산 복리 관망 구간."; }
 }
