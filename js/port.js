@@ -1,5 +1,5 @@
 // =====================================================
-// 🏆 포트폴리오 로드 및 렌더링 모듈 (수정판)
+// 🏆 포트폴리오 로드 및 렌더링 모듈 (V15.0 스마트 병합 추적 패치)
 // =====================================================
 
 async function loadPortfolioData(currentTab) {
@@ -7,33 +7,69 @@ async function loadPortfolioData(currentTab) {
         const res = await fetch(PORTFOLIO_CSV_URL);
         const matrix = parseCsvToMatrix(await res.text());
         const users = {};
-        
-        // i=1부터 시작하여 헤더(0행)를 건너뜁니다.
-        for(let i=1; i<matrix.length; i++) {
-            let row = matrix[i];
-            if(row.length < 6) continue;
-            
-            let name = row[0] ? row[0].trim() : "";
-            // 제목행이 또 나오거나 이름이 비어있으면 건너뜁니다.
-            if(!name || name === "이름" || name === "투자자") continue; 
 
-            let stock = row[1] ? row[1].trim() : "";
-            let targetWeight = parseFloat(String(row[2]).replace(/,/g, '')) || 0;
-            let avgPrice = parseFloat(String(row[3]).replace(/,/g, '')) || 0;
-            let qty = parseFloat(String(row[4]).replace(/,/g, '')) || 0;
-            let currPrice = parseFloat(String(row[5]).replace(/,/g, '')) || avgPrice;
+        // 💡 1. 헤더 딥스캔: 몇 번째 줄에 '종목', '수량' 글자가 있는지 10번째 줄까지 스스로 찾습니다.
+        let headerIdx = 0;
+        for(let i=0; i < Math.min(10, matrix.length); i++) {
+            let rowStr = matrix[i].join('').replace(/\s+/g, '');
+            if(rowStr.includes("종목") && (rowStr.includes("수량") || rowStr.includes("비중") || rowStr.includes("평단"))) {
+                headerIdx = i;
+                break;
+            }
+        }
+
+        let header = matrix[headerIdx] || [];
+        let nameIdx = 0, stockIdx = 1, weightIdx = 2, avgPriceIdx = 3, qtyIdx = 4, currPriceIdx = 5;
+        // 💡 2. 열 위치 스마트 탐색
+        for(let c=0; c<header.length; c++){
+            let colStr = String(header[c]).replace(/\s+/g, '');
+            if(colStr.includes("투자자") || colStr.includes("이름")) nameIdx = c;
+            else if(colStr.includes("종목")) stockIdx = c;
+            else if(colStr.includes("비중")) weightIdx = c;
+            else if(colStr.includes("평단") || colStr.includes("단가")) avgPriceIdx = c;
+            else if(colStr.includes("수량") || colStr.includes("보유")) qtyIdx = c;
+            else if(colStr.includes("현재")) currPriceIdx = c;
+        }
+
+        let currentUser = ""; // 🔥 셀 병합(빈 칸) 방어용 변수
+
+        for(let i = headerIdx + 1; i < matrix.length; i++) {
+            let row = matrix[i];
+            if(row.length < 3) continue;
+
+            let nameRaw = String(row[nameIdx] || "").trim();
+            // 이름 칸이 채워져 있으면 현재 유저 업데이트 (병합된 아래 칸들은 이전 유저 이름 자동 계승)
+            if(nameRaw && !nameRaw.includes("투자자") && !nameRaw.includes("이름") && !nameRaw.includes("구분") && !nameRaw.includes("No")) {
+                currentUser = nameRaw;
+            }
+            let name = currentUser;
+            if(!name) continue;
+
+            let stock = String(row[stockIdx] || "").trim();
+            if(!stock || stock.includes("종목") || stock.includes("합계")) continue;
+
+            let wStr = String(row[weightIdx] || "").replace(/[^0-9.]/g, '');
+            let targetWeight = parseFloat(wStr) || 0;
+
+            let aStr = String(row[avgPriceIdx] || "").replace(/[^0-9.]/g, '');
+            let avgPrice = parseFloat(aStr) || 0;
+
+            let qStr = String(row[qtyIdx] || "").replace(/[^0-9.-]/g, '');
+            let qty = parseFloat(qStr) || 0;
+
+            let cStr = String(row[currPriceIdx] || "").replace(/[^0-9.]/g, '');
+            let currPrice = parseFloat(cStr) || avgPrice;
 
             if(!users[name]) users[name] = { name: name, totalInvest: 0, totalCurrent: 0, items: [] };
 
             let invest = avgPrice * qty;
             let current = currPrice * qty;
-            
-            // 수량(qty)이 0 이상일 때만 합계에 반영
-            if(qty >= 0) { 
-                users[name].totalInvest += invest; 
-                users[name].totalCurrent += current; 
+
+            if(qty > 0) {
+                users[name].totalInvest += invest;
+                users[name].totalCurrent += current;
             }
-            
+
             users[name].items.push({ stock, targetWeight, avgPrice, currPrice, qty, invest, current });
         }
         globalParsedUsers = users;
@@ -43,23 +79,27 @@ async function loadPortfolioData(currentTab) {
             return u;
         }).sort((a,b) => b.totalReturnPct - a.totalReturnPct);
 
-        // 탭 상태에 따라 렌더링
+        // 현재 선택된 탭에 맞춰 렌더링 호출
         if(currentTab === 'port') renderPortfolioView(rankArray);
-        if(currentTab === 'calc') renderCalculatorView();
-        if(currentTab === 'conc') initConcentrationView();
+        if(currentTab === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
+        if(currentTab === 'conc' && typeof initConcentrationView === 'function') initConcentrationView();
         if(currentTab === 'div') {
-            await loadDividendHistoryData();
-            await loadActualDividendData();
+            if(typeof loadDividendHistoryData === 'function') await loadDividendHistoryData();
+            if(typeof loadActualDividendData === 'function') await loadActualDividendData();
         }
-    } catch (e) { 
-        console.error("포트폴리오 로드 실패:", e); 
-    }
+    } catch (e) { console.error("포트폴리오 로드 실패:", e); }
 }
 
 function renderPortfolioView(rankArray) {
     let rankHtml = "", cardsHtml = "";
     const medals = ["🥇", "🥈", "🥉"];
-    
+
+    if(!rankArray || rankArray.length === 0) {
+        const rankCont = document.getElementById('rankingContainer');
+        if(rankCont) rankCont.innerHTML = "<div class='p-4 text-center text-slate-500 font-bold'>데이터를 불러오는 중이거나 데이터가 없습니다.</div>";
+        return;
+    }
+
     rankArray.forEach((user, index) => {
         let medal = medals[index] || "🏅";
         let color = user.totalReturnPct >= 0 ? "text-red-500" : "text-blue-500";
@@ -72,7 +112,7 @@ function renderPortfolioView(rankArray) {
         });
         cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4></div><div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}</tbody></table></div></div>`;
     });
-    
+
     const rankCont = document.getElementById('rankingContainer');
     const cardsCont = document.getElementById('personalCardsContainer');
     if(rankCont) rankCont.innerHTML = rankHtml;
