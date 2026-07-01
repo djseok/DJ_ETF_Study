@@ -1,5 +1,5 @@
 // =====================================================
-// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V14.0 롤링 12개월 연속 캘린더 패치)
+// 📈 배당 이력 및 실수령 데이터 로딩 모듈 (V15.0 딥스캔 롤링 캘린더)
 // =====================================================
 
 let myDivChart = null; 
@@ -22,7 +22,17 @@ async function loadDividendHistoryData() {
         const matrix = parseCsvToMatrix(await res.text());
         let stockGroupedLogs = {}; 
 
-        let header = matrix[0] || [];
+        // 💡 딥스캔: 위에서 5번째 줄까지 뒤져서 진짜 헤더 위치 찾기
+        let headerIdx = 0;
+        for(let i=0; i < Math.min(5, matrix.length); i++) {
+            let rowStr = matrix[i].join('').replace(/\s+/g, '');
+            if(rowStr.includes("종목") && (rowStr.includes("배당") || rowStr.includes("금액"))) {
+                headerIdx = i;
+                break;
+            }
+        }
+
+        let header = matrix[headerIdx] || [];
         let nameIdx = 1, dateIdx = 3, amountIdx = 4; 
         for(let c=0; c<header.length; c++){
             let colStr = String(header[c]).replace(/\s+/g, '');
@@ -31,7 +41,7 @@ async function loadDividendHistoryData() {
             else if(colStr.includes("배당") || colStr.includes("금액") || colStr.includes("분배")) amountIdx = c;
         }
 
-        for(let i = 1; i < matrix.length; i++) {
+        for(let i = headerIdx + 1; i < matrix.length; i++) {
             let row = matrix[i];
             let stockName = String(row[nameIdx] || "").trim();
             let date = String(row[dateIdx] || "").trim();
@@ -81,7 +91,17 @@ async function loadActualDividendData() {
         const matrix = parseCsvToMatrix(await res.text());
         let logs = [];
         
-        let header = matrix[0] || [];
+        // 💡 딥스캔: 실수령액 시트도 5번째 줄까지 스캔해서 헤더 찾기
+        let headerIdx = 0;
+        for(let i=0; i < Math.min(5, matrix.length); i++) {
+            let rowStr = matrix[i].join('').replace(/\s+/g, '');
+            if((rowStr.includes("투자자") || rowStr.includes("이름")) && rowStr.includes("종목")) {
+                headerIdx = i;
+                break;
+            }
+        }
+
+        let header = matrix[headerIdx] || [];
         let userIdx = 1, dateIdx = 2, stockIdx = 3, amountIdx = 4; 
         for(let c=0; c<header.length; c++){
             let colStr = String(header[c]).replace(/\s+/g, '');
@@ -91,7 +111,7 @@ async function loadActualDividendData() {
             else if(colStr.includes("수령") || colStr.includes("금액")) amountIdx = c;
         }
 
-        for(let i=1; i<matrix.length; i++) {
+        for(let i = headerIdx + 1; i < matrix.length; i++) {
             let row = matrix[i];
             let userName = String(row[userIdx] || "").trim();      
             let date = String(row[dateIdx] || "").trim();          
@@ -120,7 +140,6 @@ function initDividendUserSelector() {
     }
 }
 
-// 📊 배당금 차트 렌더링 함수 (연속 롤링 12개월 반영)
 function renderDividendChart(monthlyData, currentMonth) {
     const ctx = document.getElementById('dividendChart');
     if(!ctx) return;
@@ -128,7 +147,6 @@ function renderDividendChart(monthlyData, currentMonth) {
     let labels = [];
     let chartData = [];
     
-    // 🔥 루프 수정: 단순 12월 컷오프가 아니라 현재월부터 연속 12번 회전
     for(let i = 0; i < 12; i++) {
         let m = ((currentMonth - 1 + i) % 12) + 1;
         labels.push(m + "월");
@@ -167,14 +185,12 @@ function calculateExpectedDividends() {
     const selector = document.getElementById('divUserSelector');
     if(!selector) return;
     
-    // 🔥 방어 코드: 선택 상자가 비어있다면 글로벌 객체의 첫 번째 유저명을 강제로 타겟팅
     const targetUser = selector.value || Object.keys(globalParsedUsers)[0];
     if(!targetUser) return;
     
     const userObj = globalParsedUsers[targetUser];
     if(!userObj) return;
 
-    // 1. 실제 수령 내역 (하단 다이어리) 그리기
     let totalReceived = 0;
     let actualLogsHtml = "";
     let sortedActualLogs = [...globalActualDividendLogs].sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -204,7 +220,6 @@ function calculateExpectedDividends() {
     const tableBody = document.getElementById("actual-dividend-table-body");
     if(tableBody) tableBody.innerHTML = actualLogsHtml || `<tr><td colspan="3" class="p-6 text-center text-slate-400 font-bold">입금 내역이 없습니다.</td></tr>`;
 
-    // 2. 향후 예상 배당금 캘린더 & 차트 연산
     let totalAnnualDividend = 0;
     let monthlyCalendar = new Array(12).fill(0); 
 
@@ -244,7 +259,6 @@ function calculateExpectedDividends() {
     let currentMonth = new Date().getMonth() + 1; 
     let calendarHtml = "";
     
-    // 🔥 달력 렌더링 루프 수정: 현재 월부터 연속 12개월 표출 알고리즘 적용
     for (let i = 0; i < 12; i++) {
         let m = ((currentMonth - 1 + i) % 12) + 1;
         let amount = monthlyCalendar[m - 1];
