@@ -1,40 +1,65 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V12.8 거시지표 통합 완벽 복구 버전)
+// 📈 퀀트 예측 엔진 (V13.1 Characteristic 시트 연동 완벽 패치)
 // =========================================================
 
 function extractGlobalMacroVariables() {
-    // 🔥 거시지표가 MasterData 시트로 통합되었으므로, masterData 배열에서 '지표'를 찾습니다.
-    if (!masterData || masterData.length === 0) return;
+    // 🔥 중요: 지표 데이터는 masterData가 아니라 macroData 배열에 들어있습니다!
+    if (!macroData || macroData.length === 0) return;
 
-    masterData.forEach(row => {
-        let gubun = String(row[0] || "").trim();
-        if (gubun !== '지표') return; // 구분 열이 '지표'인 것만 정확하게 골라냅니다.
+    macroData.forEach(row => {
+        let gubun = String(row[0] || "").replace(/\s+/g, '');
+        if (!gubun.includes('지표')) return; // 구분 열이 '지표'인 것만 필터링
 
+        // 동진님의 Characteristic 시트 구조:
+        // row[0]=구분, row[1]=티커/코드, row[2]=종목명, row[3]=전일지수, row[4]=현재지수
+        let ticker = String(row[1] || "").replace(/\s+/g, '').toUpperCase();
         let name = String(row[2] || "").replace(/\s+/g, '').toUpperCase();
+        let combinedText = ticker + name;
         
-        let prev = parseFloat(String(row[3]).replace(/,/g, '')) || 0;
-        let live = parseFloat(String(row[4]).replace(/,/g, '')) || 0;
+        let prevStr = String(row[3] || "").replace(/[^0-9.]/g, '');
+        let liveStr = String(row[4] || "").replace(/[^0-9.]/g, '');
+        
+        let prev = parseFloat(prevStr) || 0;
+        let live = parseFloat(liveStr) || 0;
+        
         let pct = prev > 0 ? ((live - prev) / prev * 100) : 0;
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
-        // 🚨 이름에 '나스닥', 'NDX', 'IXIC' 중 하나라도 들어가면 표출!
-        if(name.includes('나스닥') || name.includes('NDX') || name.includes('IXIC')) {
-            document.getElementById('macro-nasdaq').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toLocaleString()}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+        // 1. 나스닥지수 (.IXIC 또는 NDX 또는 나스닥)
+        if (combinedText.includes('나스닥') || combinedText.includes('IXIC') || combinedText.includes('NDX')) {
+            // 선물과 본장이 같이 있다면 공식 본장 지수인 .IXIC 데이터를 위젯에 우선 고정
+            if (combinedText.includes('선물') && document.getElementById('macro-nasdaq').innerHTML.includes('mono')) {
+                return; 
+            }
+            document.getElementById('macro-nasdaq').innerHTML = `
+                <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toLocaleString()}</div>
+                <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
+            `;
         } 
-        // 🚨 이름에 '환율' 이 들어가면 무조건 표출!
-        else if(name.includes('환율') && !name.includes('엔')) {
+        // 2. 환율 (원달러, USDKRW)
+        else if (combinedText.includes('환율') || combinedText.includes('USDKRW')) {
+            if (combinedText.includes('엔화') || combinedText.includes('JPY')) return; // 엔화는 통계에서 제외
             globalFxDelta = prev > 0 ? (live - prev) / prev : 0;
-            document.getElementById('macro-fx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">₩${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+            document.getElementById('macro-fx').innerHTML = `
+                <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">₩${live.toLocaleString()}</div>
+                <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
+            `;
         } 
-        // 🚨 이름에 'VIX'가 들어가면 표출!
-        else if(name.includes('VIX')) {
+        // 3. VIX 공포지수
+        else if (combinedText.includes('VIX')) {
             globalVixValue = live;
-            document.getElementById('macro-vix').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+            document.getElementById('macro-vix').innerHTML = `
+                <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toFixed(2)}</div>
+                <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
+            `;
         } 
-        // 🚨 이름에 'TNX'가 들어가면 표출!
-        else if(name.includes('TNX')) {
-            document.getElementById('macro-tnx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono">${live.toFixed(2)}%</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
+        // 4. 10년물 국채 금리 (TNX)
+        else if (combinedText.includes('TNX') || combinedText.includes('국채')) {
+            document.getElementById('macro-tnx').innerHTML = `
+                <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toFixed(2)}%</div>
+                <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
+            `;
         }
     });
 }
@@ -63,7 +88,6 @@ function renderTargetAssetDashboard(target) {
         let rowAssetName = String(row[2]).replace(/\s+/g, '').toUpperCase();
         
         if (rowAssetName === cleanTarget) {
-            // 🔥 시트 모듈화에 맞춰 3번열(전일종가)과 4번열(현재가)을 정확히 가져옵니다.
             let p3 = parseFloat(String(row[3]).replace(/,/g, '')) || 0; 
             let p4 = parseFloat(String(row[4]).replace(/,/g, '')) || 0; 
             
@@ -101,11 +125,11 @@ function renderTargetAssetDashboard(target) {
                 let finalWeight = 0;
                 
                 if (rawWeightStr.includes('%')) {
-                    finalWeight = parsedNum; // "8.85%" -> 8.85
+                    finalWeight = parsedNum;
                 } else if (parsedNum > 0 && parsedNum <= 1.0) {
-                    finalWeight = parsedNum * 100; // 0.0885 -> 8.85
+                    finalWeight = parsedNum * 100;
                 } else {
-                    finalWeight = parsedNum; // 8.85 -> 8.85
+                    finalWeight = parsedNum;
                 }
 
                 comps.push({
