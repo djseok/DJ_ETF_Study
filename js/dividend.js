@@ -1,16 +1,19 @@
+// =====================================================
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.0 최종 마스터)
+// =====================================================
+
 var myDivChart = null; 
 
 var CHART_COLORS = [
-    'rgba(54, 162, 235, 0.7)',  // 파랑
-    'rgba(255, 99, 132, 0.7)',  // 빨강
-    'rgba(255, 206, 86, 0.7)',  // 노랑
-    'rgba(75, 192, 192, 0.7)',  // 초록
-    'rgba(153, 102, 255, 0.7)', // 보라
-    'rgba(255, 159, 64, 0.7)',  // 주황
-    'rgba(199, 199, 199, 0.7)'  // 회색
+    'rgba(54, 162, 235, 0.7)',
+    'rgba(255, 99, 132, 0.7)',
+    'rgba(255, 206, 86, 0.7)',
+    'rgba(75, 192, 192, 0.7)',
+    'rgba(153, 102, 255, 0.7)',
+    'rgba(255, 159, 64, 0.7)',
+    'rgba(199, 199, 199, 0.7)'
 ];
 
-// 💡 구글 시트 배당주기 탭(룰북)에서 주기와 평균액을 가져와 동적으로 사전을 빌드하는 함수
 async function loadDynamicDividendRules() {
     try {
         if(typeof DIVIDEND_RULES_CSV_URL === 'undefined') return;
@@ -30,7 +33,6 @@ async function loadDynamicDividendRules() {
 
             if (!rawStockName) continue;
 
-            // "1,4,7,10" 문자열을 쪼개 정수 배열로 변환
             var payMonthsArray = rawMonths.split(',').map(function(m) {
                 return parseInt(m.trim());
             }).filter(function(m) {
@@ -43,7 +45,6 @@ async function loadDynamicDividendRules() {
         }
         
         globalDividendRulesMatrix = rulesObj;
-        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
     } catch (e) {
         console.error("동적 배당 룰북 로드 실패:", e);
     }
@@ -88,7 +89,7 @@ function calculateAndDrawDividends() {
     var totalMonthlyCalendar = new Array(12).fill(0); 
     var currentMonth = new Date().getMonth() + 1;
 
-    // [1] 2번 파일에서 가져온 실제 통장 입금 내역 파싱
+    // 과거 실수령 통장 데이터 취합
     if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
         var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a,b){
             return new Date(b.date) - new Date(a.date);
@@ -118,7 +119,7 @@ function calculateAndDrawDividends() {
         }
     }
 
-    // [2] 1번 파일(룰북 시트)을 활용한 미래 예측액 계산
+    // 미래 배당 예상 데이터 취합 (보유수량 * 룰북)
     var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
     var totalAnnualExpected = 0; 
 
@@ -147,6 +148,7 @@ function calculateAndDrawDividends() {
                 for(var p=0; p<activeRule.payMonths.length; p++){
                     var monthNum = activeRule.payMonths[p];
                     var calIndex = monthNum - 1;
+                    // 이미 지난 달(실수령액)은 미래 예측에서 제외
                     var isFutureMonth = monthNum > currentMonth;
 
                     if (isFutureMonth) {
@@ -159,8 +161,9 @@ function calculateAndDrawDividends() {
         }
     }
 
+    // UI 업데이트 구역
     var nameLabel = document.getElementById("actual-received-name-label");
-    if(nameLabel) nameLabel.innerText = "[" + targetUser + "]님의 실수령 배당금 현황";
+    if(nameLabel) nameLabel.innerText = "[" + targetUser + "]님의 배당금 현황";
     
     var divAmount = document.getElementById("actual-received-dividend");
     if(divAmount) divAmount.innerText = "₩" + Math.round(totalReceived).toLocaleString();
