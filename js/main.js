@@ -1,27 +1,15 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V19.0 최종 연결 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V19.0 최종 마스터)
 // =========================================================
 var timestamp = new Date().getTime();
 
-// 1. 매크로 지표 시트 (Characteristic)
 var MACRO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=2016694665&single=true&output=csv&t=" + timestamp;
-
-// 2. 퀀트 신호 시트 (ETF_Quant_Signals)
 var SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1985460214&single=true&output=csv&t=" + timestamp;
-
-// 3. 개별 종목 마스터 시트 (MasterData)
 var MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
-
-// 4. [2번 파일] 통합 포트폴리오 및 배당금 실수령 시트
 var PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
-
-// 5. 누적 배당 이력(과거 히스토리)
 var DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
-
-// 6. ETF 배당 규칙(주기 및 평균 예상액 마스터 룰북)
 var DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
 
-// 전역 공유 그릇 설정 (모든 파일에서 읽을 수 있도록 var 선언)
 var macroData = [];
 var signalData = [];
 var masterData = []; 
