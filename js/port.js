@@ -1,94 +1,93 @@
 // =====================================================
-// 🏆 포트폴리오 로드 및 렌더링 모듈 (V15.1 에러 방어 패치)
+// 🏆 포트폴리오 & 배당 일지 동시 로드 모듈 (V16.0 하드코어 패치)
 // =====================================================
 
 async function loadPortfolioData(currentTab) {
     try {
         const res = await fetch(PORTFOLIO_CSV_URL);
         const matrix = parseCsvToMatrix(await res.text());
-        const users = {};
+        
+        const users = {}; // A~F 포트폴리오 데이터 보관함
+        const divLogs = []; // H~L 실수령 배당금 보관함
 
-        let headerIdx = 0;
-        for(let i=0; i < Math.min(10, matrix.length); i++) {
-            let rowStr = matrix[i].join('').replace(/\s+/g, '');
-            if(rowStr.includes("종목") && (rowStr.includes("수량") || rowStr.includes("비중") || rowStr.includes("평단"))) {
-                headerIdx = i;
-                break;
-            }
-        }
-
-        let header = matrix[headerIdx] || [];
-        let nameIdx = 0, stockIdx = 1, weightIdx = 2, avgPriceIdx = 3, qtyIdx = 4, currPriceIdx = 5;
-        for(let c=0; c<header.length; c++){
-            let colStr = String(header[c]).replace(/\s+/g, '');
-            if(colStr.includes("투자자") || colStr.includes("이름")) nameIdx = c;
-            else if(colStr.includes("종목")) stockIdx = c;
-            else if(colStr.includes("비중")) weightIdx = c;
-            else if(colStr.includes("평단") || colStr.includes("단가")) avgPriceIdx = c;
-            else if(colStr.includes("수량") || colStr.includes("보유")) qtyIdx = c;
-            else if(colStr.includes("현재")) currPriceIdx = c;
-        }
-
-        let currentUser = ""; 
-
-        for(let i = headerIdx + 1; i < matrix.length; i++) {
+        // 첫 번째 줄(헤더)은 건너뛰고 인덱스 1부터 바로 읽기 시작합니다.
+        for(let i = 1; i < matrix.length; i++) {
             let row = matrix[i];
             if(row.length < 3) continue;
 
-            let nameRaw = String(row[nameIdx] || "").trim();
-            if(nameRaw && !nameRaw.includes("투자자") && !nameRaw.includes("이름") && !nameRaw.includes("구분") && !nameRaw.includes("No")) {
-                currentUser = nameRaw;
+            // --------------------------------------------------
+            // ⚔️ [1] 포트폴리오 파싱 (A~F열: 인덱스 0~5)
+            // --------------------------------------------------
+            let pName = String(row[0] || "").trim();
+            let pStock = String(row[1] || "").trim();
+            let pWeightStr = String(row[2] || "").replace(/[^0-9.]/g, '');
+            let pAvgPriceStr = String(row[3] || "").replace(/[^0-9.]/g, '');
+            let pQtyStr = String(row[4] || "").replace(/[^0-9.-]/g, '');
+            let pCurrPriceStr = String(row[5] || "").replace(/[^0-9.]/g, '');
+
+            let pWeight = parseFloat(pWeightStr) || 0;
+            let pAvgPrice = parseFloat(pAvgPriceStr) || 0;
+            let pQty = parseFloat(pQtyStr) || 0;
+            let pCurrPrice = parseFloat(pCurrPriceStr) || pAvgPrice;
+
+            // 이름과 종목이 정상적으로 있는 줄만 포트폴리오로 취급
+            if (pName && pStock && !pName.includes("이름") && !pStock.includes("종목")) {
+                if(!users[pName]) users[pName] = { name: pName, totalInvest: 0, totalCurrent: 0, items: [] };
+
+                let invest = pAvgPrice * pQty;
+                let current = pCurrPrice * pQty;
+
+                if(pQty > 0) {
+                    users[pName].totalInvest += invest;
+                    users[pName].totalCurrent += current;
+                }
+                users[pName].items.push({ 
+                    stock: pStock, targetWeight: pWeight, avgPrice: pAvgPrice, 
+                    currPrice: pCurrPrice, qty: pQty, invest: invest, current: current 
+                });
             }
-            let name = currentUser;
-            if(!name) continue;
 
-            let stock = String(row[stockIdx] || "").trim();
-            if(!stock || stock.includes("종목") || stock.includes("합계")) continue;
+            // --------------------------------------------------
+            // ⚔️ [2] 배당금 실수령 파싱 (H~L열: 인덱스 7~11)
+            // --------------------------------------------------
+            // CSV 특성상 뒤쪽 열이 비어있으면 배열 길이가 짧을 수 있으므로 방어 로직 추가
+            if (row.length >= 11) {
+                let dName = String(row[7] || "").trim();
+                let dDate = String(row[8] || "").trim();
+                let dStock = String(row[9] || "").trim();
+                let dQtyStr = String(row[10] || "").replace(/[^0-9.-]/g, '');
+                let dAmountStr = String(row[11] || "").replace(/[^0-9.-]/g, '');
 
-            let wStr = String(row[weightIdx] || "").replace(/[^0-9.]/g, '');
-            let targetWeight = parseFloat(wStr) || 0;
+                let dQty = parseFloat(dQtyStr) || 0;
+                let dAmount = parseFloat(dAmountStr) || 0;
 
-            let aStr = String(row[avgPriceIdx] || "").replace(/[^0-9.]/g, '');
-            let avgPrice = parseFloat(aStr) || 0;
-
-            let qStr = String(row[qtyIdx] || "").replace(/[^0-9.-]/g, '');
-            let qty = parseFloat(qStr) || 0;
-
-            let cStr = String(row[currPriceIdx] || "").replace(/[^0-9.]/g, '');
-            let currPrice = parseFloat(cStr) || avgPrice;
-
-            if(!users[name]) users[name] = { name: name, totalInvest: 0, totalCurrent: 0, items: [] };
-
-            let invest = avgPrice * qty;
-            let current = currPrice * qty;
-
-            if(qty > 0) {
-                users[name].totalInvest += invest;
-                users[name].totalCurrent += current;
+                // 이름과 일자가 있는 정상적인 배당금 기록만 취급
+                if (dName && dDate && !dName.includes("이름") && !dDate.includes("수령일자")) {
+                    divLogs.push({ name: dName, date: dDate, stock: dStock, qty: dQty, amount: dAmount });
+                }
             }
-
-            users[name].items.push({ stock, targetWeight, avgPrice, currPrice, qty, invest, current });
         }
-        globalParsedUsers = users;
 
+        // 전역 변수에 파싱된 데이터 저장 (다른 파일에서도 접근 가능하도록)
+        globalParsedUsers = users;
+        globalActualDividendLogs = divLogs; 
+
+        // 수익률 계산 및 명예의 전당(랭킹) 정렬
         let rankArray = Object.values(users).filter(u => u.totalInvest > 0).map(u => {
             u.totalReturnPct = ((u.totalCurrent - u.totalInvest) / u.totalInvest * 100) || 0;
             return u;
         }).sort((a,b) => b.totalReturnPct - a.totalReturnPct);
 
+        // 탭 상태에 따라 화면 그리기
         if(currentTab === 'port') renderPortfolioView(rankArray);
         if(currentTab === 'calc' && typeof window.renderCalculatorView === 'function') window.renderCalculatorView();
-        
-        // 🔥 안전망: 함수가 없으면 무시하고 넘어갑니다!
-        if(currentTab === 'conc') {
-            if(typeof window.initConcentrationView === 'function') window.initConcentrationView();
-        }
-        
+        if(currentTab === 'conc' && typeof window.initConcentrationView === 'function') window.initConcentrationView();
         if(currentTab === 'div') {
             if(typeof window.loadDividendHistoryData === 'function') await window.loadDividendHistoryData();
-            if(typeof window.loadActualDividendData === 'function') await window.loadActualDividendData();
+            if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
         }
-    } catch (e) { console.error("포트폴리오 로드 실패:", e); }
+        
+    } catch (e) { console.error("포트폴리오 및 배당금 로드 실패:", e); }
 }
 
 function renderPortfolioView(rankArray) {
