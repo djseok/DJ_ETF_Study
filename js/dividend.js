@@ -1,5 +1,5 @@
 // =====================================================
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.0 최종 마스터)
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.5 완전 독립형 패치)
 // =====================================================
 
 var myDivChart = null; 
@@ -14,12 +14,43 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
+// 🔥 [에러 원천 차단] main.js 의존성을 없애기 위해 내부에 파싱 함수를 직접 심었습니다!
+function localParseCsvToMatrix(text) {
+    if (!text) return [];
+    var lines = text.split('\n');
+    var result = [];
+    for (var j = 0; j < lines.length; j++) {
+        var line = lines[j];
+        var rowResult = [];
+        var current = '';
+        var inQuotes = false;
+        for (var i = 0; i < line.length; i++) {
+            var char = line[i];
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                rowResult.push(current.trim().replace(/^"|"$/g, ''));
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        rowResult.push(current.trim().replace(/^"|"$/g, ''));
+        if (rowResult.length > 0 && rowResult[0] !== '') {
+            result.push(rowResult);
+        }
+    }
+    return result;
+}
+
 async function loadDynamicDividendRules() {
     try {
         if(typeof DIVIDEND_RULES_CSV_URL === 'undefined') return;
         var res = await fetch(DIVIDEND_RULES_CSV_URL);
         var textData = await res.text();
-        var matrix = parseCsvToMatrix(textData);
+        
+        // 내장된 로컬 파싱 함수를 호출하도록 교정했습니다.
+        var matrix = localParseCsvToMatrix(textData);
         
         var rulesObj = {};
         
@@ -45,6 +76,7 @@ async function loadDynamicDividendRules() {
         }
         
         globalDividendRulesMatrix = rulesObj;
+        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
     } catch (e) {
         console.error("동적 배당 룰북 로드 실패:", e);
     }
@@ -89,7 +121,6 @@ function calculateAndDrawDividends() {
     var totalMonthlyCalendar = new Array(12).fill(0); 
     var currentMonth = new Date().getMonth() + 1;
 
-    // 과거 실수령 통장 데이터 취합
     if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
         var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a,b){
             return new Date(b.date) - new Date(a.date);
@@ -119,7 +150,6 @@ function calculateAndDrawDividends() {
         }
     }
 
-    // 미래 배당 예상 데이터 취합 (보유수량 * 룰북)
     var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
     var totalAnnualExpected = 0; 
 
@@ -148,7 +178,6 @@ function calculateAndDrawDividends() {
                 for(var p=0; p<activeRule.payMonths.length; p++){
                     var monthNum = activeRule.payMonths[p];
                     var calIndex = monthNum - 1;
-                    // 이미 지난 달(실수령액)은 미래 예측에서 제외
                     var isFutureMonth = monthNum > currentMonth;
 
                     if (isFutureMonth) {
@@ -161,7 +190,6 @@ function calculateAndDrawDividends() {
         }
     }
 
-    // UI 업데이트 구역
     var nameLabel = document.getElementById("actual-received-name-label");
     if(nameLabel) nameLabel.innerText = "[" + targetUser + "]님의 배당금 현황";
     
