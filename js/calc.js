@@ -1,29 +1,24 @@
 // =========================================================
-// 🧮 구매 계산기 (목표 비중 0% 필터링 완벽 복원 버전)
+// 🧮 구매 계산기 (V17 통합 포트폴리오 연동 완벽 패치)
 // =========================================================
 
-// 예수금 입력값이 바뀔 때마다 즉시 실시간 연산 수행
 document.getElementById('inputCash').addEventListener('input', calculateRebalancing);
 
 async function renderCalculatorView() {
     const selector = document.getElementById('calcUserSelector');
     if (!selector) return;
 
-    // 메모리에 포트폴리오 정보가 없으면 로드 함수 강제 호출
+    // 데이터가 아직 없으면 기다리기
     if (!globalParsedUsers || Object.keys(globalParsedUsers).length === 0) {
-        if (typeof loadPortfolioData === 'function') {
-            document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">포트폴리오 데이터를 동기화 중입니다... 🐕</td></tr>`;
-            await loadPortfolioData('calc');
-            return;
-        }
+        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">포트폴리오 데이터를 불러오는 중입니다... 🐕</td></tr>`;
+        return;
     }
 
     const names = Object.keys(globalParsedUsers);
     
-    // 셀렉터 옵션 목록을 포트폴리오에 등록된 실제 투자자 이름(동진, S, D, J)으로 빌드
+    // 유저 선택창 빌드
     if (selector.options.length !== names.length && names.length > 0) {
         selector.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
-        // 투자자 선택이 바뀔 때마다 재계산
         selector.removeEventListener('change', calculateRebalancing);
         selector.addEventListener('change', calculateRebalancing);
     }
@@ -40,16 +35,15 @@ function calculateRebalancing() {
     const userObj = globalParsedUsers[targetUser];
     
     if (!userObj || !userObj.items || userObj.items.length === 0) {
-        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">선택한 투자자의 포트폴리오 데이터가 없습니다.</td></tr>`;
+        document.getElementById('calcTableBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">선택한 투자자의 데이터가 없습니다.</td></tr>`;
         return;
     }
 
     let tableHtml = "";
     userObj.items.forEach(item => {
-        let weightRaw = item.targetWeight;
-        let actualWeight = weightRaw > 1 ? weightRaw / 100 : weightRaw; 
+        let actualWeight = item.targetWeight > 1 ? item.targetWeight / 100 : item.targetWeight; 
         
-        // C열 목표 비중이 0%이거나 비어있다면 장바구니에 띄우지 않고 건너뜀
+        // 목표 비중이 없거나 0이면 건너뛰기
         if (actualWeight <= 0) return;
 
         let targetMoney = cashInput * actualWeight;
@@ -72,7 +66,7 @@ function calculateRebalancing() {
         </tr>`;
     });
 
-    document.getElementById('calcTableBody').innerHTML = tableHtml || `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">목표 비중(>0%)이 설정된 종목이 없습니다.</td></tr>`;
+    document.getElementById('calcTableBody').innerHTML = tableHtml || `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">목표 비중이 설정된 종목이 없습니다.</td></tr>`;
     
     document.querySelectorAll('.calc-manual-qty').forEach(input => {
         input.addEventListener('input', updateManualCalculator);
