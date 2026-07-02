@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (최종 무결성 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V16.0 마스터 통합 패치)
 // =========================================================
 const timestamp = new Date().getTime();
 
@@ -12,15 +12,11 @@ const SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2T
 // 3. 개별 종목 마스터 시트 (MasterData) CSV 링크
 const MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
 
-// 4. 개인 포트폴리오 및 배당금 시트
-const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=539824393&single=true&output=csv&t=" + timestamp;
+// 4. 🔥 [통합] 개인 포트폴리오 및 실수령 배당금 합본 CSV 링크
+const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
 
-// 🚨 동진님이 확인해주신 배당금 이력(예상배당금) GID
+// 5. 누적 배당 이력(예상배당금) GID
 const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
-
-// 🚨 동진님이 확인해주신 실수령액 다이어리 GID
-const ACTUAL_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1276756215&single=true&output=csv&t=" + timestamp;
-const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzzS3Wb2R3bC_P9AkA8Eq1KWLYRFk8o1w5VhTApnQQyPpT29wS1HLTfo4cOyT8AWPYl/exec"; 
 
 let macroData = [];
 let signalData = [];
@@ -29,7 +25,7 @@ let globalFxDelta = 0;
 let globalVixValue = 15;
 let globalParsedUsers = {}; 
 let globalCalculatedStrategyDividends = {}; 
-let globalActualDividendLogs = [];
+let globalActualDividendLogs = []; // 실수령 배당금 데이터 담을 그릇
 
 function switchTab(tabName) {
     const tabs = ['Quant', 'Port', 'Calc', 'Div', 'Conc'];
@@ -41,24 +37,23 @@ function switchTab(tabName) {
     });
     const activeView = document.getElementById('view' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     const activeBtn = document.getElementById('btnTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+    
     if(activeView) activeView.classList.remove('hidden');
     if(activeBtn) {
         if(tabName === 'div') activeBtn.className = "flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else if(tabName === 'conc') activeBtn.className = "flex-1 py-3 bg-purple-700 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
-    // 탭을 전환할 때 데이터 유실 방지 및 자동 타겟 렌더링
+
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
-    
-    // 🔥 [추가된 부분] 배당 탭 클릭 시 배당 데이터를 자동으로 불러오도록 트리거 설정!
     if(tabName === 'div') {
         if(typeof loadDividendHistoryData === 'function') loadDividendHistoryData();
-        if(typeof loadActualDividendData === 'function') loadActualDividendData();
+        // 포트폴리오 엔진에서 배당금을 이미 파싱했으므로 화면만 그려줍니다.
+        if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     }
 }
 
-// 연속된 쉼표(빈 칸)를 건너뛰지 않고 방어하는 표준 CSV 매트릭스 변환 함수
 function parseCsvToMatrix(text) {
     if (!text) return [];
     return text.split('\n').map(line => {
@@ -107,7 +102,7 @@ async function initDashboard() {
             });
         }
         
-        // 대시보드 구동 시 배경에서 포트폴리오 데이터를 미리 파싱해 둡니다.
+        // 포트폴리오 및 배당금 데이터 동시 사전 로드
         if (typeof loadPortfolioData === 'function') {
             await loadPortfolioData('init'); 
         }
