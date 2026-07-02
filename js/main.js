@@ -1,47 +1,39 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V18.0 마스터 통합 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V18.1 완전 무결점 패치)
 // =========================================================
-const timestamp = new Date().getTime();
+var timestamp = new Date().getTime();
 
-// 1. 매크로 지표 시트 (Characteristic) CSV 링크
-const MACRO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=2016694665&single=true&output=csv&t=" + timestamp;
+var MACRO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=2016694665&single=true&output=csv&t=" + timestamp;
+var SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1985460214&single=true&output=csv&t=" + timestamp;
+var MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
+var PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
+var DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
+var DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
 
-// 2. 퀀트 신호 시트 (ETF_Quant_Signals) CSV 링크
-const SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1985460214&single=true&output=csv&t=" + timestamp;
-
-// 3. 개별 종목 마스터 시트 (MasterData) CSV 링크
-const MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
-
-// 4. [통합] 개인 포트폴리오 및 실수령 배당금 합본 CSV 링크
-const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
-
-// 5. 누적 배당 이력(과거 데이터) GID
-const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
-
-// 6. 🔥 [신규 추가] ETF 배당 규칙(주기 및 평균 예상액) CSV 링크
-const DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
-
-let macroData = [];
-let signalData = [];
-let masterData = []; 
-let globalFxDelta = 0;
-let globalVixValue = 15;
-let globalParsedUsers = {}; 
-let globalCalculatedStrategyDividends = {}; 
-let globalActualDividendLogs = []; 
-// 🔥 [신규 추가] 동적으로 읽어온 배당 규칙을 담을 객체
-let globalDividendRulesMatrix = {}; 
+// 🔥 다른 자바스크립트 파일들과 에러 없이 변수를 공유하기 위해 모두 'var'로 통일했습니다.
+var macroData = [];
+var signalData = [];
+var masterData = []; 
+var globalFxDelta = 0;
+var globalVixValue = 15;
+var globalParsedUsers = {}; 
+var globalCalculatedStrategyDividends = {}; 
+var globalActualDividendLogs = []; 
+var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    const tabs = ['Quant', 'Port', 'Calc', 'Div', 'Conc'];
-    tabs.forEach(t => {
-        const view = document.getElementById('view' + t);
-        const btn = document.getElementById('btnTab' + t);
+    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Conc'];
+    for (var i = 0; i < tabs.length; i++) {
+        var t = tabs[i];
+        var view = document.getElementById('view' + t);
+        var btn = document.getElementById('btnTab' + t);
         if(view) view.classList.add('hidden');
         if(btn) btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
-    });
-    const activeView = document.getElementById('view' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
-    const activeBtn = document.getElementById('btnTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+    }
+    
+    var capTabName = tabName.charAt(0).toUpperCase() + tabName.slice(1);
+    var activeView = document.getElementById('view' + capTabName);
+    var activeBtn = document.getElementById('btnTab' + capTabName);
     
     if(activeView) activeView.classList.remove('hidden');
     if(activeBtn) {
@@ -52,40 +44,43 @@ function switchTab(tabName) {
 
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
-    if(tabName === 'div') {
-        // 배당 탭 클릭 시, 배당 룰북을 먼저 불러오고 화면을 그립니다!
-        if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
-    }
+    if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
 }
 
 function parseCsvToMatrix(text) {
     if (!text) return [];
-    return text.split('\n').map(line => {
-        let result = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            let char = line[i];
+    var lines = text.split('\n');
+    var result = [];
+    for (var j = 0; j < lines.length; j++) {
+        var line = lines[j];
+        var rowResult = [];
+        var current = '';
+        var inQuotes = false;
+        for (var i = 0; i < line.length; i++) {
+            var char = line[i];
             if (char === '"') {
                 inQuotes = !inQuotes;
             } else if (char === ',' && !inQuotes) {
-                result.push(current.trim().replace(/^"|"$/g, ''));
+                rowResult.push(current.trim().replace(/^"|"$/g, ''));
                 current = '';
             } else {
                 current += char;
             }
         }
-        result.push(current.trim().replace(/^"|"$/g, ''));
-        return result;
-    }).filter(row => row.length > 0 && row[0] !== '');
+        rowResult.push(current.trim().replace(/^"|"$/g, ''));
+        if (rowResult.length > 0 && rowResult[0] !== '') {
+            result.push(rowResult);
+        }
+    }
+    return result;
 }
 
 async function initDashboard() {
     try {
         const [macroRes, signalRes, masterRes] = await Promise.all([
-            fetch(MACRO_CSV_URL).catch(() => null),
-            fetch(SIGNAL_CSV_URL).catch(() => null),
-            fetch(MASTER_CSV_URL).catch(() => null)
+            fetch(MACRO_CSV_URL).catch(function(){ return null; }),
+            fetch(SIGNAL_CSV_URL).catch(function(){ return null; }),
+            fetch(MASTER_CSV_URL).catch(function(){ return null; })
         ]);
 
         if (macroRes) macroData = parseCsvToMatrix(await macroRes.text());
@@ -95,13 +90,13 @@ async function initDashboard() {
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
 
-        let selector = document.getElementById('assetSelector');
+        var selector = document.getElementById('assetSelector');
         if (signalData.length > 0 && selector && typeof renderTargetAssetDashboard === 'function') {
             renderTargetAssetDashboard(selector.value);
         }
 
         if (selector) {
-            selector.addEventListener('change', (e) => {
+            selector.addEventListener('change', function(e) {
                 if (typeof renderTargetAssetDashboard === 'function') renderTargetAssetDashboard(e.target.value);
             });
         }
