@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V16.0 마스터 통합 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V18.0 마스터 통합 패치)
 // =========================================================
 const timestamp = new Date().getTime();
 
@@ -12,11 +12,14 @@ const SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2T
 // 3. 개별 종목 마스터 시트 (MasterData) CSV 링크
 const MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
 
-// 4. 🔥 [통합] 개인 포트폴리오 및 실수령 배당금 합본 CSV 링크
+// 4. [통합] 개인 포트폴리오 및 실수령 배당금 합본 CSV 링크
 const PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
 
-// 5. 누적 배당 이력(예상배당금) GID
+// 5. 누적 배당 이력(과거 데이터) GID
 const DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
+
+// 6. 🔥 [신규 추가] ETF 배당 규칙(주기 및 평균 예상액) CSV 링크
+const DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
 
 let macroData = [];
 let signalData = [];
@@ -25,7 +28,9 @@ let globalFxDelta = 0;
 let globalVixValue = 15;
 let globalParsedUsers = {}; 
 let globalCalculatedStrategyDividends = {}; 
-let globalActualDividendLogs = []; // 실수령 배당금 데이터 담을 그릇
+let globalActualDividendLogs = []; 
+// 🔥 [신규 추가] 동적으로 읽어온 배당 규칙을 담을 객체
+let globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
     const tabs = ['Quant', 'Port', 'Calc', 'Div', 'Conc'];
@@ -48,8 +53,7 @@ function switchTab(tabName) {
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
     if(tabName === 'div') {
-        if(typeof loadDividendHistoryData === 'function') loadDividendHistoryData();
-        // 포트폴리오 엔진에서 배당금을 이미 파싱했으므로 화면만 그려줍니다.
+        // 배당 탭 클릭 시, 배당 룰북을 먼저 불러오고 화면을 그립니다!
         if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     }
 }
@@ -102,7 +106,6 @@ async function initDashboard() {
             });
         }
         
-        // 포트폴리오 및 배당금 데이터 동시 사전 로드
         if (typeof loadPortfolioData === 'function') {
             await loadPortfolioData('init'); 
         }
