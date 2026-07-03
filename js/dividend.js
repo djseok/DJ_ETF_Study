@@ -38,5 +38,6 @@ async function renderActualDividendView() {
     calculateAndDrawDividends();
 }
 
+
 // 🔥 [핵심 추가] main.js의 탭 클릭 로직이 이 함수를 정상적으로 부를 수 있도록 연결해 줍니다!
 window.loadActualDividendData = renderActualDividendView;
