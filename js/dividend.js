@@ -1,10 +1,8 @@
 // =====================================================
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.5 완전 독립형 패치 - 교정본)
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.6 자가 치유형 패치)
 // =====================================================
 
 var myDivChart = null; 
-// 💡 에러 방지 1: 전역 변수 미리 선언 (ReferenceError 차단)
-var globalDividendRulesMatrix = {}; 
 
 var CHART_COLORS = [
     'rgba(54, 162, 235, 0.7)',
@@ -16,7 +14,6 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
-// 🔥 [에러 원천 차단] main.js 의존성을 없애기 위해 내부에 파싱 함수를 직접 심었습니다!
 function localParseCsvToMatrix(text) {
     if (!text) return [];
     var lines = text.split('\n');
@@ -52,6 +49,7 @@ async function loadDynamicDividendRules() {
         var textData = await res.text();
         
         var matrix = localParseCsvToMatrix(textData);
+        
         var rulesObj = {};
         
         for(var i = 1; i < matrix.length; i++) {
@@ -76,7 +74,6 @@ async function loadDynamicDividendRules() {
         }
         
         globalDividendRulesMatrix = rulesObj;
-        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
     } catch (e) {
         console.error("동적 배당 룰북 로드 실패:", e);
     }
@@ -94,9 +91,7 @@ function initDividendUserSelector() {
     var selector = document.getElementById('divUserSelector');
     if(!selector) return;
     
-    // 💡 에러 방지 2: typeof 체크를 통한 안전한 변수 참조
-    var isUsersLoaded = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers);
-    var names = isUsersLoaded ? Object.keys(globalParsedUsers) : [];
+    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
     
     if(selector.options.length !== names.length && names.length > 0) {
         var htmlStr = '';
@@ -113,9 +108,7 @@ function calculateAndDrawDividends() {
     var selector = document.getElementById('divUserSelector');
     if(!selector) return;
     
-    // 💡 에러 방지 3: 여기서도 안전하게 참조
-    var isUsersLoaded = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers);
-    var names = isUsersLoaded ? Object.keys(globalParsedUsers) : [];
+    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
     var targetUser = selector.value || (names.length > 0 ? names[0] : "");
     if(!targetUser) return;
 
@@ -154,8 +147,7 @@ function calculateAndDrawDividends() {
         }
     }
 
-    // 💡 에러 방지 4: 안전하게 유저 객체 조회
-    var userObj = isUsersLoaded ? globalParsedUsers[targetUser] : null;
+    var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
     var totalAnnualExpected = 0; 
 
     if (userObj && userObj.items) {
@@ -249,7 +241,31 @@ function calculateAndDrawDividends() {
     var calendarDiv = document.getElementById("dividend-calendar");
     if(calendarDiv) calendarDiv.innerHTML = calendarHtml;
 
-    renderStackedDividendChart(chartDatasetsByStock);
+    // 🔥 핵심 우회로: Chart.js가 없으면 JS가 스스로 다운로드 후 렌더링을 실행합니다!
+    loadChartJsAndRender(chartDatasetsByStock);
+}
+
+// 💡 자가 치유 함수: HTML에 의존하지 않고 라이브러리를 동적으로 주입
+function loadChartJsAndRender(datasetsByStock) {
+    if (typeof Chart !== 'undefined') {
+        renderStackedDividendChart(datasetsByStock);
+    } else {
+        console.log("Chart.js 도구가 없어 자동으로 다운로드합니다...");
+        var script = document.createElement('script');
+        // 안정성이 매우 높은 cdnjs 주소를 사용합니다.
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
+        
+        // 다운로드가 완료되면 그제서야 차트를 그립니다.
+        script.onload = function() {
+            renderStackedDividendChart(datasetsByStock);
+        };
+        
+        script.onerror = function() {
+            console.error("인터넷 방화벽 등의 이유로 차트를 그릴 수 없습니다.");
+        };
+        
+        document.head.appendChild(script);
+    }
 }
 
 function renderStackedDividendChart(datasetsByStock) {
