@@ -1,8 +1,10 @@
 // =====================================================
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.5 완전 독립형 패치)
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.5 완전 독립형 패치 - 교정본)
 // =====================================================
 
 var myDivChart = null; 
+// 💡 에러 방지 1: 전역 변수 미리 선언 (ReferenceError 차단)
+var globalDividendRulesMatrix = {}; 
 
 var CHART_COLORS = [
     'rgba(54, 162, 235, 0.7)',
@@ -49,9 +51,7 @@ async function loadDynamicDividendRules() {
         var res = await fetch(DIVIDEND_RULES_CSV_URL);
         var textData = await res.text();
         
-        // 내장된 로컬 파싱 함수를 호출하도록 교정했습니다.
         var matrix = localParseCsvToMatrix(textData);
-        
         var rulesObj = {};
         
         for(var i = 1; i < matrix.length; i++) {
@@ -94,7 +94,9 @@ function initDividendUserSelector() {
     var selector = document.getElementById('divUserSelector');
     if(!selector) return;
     
-    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
+    // 💡 에러 방지 2: typeof 체크를 통한 안전한 변수 참조
+    var isUsersLoaded = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers);
+    var names = isUsersLoaded ? Object.keys(globalParsedUsers) : [];
     
     if(selector.options.length !== names.length && names.length > 0) {
         var htmlStr = '';
@@ -111,7 +113,9 @@ function calculateAndDrawDividends() {
     var selector = document.getElementById('divUserSelector');
     if(!selector) return;
     
-    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
+    // 💡 에러 방지 3: 여기서도 안전하게 참조
+    var isUsersLoaded = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers);
+    var names = isUsersLoaded ? Object.keys(globalParsedUsers) : [];
     var targetUser = selector.value || (names.length > 0 ? names[0] : "");
     if(!targetUser) return;
 
@@ -150,7 +154,8 @@ function calculateAndDrawDividends() {
         }
     }
 
-    var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
+    // 💡 에러 방지 4: 안전하게 유저 객체 조회
+    var userObj = isUsersLoaded ? globalParsedUsers[targetUser] : null;
     var totalAnnualExpected = 0; 
 
     if (userObj && userObj.items) {
