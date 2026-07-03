@@ -1,5 +1,5 @@
 // ===================================================== 
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V20.2 완벽 패치) 
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V21.0 최종 통합 완성본) 
 // ===================================================== 
 
 var myDivChart = null;
@@ -14,7 +14,7 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
-// 🔥 [완벽 해결] CSV 파싱 엔진 개조! A열이 비어있어도 데이터를 버리지 않게 수정했습니다.
+// CSV 텍스트 파싱 엔진
 function localParseCsvToMatrix(text) {
     if (!text) return [];
     var lines = text.split('\n');
@@ -39,13 +39,29 @@ function localParseCsvToMatrix(text) {
         }
         rowResult.push(current.trim().replace(/^"|"$/g, ''));
         
-        // 🚨 기존 버그: rowResult[0] !== '' (A열이 비어있으면 삭.제.해버리던 치명적 코드)
-        // ✅ 수정 완료: 줄 전체가 완전히 빈칸만 있는 게 아니라면 무조건 통과!
         if (rowResult.length > 0 && rowResult.join('').trim() !== '') {
             result.push(rowResult);
         }
     }
     return result;
+}
+
+// 🔥 [초강력 무적 패치] "2026. 7. 2" 같은 한국식 날짜 포맷을 브라우저 에러 없이 완벽 분해하는 함수
+function parseCustomDate(dateStr) {
+    if (!dateStr) return { month: 1, jsDate: new Date(0) };
+    var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, ''); // 공백 제거 및 맨 뒤 점 제거
+    var parts = clean.split('.');
+    
+    if (parts.length >= 3) {
+        var y = parseInt(parts[0]) || 2026;
+        var m = parseInt(parts[1]) || 1;
+        var d = parseInt(parts[2]) || 1;
+        return { month: m, jsDate: new Date(y, m - 1, d) };
+    }
+    
+    var fallback = new Date(dateStr);
+    if (isNaN(fallback.getTime())) fallback = new Date(0);
+    return { month: fallback.getMonth() + 1, jsDate: fallback };
 }
 
 async function loadDynamicDividendRules() {
@@ -59,7 +75,7 @@ async function loadDynamicDividendRules() {
 
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
-            if(row.length < 3) continue; 
+            if(!row || row.length < 3) continue; 
             var rawStockName = String(row[0] || "").trim();
             var rawMonths = String(row[1] || "").trim();
             var rawAmount = String(row[2] || "").replace(/[^0-9.]/g, '');
@@ -101,21 +117,26 @@ async function loadDividendLogs() {
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
             
-            // H열(인덱스 7) 이름이 있는지 확인
-            if(row.length <= 7 || !row[7]) continue; 
+            // 안전하게 인덱스 참조 (H열 이름 존재 여부)
+            if(!row || row.length <= 7 || !row[7]) continue; 
 
             var userName = String(row[7]).trim();
-            // 제목(헤더)인 경우 건너뛰기
-            if(!userName || userName === "이름" || userName === "구분") continue;
+            if(!userName || userName === "이름" || userName === "구분" || userName === "유저") continue;
 
-            // 실수령액에서 숫자만 추출 (안전한 정규식 적용)
-            var rawAmount = row.length > 11 ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
+            var dateStr = row[8] ? String(row[8]).trim() : "";
+            var stockName = row[9] ? String(row[9]).trim() : "";
+            var rawAmount = row[11] ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
             var amountVal = parseFloat(rawAmount) || 0;
+
+            // 로컬 파서 엔진 가동
+            var dateInfo = parseCustomDate(dateStr);
 
             globalActualDividendLogs.push({
                 userName: userName,
-                date: row.length > 8 ? String(row[8]).trim() : "",
-                stockName: row.length > 9 ? String(row[9]).trim() : "",
+                date: dateStr,
+                parsedMonth: dateInfo.month,
+                jsDate: dateInfo.jsDate,
+                stockName: stockName,
                 amount: amountVal
             });
         }
@@ -176,28 +197,29 @@ function calculateAndDrawDividends() {
     var currentMonth = new Date().getMonth() + 1;
 
     if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
-        var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a,b){
-            // 💡 날짜 파싱 안전성 강화 (2026. 7. 2. 등의 포맷 대비)
-            var dateA = new Date(a.date.replace(/\.$/, ''));
-            var dateB = new Date(b.date.replace(/\.$/, ''));
-            return dateB - dateA;
+        // 🔥 안전하게 밀리초(getTime) 기반으로 브라우저 오차 없는 완벽 정렬 수행
+        var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a, b){
+            return b.jsDate.getTime() - a.jsDate.getTime();
         });
 
         for(var j=0; j<sortedActualLogs.length; j++){
             var log = sortedActualLogs[j];
 
-            if (log.userName.includes(targetUser) || targetUser.includes(log.userName)) {
+            var logUser = log.userName.toLowerCase();
+            var searchUser = targetUser.toLowerCase();
+
+            if (logUser.includes(searchUser) || searchUser.includes(logUser)) {
                 totalReceived += log.amount;
                 
                 actualLogsHtml += '<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">';
                 actualLogsHtml += '<td class="py-3 px-4 text-slate-500 font-mono text-sm">' + log.date + '</td>';
                 actualLogsHtml += '<td class="py-3 px-4 text-slate-800 font-bold">' + log.stockName + '</td>';
-                actualLogsHtml += '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + log.amount.toLocaleString() + '</td>';
+                actualLogsHtml += '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + Math.round(log.amount).toLocaleString() + '</td>';
                 actualLogsHtml += '</tr>';
 
-                var monthMatch = log.date.match(/\b([1-9]|1[0-2])\b/);
-                if (monthMatch) {
-                    var mIndex = parseInt(monthMatch[0]) - 1;
+                // 정규식 대신 안전한 파싱 월 활용
+                var mIndex = log.parsedMonth - 1;
+                if (mIndex >= 0 && mIndex < 12) {
                     totalMonthlyCalendar[mIndex] += log.amount;
                     
                     if (!chartDatasetsByStock[log.stockName]) {
