@@ -1,5 +1,5 @@
 // ===================================================== 
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V21.0 최종 통합 완성본) 
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V22.0 인덱스 완벽 매핑 패치)
 // ===================================================== 
 
 var myDivChart = null;
@@ -14,7 +14,6 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
-// CSV 텍스트 파싱 엔진
 function localParseCsvToMatrix(text) {
     if (!text) return [];
     var lines = text.split('\n');
@@ -46,10 +45,10 @@ function localParseCsvToMatrix(text) {
     return result;
 }
 
-// 🔥 [초강력 무적 패치] "2026. 7. 2" 같은 한국식 날짜 포맷을 브라우저 에러 없이 완벽 분해하는 함수
+// "2026. 7. 2" 같은 한국식 날짜 포맷 분해
 function parseCustomDate(dateStr) {
     if (!dateStr) return { month: 1, jsDate: new Date(0) };
-    var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, ''); // 공백 제거 및 맨 뒤 점 제거
+    var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, ''); 
     var parts = clean.split('.');
     
     if (parts.length >= 3) {
@@ -94,7 +93,6 @@ async function loadDynamicDividendRules() {
         }
         
         globalDividendRulesMatrix = rulesObj;
-        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
     } catch (e) {
         console.error("동적 배당 룰북 로드 실패:", e);
     }
@@ -114,21 +112,23 @@ async function loadDividendLogs() {
         
         globalActualDividendLogs = [];
         
+        // 🚀 A열(이름), B열(날짜), C열(종목), E열(실수령액)에 맞춘 완벽한 파싱 엔진
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
             
-            // 안전하게 인덱스 참조 (H열 이름 존재 여부)
-            if(!row || row.length <= 7 || !row[7]) continue; 
+            // 이름(A열, 인덱스0)이 없으면 건너뜀
+            if(!row || row.length < 1 || !row[0]) continue; 
 
-            var userName = String(row[7]).trim();
-            if(!userName || userName === "이름" || userName === "구분" || userName === "유저") continue;
+            var userName = String(row[0]).trim();
+            // 헤더(제목)이면 건너뜀
+            if(!userName || userName === "이름" || userName === "구분") continue;
 
-            var dateStr = row[8] ? String(row[8]).trim() : "";
-            var stockName = row[9] ? String(row[9]).trim() : "";
-            var rawAmount = row[11] ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
+            // B열(인덱스1) 날짜, C열(인덱스2) 종목, E열(인덱스4) 실수령액
+            var dateStr = row.length > 1 ? String(row[1]).trim() : "";
+            var stockName = row.length > 2 ? String(row[2]).trim() : "";
+            var rawAmount = row.length > 4 ? String(row[4]).replace(/[^0-9.-]/g, '') : "0";
             var amountVal = parseFloat(rawAmount) || 0;
 
-            // 로컬 파서 엔진 가동
             var dateInfo = parseCustomDate(dateStr);
 
             globalActualDividendLogs.push({
@@ -197,7 +197,6 @@ function calculateAndDrawDividends() {
     var currentMonth = new Date().getMonth() + 1;
 
     if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
-        // 🔥 안전하게 밀리초(getTime) 기반으로 브라우저 오차 없는 완벽 정렬 수행
         var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a, b){
             return b.jsDate.getTime() - a.jsDate.getTime();
         });
@@ -217,7 +216,6 @@ function calculateAndDrawDividends() {
                 actualLogsHtml += '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + Math.round(log.amount).toLocaleString() + '</td>';
                 actualLogsHtml += '</tr>';
 
-                // 정규식 대신 안전한 파싱 월 활용
                 var mIndex = log.parsedMonth - 1;
                 if (mIndex >= 0 && mIndex < 12) {
                     totalMonthlyCalendar[mIndex] += log.amount;
