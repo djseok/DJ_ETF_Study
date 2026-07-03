@@ -1,5 +1,5 @@
 // ===================================================== 
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V22.0 인덱스 완벽 매핑 패치)
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V23.0 원천 데이터 동기화 완료본) 
 // ===================================================== 
 
 var myDivChart = null;
@@ -14,6 +14,7 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
+// CSV 텍스트 파싱 엔진
 function localParseCsvToMatrix(text) {
     if (!text) return [];
     var lines = text.split('\n');
@@ -45,7 +46,7 @@ function localParseCsvToMatrix(text) {
     return result;
 }
 
-// "2026. 7. 2" 같은 한국식 날짜 포맷 분해
+// "2026. 7. 2" 한국식 날짜 포맷 표준 객체 변환기
 function parseCustomDate(dateStr) {
     if (!dateStr) return { month: 1, jsDate: new Date(0) };
     var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, ''); 
@@ -63,6 +64,7 @@ function parseCustomDate(dateStr) {
     return { month: fallback.getMonth() + 1, jsDate: fallback };
 }
 
+// ETF 자체의 배당 규칙 정보 로드 (DIVIDEND_RULES_CSV_URL 사용)
 async function loadDynamicDividendRules() {
     try {
         if(typeof DIVIDEND_RULES_CSV_URL === 'undefined') return;
@@ -93,40 +95,42 @@ async function loadDynamicDividendRules() {
         }
         
         globalDividendRulesMatrix = rulesObj;
+        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
     } catch (e) {
         console.error("동적 배당 룰북 로드 실패:", e);
     }
 }
 
+// 🔥 [초강력 핵심 수술] 동진님의 힌트를 바탕으로 수기 장부가 들어있는 PORTFOLIO_CSV_URL을 다이렉트로 정조준합니다!
 async function loadDividendLogs() {
     try {
-        if(typeof DIVIDEND_CSV_URL === 'undefined') {
-            console.warn("⚠️ DIVIDEND_CSV_URL이 설정되지 않아 배당 내역을 불러올 수 없습니다.");
+        if(typeof PORTFOLIO_CSV_URL === 'undefined') {
+            console.warn("⚠️ PORTFOLIO_CSV_URL이 설정되지 않아 개인 배당 내역을 불러올 수 없습니다.");
             globalActualDividendLogs = [];
             return;
         }
 
-        var res = await fetch(DIVIDEND_CSV_URL + "&t=" + new Date().getTime());
+        // 통합 포트폴리오 시트(수기 장부 포함) 로드
+        var res = await fetch(PORTFOLIO_CSV_URL + "&t=" + new Date().getTime());
         var text = await res.text();
         var matrix = localParseCsvToMatrix(text);
         
         globalActualDividendLogs = [];
         
-        // 🚀 A열(이름), B열(날짜), C열(종목), E열(실수령액)에 맞춘 완벽한 파싱 엔진
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
             
-            // 이름(A열, 인덱스0)이 없으면 건너뜀
-            if(!row || row.length < 1 || !row[0]) continue; 
+            // 🚨 H열(인덱스 7)에 개인 수기 장부 이름(D, S, J)이 없으면 배당 로그가 없는 행이므로 패스!
+            if(!row || row.length <= 7 || !row[7]) continue; 
 
-            var userName = String(row[0]).trim();
-            // 헤더(제목)이면 건너뜀
-            if(!userName || userName === "이름" || userName === "구분") continue;
+            var userName = String(row[7]).trim();
+            // 데이터 헤더 텍스트 필터링
+            if(!userName || userName === "이름" || userName === "구분" || userName === "유저") continue;
 
-            // B열(인덱스1) 날짜, C열(인덱스2) 종목, E열(인덱스4) 실수령액
-            var dateStr = row.length > 1 ? String(row[1]).trim() : "";
-            var stockName = row.length > 2 ? String(row[2]).trim() : "";
-            var rawAmount = row.length > 4 ? String(row[4]).replace(/[^0-9.-]/g, '') : "0";
+            // I열(8) 날짜, J열(9) 종목, L열(11) 실수령액 정밀 추출
+            var dateStr = row[8] ? String(row[8]).trim() : "";
+            var stockName = row[9] ? String(row[9]).trim() : "";
+            var rawAmount = row[11] ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
             var amountVal = parseFloat(rawAmount) || 0;
 
             var dateInfo = parseCustomDate(dateStr);
