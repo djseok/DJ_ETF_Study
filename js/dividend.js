@@ -82,10 +82,9 @@ async function loadDynamicDividendRules() {
     }
 }
 
-// 🔥 [핵심 수정 1] 배당 로그 로드 함수
+// 🔥 [최종 패치] 엄격한 방어막을 해제한 유연한 배당 로그 로드 함수
 async function loadDividendLogs() {
     try {
-        // DIVIDEND_CSV_URL이 선언되어 있는지 확인하는 방어 코드 추가
         if(typeof DIVIDEND_CSV_URL === 'undefined') {
             console.warn("⚠️ DIVIDEND_CSV_URL이 설정되지 않아 배당 내역을 불러올 수 없습니다.");
             globalActualDividendLogs = [];
@@ -102,15 +101,20 @@ async function loadDividendLogs() {
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
             
-            // H열(인덱스 7)부터 L열(인덱스 11)까지 데이터가 존재해야 하므로 방어 코드 수정
-            // H열(이름)이 비어있으면 배당 데이터가 없는 줄이므로 건너뜁니다.
-            if(row.length < 12 || !row[7]) continue; 
+            // 🚨 [핵심 원인 해결] 기존의 row.length < 12 라는 엄격한 조건을 삭제했습니다!
+            // 구글 시트가 빈칸을 생략해서 내보내더라도, 최소 H열(인덱스 7)만 존재하면 무조건 통과시킵니다.
+            if(row.length <= 7 || !row[7]) continue; 
+
+            var userName = String(row[7]).trim();
+            // 이름 칸이 비어있거나, 표의 제목("이름" 등)인 경우 데이터가 아니므로 건너뜁니다.
+            if(!userName || userName === "이름" || userName === "구분") continue;
 
             globalActualDividendLogs.push({
-                userName: String(row[7]).trim(),                           // H열: 이름 (D, S, J)
-                date: String(row[8]).trim(),                               // I열: 수령일자
-                stockName: String(row[9]).trim(),                          // J열: 종목
-                amount: parseFloat(String(row[11]).replace(/[^0-9.]/g, '')) || 0 // L열: 실수령액 (K열은 10)
+                userName: userName,                                       // H열: 이름 (D, S, J)
+                date: row.length > 8 ? String(row[8]).trim() : "",        // I열: 수령일자 (2026. 7. 2)
+                stockName: row.length > 9 ? String(row[9]).trim() : "",   // J열: 종목 (RISE 미국나스닥100)
+                // L열(인덱스 11)이 있으면 실수령액 파싱, 없거나 짧으면 0원 처리
+                amount: row.length > 11 ? (parseFloat(String(row[11]).replace(/[^0-9.]/g, '')) || 0) : 0 
             });
         }
         console.log("✅ 배당 로그 데이터 로드 완료:", globalActualDividendLogs);
@@ -118,7 +122,6 @@ async function loadDividendLogs() {
         console.error("배당 로그 로드 실패:", e);
     }
 }
-
 // 🔥 [핵심 수정 2] 렌더링 함수 (에러 방어형)
 async function renderActualDividendView() {
     try {
