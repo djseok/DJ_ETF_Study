@@ -1,5 +1,5 @@
 // ===================================================== 
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V19.5 완전 독립형 패치) 
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V20.2 완벽 패치) 
 // ===================================================== 
 
 var myDivChart = null;
@@ -14,7 +14,7 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
-// 🔥 [에러 원천 차단] main.js 의존성을 없애기 위해 내부에 파싱 함수를 직접 심었습니다!
+// 🔥 [완벽 해결] CSV 파싱 엔진 개조! A열이 비어있어도 데이터를 버리지 않게 수정했습니다.
 function localParseCsvToMatrix(text) {
     if (!text) return [];
     var lines = text.split('\n');
@@ -38,7 +38,10 @@ function localParseCsvToMatrix(text) {
             }
         }
         rowResult.push(current.trim().replace(/^"|"$/g, ''));
-        if (rowResult.length > 0 && rowResult[0] !== '') {
+        
+        // 🚨 기존 버그: rowResult[0] !== '' (A열이 비어있으면 삭.제.해버리던 치명적 코드)
+        // ✅ 수정 완료: 줄 전체가 완전히 빈칸만 있는 게 아니라면 무조건 통과!
+        if (rowResult.length > 0 && rowResult.join('').trim() !== '') {
             result.push(rowResult);
         }
     }
@@ -51,7 +54,6 @@ async function loadDynamicDividendRules() {
         var res = await fetch(DIVIDEND_RULES_CSV_URL);
         var textData = await res.text();
         
-        // 내장된 로컬 파싱 함수를 호출하도록 교정했습니다.
         var matrix = localParseCsvToMatrix(textData);
         var rulesObj = {};
 
@@ -82,7 +84,6 @@ async function loadDynamicDividendRules() {
     }
 }
 
-// 🔥 [최종 패치] 엄격한 방어막을 해제한 유연한 배당 로그 로드 함수
 async function loadDividendLogs() {
     try {
         if(typeof DIVIDEND_CSV_URL === 'undefined') {
@@ -97,24 +98,25 @@ async function loadDividendLogs() {
         
         globalActualDividendLogs = [];
         
-        // CSV 데이터 파싱 (헤더 제외)
         for(var i = 1; i < matrix.length; i++) {
             var row = matrix[i];
             
-            // 🚨 [핵심 원인 해결] 기존의 row.length < 12 라는 엄격한 조건을 삭제했습니다!
-            // 구글 시트가 빈칸을 생략해서 내보내더라도, 최소 H열(인덱스 7)만 존재하면 무조건 통과시킵니다.
+            // H열(인덱스 7) 이름이 있는지 확인
             if(row.length <= 7 || !row[7]) continue; 
 
             var userName = String(row[7]).trim();
-            // 이름 칸이 비어있거나, 표의 제목("이름" 등)인 경우 데이터가 아니므로 건너뜁니다.
+            // 제목(헤더)인 경우 건너뛰기
             if(!userName || userName === "이름" || userName === "구분") continue;
 
+            // 실수령액에서 숫자만 추출 (안전한 정규식 적용)
+            var rawAmount = row.length > 11 ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
+            var amountVal = parseFloat(rawAmount) || 0;
+
             globalActualDividendLogs.push({
-                userName: userName,                                       // H열: 이름 (D, S, J)
-                date: row.length > 8 ? String(row[8]).trim() : "",        // I열: 수령일자 (2026. 7. 2)
-                stockName: row.length > 9 ? String(row[9]).trim() : "",   // J열: 종목 (RISE 미국나스닥100)
-                // L열(인덱스 11)이 있으면 실수령액 파싱, 없거나 짧으면 0원 처리
-                amount: row.length > 11 ? (parseFloat(String(row[11]).replace(/[^0-9.]/g, '')) || 0) : 0 
+                userName: userName,
+                date: row.length > 8 ? String(row[8]).trim() : "",
+                stockName: row.length > 9 ? String(row[9]).trim() : "",
+                amount: amountVal
             });
         }
         console.log("✅ 배당 로그 데이터 로드 완료:", globalActualDividendLogs);
@@ -122,11 +124,9 @@ async function loadDividendLogs() {
         console.error("배당 로그 로드 실패:", e);
     }
 }
-// 🔥 [핵심 수정 2] 렌더링 함수 (에러 방어형)
+
 async function renderActualDividendView() {
     try {
-        // 1. 배당 룰북과 배당 내역을 로드
-        // loadDynamicDividendRules 함수가 없더라도 에러를 뿜지 않고 넘어가게 만듭니다.
         const ruleLoader = typeof loadDynamicDividendRules === 'function' 
             ? loadDynamicDividendRules() 
             : Promise.resolve();
@@ -136,7 +136,6 @@ async function renderActualDividendView() {
             loadDividendLogs()
         ]);
         
-        // 2. 화면 렌더링
         initDividendUserSelector();
         calculateAndDrawDividends();
         
@@ -149,7 +148,6 @@ function initDividendUserSelector() {
     var selector = document.getElementById('divUserSelector');
     if(!selector) return;
 
-    // globalParsedUsers 존재 여부 확인 (에러 방어)
     var names = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers) ? Object.keys(globalParsedUsers) : [];
 
     if(selector.options.length !== names.length && names.length > 0) {
@@ -179,7 +177,10 @@ function calculateAndDrawDividends() {
 
     if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
         var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a,b){
-            return new Date(b.date) - new Date(a.date);
+            // 💡 날짜 파싱 안전성 강화 (2026. 7. 2. 등의 포맷 대비)
+            var dateA = new Date(a.date.replace(/\.$/, ''));
+            var dateB = new Date(b.date.replace(/\.$/, ''));
+            return dateB - dateA;
         });
 
         for(var j=0; j<sortedActualLogs.length; j++){
@@ -371,8 +372,4 @@ function renderStackedDividendChart(datasetsByStock) {
     });
 }
 
-// 🔥 main.js 탭 전환 시 화면을 그릴 수 있도록 외부에 함수 연결
 window.loadActualDividendData = renderActualDividendView;
-
-// 테스트를 위한 의미없는 주석 추가 (동진님 요청사항)
-// 테스트 코드 끝. 🚀
