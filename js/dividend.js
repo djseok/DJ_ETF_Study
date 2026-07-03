@@ -28,16 +28,26 @@ async function loadDividendLogs() {
 }
 
 async function renderActualDividendView() {
-    // 1. 배당 룰북과 배당 내역을 로드
-    await Promise.all([
-        loadDynamicDividendRules(),
-        loadDividendLogs()
-    ]);
-    
-    initDividendUserSelector();
-    calculateAndDrawDividends();
-}
+    try {
+        // 1. 배당 룰북과 배당 내역을 로드
+        // 🔥 [2중 방어 적용] loadDynamicDividendRules 함수가 없더라도 에러를 뿜지 않고 넘어가게 만듭니다.
+        const ruleLoader = typeof loadDynamicDividendRules === 'function' 
+            ? loadDynamicDividendRules() 
+            : Promise.resolve();
 
+        await Promise.all([
+            ruleLoader,
+            loadDividendLogs()
+        ]);
+        
+        // 2. 화면 렌더링
+        initDividendUserSelector();
+        calculateAndDrawDividends();
+        
+    } catch (error) {
+        console.error("차트 렌더링 중 오류 발생:", error);
+    }
+}
 
 // 🔥 [핵심 추가] main.js의 탭 클릭 로직이 이 함수를 정상적으로 부를 수 있도록 연결해 줍니다!
 window.loadActualDividendData = renderActualDividendView;
