@@ -100,7 +100,7 @@ async function initDashboard() {
 
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
         
-        // ✨ 필터 엔진 초기화! (새로 추가된 핵심 1줄)
+        // ✨ 필터 엔진 초기화! (새 옷을 입은 HTML과 연결하는 핵심)
         if (typeof initFilters === 'function') initFilters(); 
 
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
