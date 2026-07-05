@@ -65,24 +65,28 @@ function populateAssetDropdownSelector() {
     if(!selector) return;
 
     const uniqueAssets = [];
-    signalData.forEach(row => {
-        if (row[0] && String(row[0]).startsWith('■')) {
-            let assetName = String(row[0]).replace('■', '').trim();
-            uniqueAssets.push(assetName);
-        }
-    });
+    if(signalData && signalData.length > 0) {
+        signalData.forEach(row => {
+            if (row[0] && String(row[0]).startsWith('■')) {
+                let assetName = String(row[0]).replace('■', '').trim();
+                uniqueAssets.push(assetName);
+            }
+        });
+    }
 
     // MasterData에서 대분류(H열-인덱스7), 중분류(I열-인덱스8) 매핑
     let categoryMap = {};
-    masterData.forEach(row => {
-        let name = String(row[2] || "").replace(/\s+/g, '').toUpperCase();
-        if(name) {
-            categoryMap[name] = {
-                main: String(row[7] || "").trim(), // 성장 / 배당
-                sub: String(row[8] || "").trim()   // 해외 / 국내
-            };
-        }
-    });
+    if(masterData && masterData.length > 0) {
+        masterData.forEach(row => {
+            let name = String(row[2] || "").replace(/\s+/g, '').toUpperCase();
+            if(name) {
+                categoryMap[name] = {
+                    main: String(row[7] || "").trim(), // 성장 / 배당
+                    sub: String(row[8] || "").trim()   // 해외 / 국내
+                };
+            }
+        });
+    }
 
     // 현재 선택된 버튼과 검색어에 맞춰 종목 걸러내기
     const filteredAssets = uniqueAssets.filter(asset => {
