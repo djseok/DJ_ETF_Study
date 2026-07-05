@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V19.0 최종 연결 패치)
+// 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V19.1 검색필터 장착)
 // =========================================================
 var timestamp = new Date().getTime();
 
@@ -21,7 +21,7 @@ var DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2T
 // 6. ETF 배당 규칙(주기 및 평균 예상액 마스터 룰북)
 var DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
 
-// 전역 공유 그릇 설정 (모든 파일에서 읽을 수 있도록 var 선언)
+// 전역 공유 그릇 설정
 var macroData = [];
 var signalData = [];
 var masterData = []; 
@@ -99,6 +99,10 @@ async function initDashboard() {
         if (masterRes) masterData = parseCsvToMatrix(await masterRes.text()); 
 
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
+        
+        // ✨ 필터 엔진 초기화! (새로 추가된 핵심 1줄)
+        if (typeof initFilters === 'function') initFilters(); 
+
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
 
         var selector = document.getElementById('assetSelector');
