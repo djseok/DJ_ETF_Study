@@ -1,17 +1,19 @@
 // =========================================================
-// 📈 퀀트 예측 엔진 (V13.1 Characteristic 시트 연동 완벽 패치)
+// 📈 퀀트 예측 엔진 (V13.5 실시간 검색 및 필터링 장착)
 // =========================================================
 
+// ✨ 필터 상태 저장용 전역 변수
+let currentMainFilter = 'all';
+let currentSubFilter = 'all';
+let currentSearchText = '';
+
 function extractGlobalMacroVariables() {
-    // 🔥 중요: 지표 데이터는 masterData가 아니라 macroData 배열에 들어있습니다!
     if (!macroData || macroData.length === 0) return;
 
     macroData.forEach(row => {
         let gubun = String(row[0] || "").replace(/\s+/g, '');
-        if (!gubun.includes('지표')) return; // 구분 열이 '지표'인 것만 필터링
+        if (!gubun.includes('지표')) return;
 
-        // 동진님의 Characteristic 시트 구조:
-        // row[0]=구분, row[1]=티커/코드, row[2]=종목명, row[3]=전일지수, row[4]=현재지수
         let ticker = String(row[1] || "").replace(/\s+/g, '').toUpperCase();
         let name = String(row[2] || "").replace(/\s+/g, '').toUpperCase();
         let combinedText = ticker + name;
@@ -26,27 +28,21 @@ function extractGlobalMacroVariables() {
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
-        // 1. 나스닥지수 (.IXIC 또는 NDX 또는 나스닥)
         if (combinedText.includes('나스닥') || combinedText.includes('IXIC') || combinedText.includes('NDX')) {
-            // 선물과 본장이 같이 있다면 공식 본장 지수인 .IXIC 데이터를 위젯에 우선 고정
-            if (combinedText.includes('선물') && document.getElementById('macro-nasdaq').innerHTML.includes('mono')) {
-                return; 
-            }
+            if (combinedText.includes('선물') && document.getElementById('macro-nasdaq').innerHTML.includes('mono')) return; 
             document.getElementById('macro-nasdaq').innerHTML = `
                 <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toLocaleString()}</div>
                 <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
             `;
         } 
-        // 2. 환율 (원달러, USDKRW)
         else if (combinedText.includes('환율') || combinedText.includes('USDKRW')) {
-            if (combinedText.includes('엔화') || combinedText.includes('JPY')) return; // 엔화는 통계에서 제외
+            if (combinedText.includes('엔화') || combinedText.includes('JPY')) return;
             globalFxDelta = prev > 0 ? (live - prev) / prev : 0;
             document.getElementById('macro-fx').innerHTML = `
                 <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">₩${live.toLocaleString()}</div>
                 <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
             `;
         } 
-        // 3. VIX 공포지수
         else if (combinedText.includes('VIX')) {
             globalVixValue = live;
             document.getElementById('macro-vix').innerHTML = `
@@ -54,7 +50,6 @@ function extractGlobalMacroVariables() {
                 <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
             `;
         } 
-        // 4. 10년물 국채 금리 (TNX)
         else if (combinedText.includes('TNX') || combinedText.includes('국채')) {
             document.getElementById('macro-tnx').innerHTML = `
                 <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toFixed(2)}%</div>
@@ -64,8 +59,11 @@ function extractGlobalMacroVariables() {
     });
 }
 
+// ✨ 드롭다운 리스트를 필터 조건에 맞게 다시 그려주는 마법의 함수!
 function populateAssetDropdownSelector() {
     const selector = document.getElementById('assetSelector');
+    if(!selector) return;
+
     const uniqueAssets = [];
     signalData.forEach(row => {
         if (row[0] && String(row[0]).startsWith('■')) {
@@ -73,7 +71,84 @@ function populateAssetDropdownSelector() {
             uniqueAssets.push(assetName);
         }
     });
-    selector.innerHTML = uniqueAssets.map(asset => `<option value="${asset}">${asset}</option>`).join('');
+
+    // MasterData에서 대분류(H열-인덱스7), 중분류(I열-인덱스8) 매핑
+    let categoryMap = {};
+    masterData.forEach(row => {
+        let name = String(row[2] || "").replace(/\s+/g, '').toUpperCase();
+        if(name) {
+            categoryMap[name] = {
+                main: String(row[7] || "").trim(), // 성장 / 배당
+                sub: String(row[8] || "").trim()   // 해외 / 국내
+            };
+        }
+    });
+
+    // 현재 선택된 버튼과 검색어에 맞춰 종목 걸러내기
+    const filteredAssets = uniqueAssets.filter(asset => {
+        let cleanAsset = asset.replace(/\s+/g, '').toUpperCase();
+        let cat = categoryMap[cleanAsset] || {main: "", sub: ""};
+        
+        let matchText = currentSearchText === "" || asset.toLowerCase().includes(currentSearchText);
+        let matchMain = currentMainFilter === 'all' || cat.main === currentMainFilter;
+        let matchSub = currentSubFilter === 'all' || cat.sub === currentSubFilter;
+
+        return matchText && matchMain && matchSub;
+    });
+
+    // 드롭다운 HTML 생성
+    if (filteredAssets.length === 0) {
+        selector.innerHTML = `<option value="">검색 결과가 없습니다</option>`;
+    } else {
+        selector.innerHTML = filteredAssets.map(asset => `<option value="${asset}">${asset}</option>`).join('');
+    }
+
+    // 필터링 후 맨 위에 있는 종목으로 화면 즉시 업데이트
+    if (filteredAssets.length > 0 && typeof renderTargetAssetDashboard === 'function') {
+        renderTargetAssetDashboard(selector.value);
+    }
+}
+
+// ✨ UI 버튼들과 검색창에 생명을 불어넣는 이벤트 리스너 세팅
+function initFilters() {
+    // 1. 검색창 타이핑 실시간 감지
+    const searchInput = document.getElementById('assetSearchInput');
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            currentSearchText = e.target.value.toLowerCase().trim();
+            populateAssetDropdownSelector();
+        });
+    }
+
+    // 2. 대분류(전략) 버튼 클릭 감지
+    document.querySelectorAll('.filter-main-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.filter-main-btn').forEach(b => {
+                b.classList.remove('bg-slate-800', 'text-white');
+                b.classList.add('bg-slate-100', 'text-slate-600');
+            });
+            e.currentTarget.classList.remove('bg-slate-100', 'text-slate-600');
+            e.currentTarget.classList.add('bg-slate-800', 'text-white');
+            
+            currentMainFilter = e.currentTarget.getAttribute('data-filter');
+            populateAssetDropdownSelector();
+        });
+    });
+
+    // 3. 중분류(지역) 버튼 클릭 감지
+    document.querySelectorAll('.filter-sub-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.filter-sub-btn').forEach(b => {
+                b.classList.remove('bg-slate-800', 'text-white');
+                b.classList.add('bg-slate-100', 'text-slate-600');
+            });
+            e.currentTarget.classList.remove('bg-slate-100', 'text-slate-600');
+            e.currentTarget.classList.add('bg-slate-800', 'text-white');
+            
+            currentSubFilter = e.currentTarget.getAttribute('data-filter');
+            populateAssetDropdownSelector();
+        });
+    });
 }
 
 function renderTargetAssetDashboard(target) {
