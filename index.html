@@ -314,16 +314,20 @@
 
         <div id="viewMdd" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 class="text-xl font-black text-slate-800 mb-2"><i class="fas fa-chart-line text-red-500 mr-2"></i>실시간 MDD (최대 낙폭) 시뮬레이터</h3>
-                <p class="text-sm text-slate-500 font-bold mb-5">궁금한 종목의 티커(Ticker)를 입력해보세요. 최근 1년치 주가 흐름을 바탕으로 최고점 대비 최대 낙폭을 즉시 계산합니다. (한국 주식은 005930.KS 형식)</p>
-        
+                <h3 class="text-xl font-black text-slate-800 mb-2"><i class="fas fa-water text-blue-500 mr-2"></i>MDD 언더워터 차트 시뮬레이터</h3>
+                <p class="text-sm text-slate-500 font-bold mb-5">종목 티커를 입력하면 최근 5년간의 주가 하락폭(물에 잠긴 깊이)을 시각화하여 보여줍니다. (한국 주식: 005930.KS)</p>
+
                 <div class="flex flex-col md:flex-row gap-3">
-                    <input type="text" id="mdd-price-input" placeholder="종목 티커 입력 (예: AAPL, SPY, QQQ)" class="flex-1 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-red-500 focus:border-red-500 font-mono">
-                    <button onclick="runMDDCalculation()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md whitespace-nowrap">MDD 계산하기</button>
+                    <input type="text" id="mdd-price-input" placeholder="종목 티커 입력 (예: AAPL, SPY, QQQ)" class="flex-1 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-blue-500 focus:border-blue-500 font-mono">
+                    <button onclick="runMDDCalculation()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md whitespace-nowrap">차트 분석하기</button>
                 </div>
-        
-                <div id="mdd-result-display" class="mt-6 p-5 bg-slate-50 rounded-xl border border-slate-100 text-lg font-bold text-center text-slate-400">
-                    티커를 입력하고 계산하기를 눌러주세요.
+
+                <div id="mdd-result-display" class="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-100 text-lg font-bold text-center text-slate-500 mb-4">
+                    티커를 입력하고 분석을 시작해보세요.
+                </div>
+
+                <div class="relative w-full h-64 md:h-80">
+                    <canvas id="mddChartCanvas"></canvas>
                 </div>
             </div>
         </div>
