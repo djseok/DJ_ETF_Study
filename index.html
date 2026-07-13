@@ -29,6 +29,7 @@
             <button id="btnTabCalc" onclick="switchTab('calc')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🧮 구매 계산기</button>
             <button id="btnTabDiv" onclick="switchTab('div')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-emerald-50 whitespace-nowrap text-emerald-700">💰 배당&총알</button>
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
+            <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
         </div>
 
         <div id="viewQuant" class="space-y-6 block">
@@ -475,6 +476,56 @@
             </div>
         </div>
         
+        <div id="viewRsi" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
+                <h2 class="text-2xl font-bold mb-2 flex items-center">📈 RSI 계산기</h2>
+                <p class="text-sm text-gray-500 mb-6">티커만 입력하면 최근 시세로 자동 계산 — 지금 많이 올랐는지 많이 빠졌는지 한눈에</p>
+
+                <div class="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <h3 class="font-bold text-lg mb-3">🔍 종목 티커로 바로 조회</h3>
+                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                        <input type="text" id="rsiTickerInput" placeholder="예: AAPL, NVDA, 494300" 
+                               class="flex-1 p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 uppercase font-bold text-slate-700">
+                        <button onclick="if(typeof fetchAndCalculateRSI === 'function') fetchAndCalculateRSI(); else alert('RSI 스크립트 로딩 중입니다.')" class="bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 transition shadow-sm whitespace-nowrap">
+                            📈 조회하기
+                        </button>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="setRSIPeriod(9)" id="btnRsi9" class="rsi-period-btn px-4 py-2 border border-slate-300 rounded-full text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">9일 (단기)</button>
+                        <button onclick="setRSIPeriod(14)" id="btnRsi14" class="rsi-period-btn px-4 py-2 border border-transparent rounded-full text-sm font-bold bg-slate-800 text-white transition-colors">14일 (기본)</button>
+                        <button onclick="setRSIPeriod(25)" id="btnRsi25" class="rsi-period-btn px-4 py-2 border border-slate-300 rounded-full text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">25일 (장기)</button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3 flex items-center"><i class="fas fa-bolt text-yellow-500 mr-1"></i> 최근 시세를 자동으로 불러와 계산합니다. 방금 조회한 티커는 즉시 계산해요!</p>
+                </div>
+
+                <div class="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <h3 class="font-bold text-lg mb-3">🔧 고급: 종가 데이터 직접 입력하기</h3>
+                    <textarea id="rsiManualInput" rows="2" placeholder="종가 데이터 입력 (쉼표로 구분, 예: 100, 102, 105, 103... 최신 데이터가 마지막)" 
+                              class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 mb-3 font-mono text-sm"></textarea>
+                    <button onclick="if(typeof calculateManualRSI === 'function') calculateManualRSI(); else alert('RSI 스크립트 로딩 중입니다.')" class="w-full bg-slate-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-slate-800 transition shadow-sm">
+                        <i class="fas fa-keyboard mr-1"></i> 직접 입력한 데이터로 계산
+                    </button>
+                </div>
+
+                <div id="rsiResultBox" class="hidden text-center p-8 rounded-xl border-2 mb-6 transition-all duration-300 relative overflow-hidden">
+                    <h3 id="rsiResultTicker" class="text-xl font-bold mb-1 text-slate-700 relative z-10"></h3>
+                    <div class="text-6xl font-black mb-3 font-mono tracking-tighter relative z-10" id="rsiResultValue">0.00</div>
+                    <p id="rsiResultMessage" class="text-xl font-bold relative z-10"></p>
+                </div>
+
+                <div class="bg-blue-50 p-5 rounded-xl text-sm border border-blue-100">
+                    <h4 class="font-bold mb-3 text-blue-900 text-base"><i class="fas fa-book-open text-blue-600 mr-2"></i>RSI, 이렇게만 알면 됩니다</h4>
+                    <p class="mb-4 text-slate-700 font-medium">RSI는 최근에 많이 올랐는지, 많이 빠졌는지를 0~100 숫자 하나로 보여주는 지표예요. 숫자가 높을수록 최근 상승세가 강했다는 뜻이고, 낮을수록 하락세가 강했다는 뜻입니다.</p>
+                    <ul class="space-y-3 font-bold text-slate-700">
+                        <li class="flex items-center"><span class="w-24 text-green-600 bg-green-100 px-2 py-1 rounded text-center mr-3">🟢 30 미만</span> 많이 빠졌다 (과매도 - 분할 매수 기회 🛒)</li>
+                        <li class="flex items-center"><span class="w-24 text-yellow-600 bg-yellow-100 px-2 py-1 rounded text-center mr-3">🟡 30 ~ 70</span> 보통 수준 (관망 💤)</li>
+                        <li class="flex items-center"><span class="w-24 text-red-500 bg-red-100 px-2 py-1 rounded text-center mr-3">🔴 70 초과</span> 많이 올랐다 (과매수 - 일부 익절 고려 💰)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -485,5 +536,6 @@
     <script src="js/dividend.js"></script>
     <script src="js/mdd.js"></script>
     <script src="js/backtest.js"></script>
+    <script src="js/rsi.js"></script>
 </body>
 </html>
