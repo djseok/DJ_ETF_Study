@@ -1,9 +1,10 @@
 // ==========================================
-// 📉 실시간 API 연동 MDD (최대 낙폭) 계산기 (V2 안정화 버전)
+// 📉 실시간 API 연동 MDD 언더워터 차트 엔진
 // ==========================================
 
+let mddChartInstance = null; // 차트 중복 생성을 막기 위한 전역 변수
+
 async function runMDDCalculation() {
-    // 1. 입력된 티커 가져오기 (공백 제거 및 대문자 변환)
     const ticker = document.getElementById('mdd-price-input').value.trim().toUpperCase();
     const resultDisplay = document.getElementById('mdd-result-display');
 
@@ -13,85 +14,146 @@ async function runMDDCalculation() {
         return;
     }
 
-    // 로딩 중 표시
-    resultDisplay.innerHTML = `<i class="fas fa-circle-notch fa-spin text-red-400"></i> <b>${ticker}</b> 과거 1년 데이터를 불러오는 중입니다... 🐕⏳`;
+    resultDisplay.innerHTML = `<i class="fas fa-circle-notch fa-spin text-blue-400"></i> <b>${ticker}</b> 과거 5년치 데이터를 시각화하는 중입니다... 🐕⏳`;
     resultDisplay.style.color = "#64748b";
 
     try {
-        // 2. 야후 파이낸스 API 주소 생성 (최근 1년, 1일 간격 데이터)
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1y&interval=1d`;
-        
-        // ✨ 해결 포인트: 더 강력하고 안정적인 corsproxy.io 로 우회 터널 교체
+        // 1. 야후 파이낸스 데이터 호출 (최근 5년, 1주일 간격 데이터가 차트 그리기에 가장 빠르고 깔끔함)
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5y&interval=1wk`;
         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-        // API 데이터 호출
         const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`서버 응답 오류: ${response.status}`);
         
-        // 서버가 터졌을 때 방어
-        if (!response.ok) {
-            throw new Error(`서버 응답 오류: ${response.status}`);
-        }
-        
-        // corsproxy는 데이터를 한 번 더 감싸지 않고 원본 그대로 줍니다.
         const data = await response.json();
-
         if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
             throw new Error("종목 없음");
         }
 
-        // 3. 종가(Close price) 데이터 배열만 쏙 뽑아내기
+        const timestamps = data.chart.result[0].timestamp;
         const rawPrices = data.chart.result[0].indicators.quote[0].close;
-        
-        // 간혹 장이 쉬는 날 섞여 있는 빈값(null) 제거
-        const prices = rawPrices.filter(price => price !== null);
 
-        if (prices.length < 2) {
-             throw new Error("데이터 부족");
+        // 2. 날짜 및 가격 데이터 정제 (null 값 제거)
+        let dates = [];
+        let prices = [];
+        for(let i=0; i<rawPrices.length; i++) {
+            if(rawPrices[i] !== null) {
+                // 타임스탬프를 YYYY-MM-DD 형식으로 변환
+                const dateObj = new Date(timestamps[i] * 1000);
+                dates.push(`${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`);
+                prices.push(rawPrices[i]);
+            }
         }
 
-        // 4. 기존 MDD 산출 알고리즘 적용
+        if (prices.length < 2) throw new Error("데이터 부족");
+
+        // 3. 언더워터(Drawdown) 시계열 계산 로직
         let peak = prices[0];
         let maxDrawdown = 0;
+        let drawdowns = [];
 
-        for (let i = 1; i < prices.length; i++) {
+        for (let i = 0; i < prices.length; i++) {
             if (prices[i] > peak) {
                 peak = prices[i]; // 전고점 갱신
             }
-            // 하락률 계산
+            // 그 날짜의 하락률 계산 (음수로 저장)
             const currentDrawdown = ((prices[i] - peak) / peak) * 100;
+            drawdowns.push(currentDrawdown);
             
+            // 역대 최고 하락률 찾기 (절댓값이 가장 큰 음수)
             if (currentDrawdown < maxDrawdown) {
-                maxDrawdown = currentDrawdown; // 최대 낙폭 갱신
+                maxDrawdown = currentDrawdown;
             }
         }
 
-        // 5. 결과 화면 출력
+        // 4. 상단 텍스트 결과 출력
         if (maxDrawdown === 0) {
-             resultDisplay.innerHTML = `👏 <b>${ticker}</b> MDD: 0.00% <br><span class="text-sm font-normal text-slate-500">최근 1년간 가격 하락 없이 우상향했습니다!</span>`;
-             resultDisplay.style.color = "#10b981"; // 에메랄드 그린
+             resultDisplay.innerHTML = `👏 <b>${ticker}</b> 최근 5년간 MDD: 0.00% <br><span class="text-sm font-normal text-slate-500">가격 하락 없이 우상향했습니다.</span>`;
+             resultDisplay.style.color = "#10b981";
         } else {
              resultDisplay.innerHTML = `
-                🚨 <b>${ticker}</b> 최대 낙폭(MDD): ${maxDrawdown.toFixed(2)}% <br>
-                <span class="text-sm font-normal text-slate-500">최근 1년 최고점 대비 가장 깊게 파인 하락률입니다.</span>
+                🚨 <b>${ticker}</b> 최근 5년 최대 낙폭(MDD): ${maxDrawdown.toFixed(2)}% <br>
+                <span class="text-sm font-normal text-slate-500">아래 차트의 붉은 면적이 깊을수록 고점 대비 많이 물려있던 뼈아픈 시기입니다.</span>
              `;
-             resultDisplay.style.color = "#ef4444"; // 붉은 경고
+             resultDisplay.style.color = "#ef4444";
         }
+
+        // 5. Chart.js 로 언더워터 차트 그리기
+        drawUnderwaterChart(dates, drawdowns, ticker);
 
     } catch (error) {
         console.error(error);
-        resultDisplay.innerHTML = `❌ <b>${ticker}</b> 데이터를 불러오지 못했습니다.<br><span class="text-sm font-normal text-slate-500">티커명을 확인하거나, 일시적인 서버 오류일 수 있습니다. (※ 한국 주식은 005930.KS 형식)</span>`;
+        resultDisplay.innerHTML = `❌ <b>${ticker}</b> 데이터를 불러오지 못했습니다.<br><span class="text-sm font-normal text-slate-500">티커를 확인하거나 잠시 후 다시 시도해주세요.</span>`;
         resultDisplay.style.color = "#ef4444";
     }
 }
 
-// 엔터키를 누르면 바로 계산되도록 이벤트 추가
+// 🎨 차트 렌더링 함수
+function drawUnderwaterChart(dates, drawdowns, ticker) {
+    const ctx = document.getElementById('mddChartCanvas').getContext('2d');
+
+    // 기존에 그려진 차트가 있다면 지워야 에러가 안 남
+    if (mddChartInstance) {
+        mddChartInstance.destroy();
+    }
+
+    mddChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: `${ticker} Drawdown (%)`,
+                data: drawdowns,
+                borderColor: 'rgba(239, 68, 68, 1)',   // 테두리 붉은색
+                backgroundColor: 'rgba(239, 68, 68, 0.2)', // 속을 채울 투명한 붉은색
+                borderWidth: 1.5,
+                fill: true,       // 0% 선 아래로 색칠하기
+                pointRadius: 0,   // 점 숨기기 (깔끔하게 선만 보이게)
+                tension: 0.1      // 살짝 부드러운 곡선
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 8 } // 날짜 너무 많으면 텍스트 겹치므로 제한
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 0, // y축 맨 위를 0%로 고정 (물수면)
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%'; // y축 라벨에 % 붙이기
+                        }
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `하락률: ${context.parsed.y.toFixed(2)}%`;
+                        }
+                    }
+                },
+                legend: { display: false } // 상단 범례 숨기기
+            }
+        }
+    });
+}
+
+// 엔터키 연동
 document.addEventListener('DOMContentLoaded', () => {
     const mddInput = document.getElementById('mdd-price-input');
     if(mddInput) {
         mddInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                runMDDCalculation();
-            }
+            if (e.key === 'Enter') runMDDCalculation();
         });
     }
 });
