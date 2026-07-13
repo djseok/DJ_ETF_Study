@@ -33,8 +33,8 @@ var globalActualDividendLogs = [];
 var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    // 💡 변경점 1: 'Conc' 대신 'Mdd' 탭을 인식하도록 배열 수정
-    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd'];
+    // 💡 변경점 1: 'Rsi' 탭 추가 인식
+    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi'];
     for (var i = 0; i < tabs.length; i++) {
         var t = tabs[i];
         var view = document.getElementById('view' + t);
@@ -50,8 +50,9 @@ function switchTab(tabName) {
     if(activeView) activeView.classList.remove('hidden');
     if(activeBtn) {
         if(tabName === 'div') activeBtn.className = "flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
-        // 💡 변경점 2: MDD 탭이 활성화되었을 때 경고/위험 관리 느낌의 붉은색 톤(bg-red-600) 적용
         else if(tabName === 'mdd') activeBtn.className = "flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
+        // 💡 변경점 2: RSI 탭은 트렌디한 보라색(bg-purple-600)으로 활성화
+        else if(tabName === 'rsi') activeBtn.className = "flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
 
