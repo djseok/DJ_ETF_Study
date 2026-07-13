@@ -24,7 +24,7 @@
             <button id="btnTabPort" onclick="switchTab('port')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🏆 클럽 현황</button>
             <button id="btnTabCalc" onclick="switchTab('calc')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🧮 구매 계산기</button>
             <button id="btnTabDiv" onclick="switchTab('div')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-emerald-50 whitespace-nowrap text-emerald-700">💰 배당&총알</button>
-            <button id="btnTabConc" onclick="switchTab('conc')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">🧩 집중도 분석</button>
+            <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
         </div>
 
         <div id="viewQuant" class="space-y-6 block">
@@ -312,9 +312,22 @@
             </div>
         </div>
 
-        <div id="viewConc" class="hidden">
-            <div id="concContainer" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-h-[200px] text-center text-slate-400 font-bold flex items-center justify-center">데이터 로딩 중...</div>
+        <div id="viewMdd" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-xl font-black text-slate-800 mb-2"><i class="fas fa-chart-line text-red-500 mr-2"></i>실시간 MDD (최대 낙폭) 시뮬레이터</h3>
+                <p class="text-sm text-slate-500 font-bold mb-5">궁금한 종목의 티커(Ticker)를 입력해보세요. 최근 1년치 주가 흐름을 바탕으로 최고점 대비 최대 낙폭을 즉시 계산합니다. (한국 주식은 005930.KS 형식)</p>
+        
+                <div class="flex flex-col md:flex-row gap-3">
+                    <input type="text" id="mdd-price-input" placeholder="종목 티커 입력 (예: AAPL, SPY, QQQ)" class="flex-1 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-red-500 focus:border-red-500 font-mono">
+                    <button onclick="runMDDCalculation()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md whitespace-nowrap">MDD 계산하기</button>
+                </div>
+        
+                <div id="mdd-result-display" class="mt-6 p-5 bg-slate-50 rounded-xl border border-slate-100 text-lg font-bold text-center text-slate-400">
+                    티커를 입력하고 계산하기를 눌러주세요.
+                </div>
+            </div>
         </div>
+        
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -324,7 +337,7 @@
     <script src="js/port.js"></script>
     <script src="js/calc.js"></script>
     <script src="js/dividend.js"></script>
-    <script src="js/conc.js"></script>
+    <script src="js/mdd.js"></script>
     <script src="js/backtest.js"></script>
 </body>
 </html>
