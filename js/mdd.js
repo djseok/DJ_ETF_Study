@@ -1,159 +1,195 @@
 // ==========================================
-// 📉 실시간 API 연동 MDD 언더워터 차트 엔진
+// 📉 고급 실시간 MDD 시뮬레이터 엔진 (mddcalc.com 클론)
 // ==========================================
 
-let mddChartInstance = null; // 차트 중복 생성을 막기 위한 전역 변수
+let mddChartInstance = null;
 
-async function runMDDCalculation() {
-    const ticker = document.getElementById('mdd-price-input').value.trim().toUpperCase();
-    const resultDisplay = document.getElementById('mdd-result-display');
+async function runAdvancedMDD() {
+    const tickerInput = document.getElementById('mdd-ticker-input').value.trim().toUpperCase();
+    const statusMsg = document.getElementById('mdd-status-msg');
+    const resultContainer = document.getElementById('mdd-result-container');
 
-    if (!ticker) {
-        resultDisplay.innerHTML = "⚠️ 종목 티커를 입력해주세요. (예: NVDA, SPY)";
-        resultDisplay.style.color = "#64748b";
+    if (!tickerInput) {
+        statusMsg.innerHTML = "⚠️ 종목 티커를 입력해주세요.";
+        statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
         return;
     }
 
-    resultDisplay.innerHTML = `<i class="fas fa-circle-notch fa-spin text-blue-400"></i> <b>${ticker}</b> 과거 5년치 데이터를 시각화하는 중입니다... 🐕⏳`;
-    resultDisplay.style.color = "#64748b";
+    // 로딩 시작
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> ${tickerInput}의 과거 데이터를 로드하고 분석 중입니다...`;
+    statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
+    resultContainer.classList.add('hidden'); // 계산 전까지 결과창 숨김
 
     try {
-        // 1. 야후 파이낸스 데이터 호출 (최근 5년, 1주일 간격 데이터가 차트 그리기에 가장 빠르고 깔끔함)
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5y&interval=1wk`;
+        // 5년치 일봉 데이터 호출 (야후 파이낸스)
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=5y&interval=1d`;
         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
         const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error(`서버 응답 오류: ${response.status}`);
+        if (!response.ok) throw new Error("서버 응답 오류");
         
         const data = await response.json();
-        if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-            throw new Error("종목 없음");
-        }
+        if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("종목 없음");
 
         const timestamps = data.chart.result[0].timestamp;
-        const rawPrices = data.chart.result[0].indicators.quote[0].close;
+        const quote = data.chart.result[0].indicators.quote[0];
+        // mddcalc는 보통 고가(High)를 기준으로 하거나 종가(Close)를 씁니다. 여기선 보수적으로 Close 사용.
+        const rawPrices = quote.close; 
 
-        // 2. 날짜 및 가격 데이터 정제 (null 값 제거)
         let dates = [];
         let prices = [];
-        for(let i=0; i<rawPrices.length; i++) {
+        
+        // 데이터 정제 (null 제거 및 날짜 변환)
+        for(let i = 0; i < rawPrices.length; i++) {
             if(rawPrices[i] !== null) {
-                // 타임스탬프를 YYYY-MM-DD 형식으로 변환
-                const dateObj = new Date(timestamps[i] * 1000);
-                dates.push(`${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`);
+                const d = new Date(timestamps[i] * 1000);
+                dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
                 prices.push(rawPrices[i]);
             }
         }
 
         if (prices.length < 2) throw new Error("데이터 부족");
 
-        // 3. 언더워터(Drawdown) 시계열 계산 로직
-        let peak = prices[0];
+        // --- 핵심 통계 계산 로직 ---
+        let currentPrice = prices[prices.length - 1];
+        let currentDate = dates[dates.length - 1];
+        
+        let athPrice = prices[0];
+        let athDate = dates[0];
+        
         let maxDrawdown = 0;
+        let maxDrawdownDate = dates[0];
+        
         let drawdowns = [];
+        let runningMax = prices[0];
 
         for (let i = 0; i < prices.length; i++) {
-            if (prices[i] > peak) {
-                peak = prices[i]; // 전고점 갱신
+            // 전고점(ATH) 갱신 기록
+            if (prices[i] > runningMax) {
+                runningMax = prices[i];
             }
-            // 그 날짜의 하락률 계산 (음수로 저장)
-            const currentDrawdown = ((prices[i] - peak) / peak) * 100;
-            drawdowns.push(currentDrawdown);
+            if (prices[i] > athPrice) {
+                athPrice = prices[i];
+                athDate = dates[i];
+            }
             
-            // 역대 최고 하락률 찾기 (절댓값이 가장 큰 음수)
-            if (currentDrawdown < maxDrawdown) {
-                maxDrawdown = currentDrawdown;
+            // 하락률 계산
+            const currentDD = ((prices[i] - runningMax) / runningMax) * 100;
+            drawdowns.push(currentDD);
+            
+            // 최대 낙폭 기록
+            if (currentDD < maxDrawdown) {
+                maxDrawdown = currentDD;
+                maxDrawdownDate = dates[i];
             }
         }
 
-        // 4. 상단 텍스트 결과 출력
-        if (maxDrawdown === 0) {
-             resultDisplay.innerHTML = `👏 <b>${ticker}</b> 최근 5년간 MDD: 0.00% <br><span class="text-sm font-normal text-slate-500">가격 하락 없이 우상향했습니다.</span>`;
-             resultDisplay.style.color = "#10b981";
+        let currentDrawdown = ((currentPrice - athPrice) / athPrice) * 100;
+
+        // --- UI 업데이트 (DOM 조작) ---
+        document.getElementById('mdd-current-price').innerText = `$${currentPrice.toFixed(2)}`;
+        document.getElementById('mdd-current-date').innerText = currentDate;
+        
+        document.getElementById('mdd-ath-price').innerText = `$${athPrice.toFixed(2)}`;
+        document.getElementById('mdd-ath-date').innerText = athDate;
+
+        const ddDisplay = document.getElementById('mdd-current-drawdown');
+        const badgeDisplay = document.getElementById('mdd-status-badge');
+        const cardDisplay = document.getElementById('mdd-status-card');
+
+        ddDisplay.innerText = `${currentDrawdown.toFixed(2)}%`;
+
+        // 상태 뱃지 판별 로직
+        if(currentDrawdown >= -5) {
+            badgeDisplay.innerText = "🙂 소폭 조정 (안정권)";
+            cardDisplay.className = "bg-green-50 p-5 rounded-2xl shadow-sm border border-green-200 text-center";
+            ddDisplay.className = "text-4xl font-black text-green-600 font-mono";
+            document.querySelector('#mdd-status-card .text-sm').className = "text-sm font-bold text-green-600 mb-1";
+        } else if (currentDrawdown >= -15) {
+            badgeDisplay.innerText = "🟡 단기 조정 구간";
+            cardDisplay.className = "bg-yellow-50 p-5 rounded-2xl shadow-sm border border-yellow-200 text-center";
+            ddDisplay.className = "text-4xl font-black text-yellow-600 font-mono";
+            document.querySelector('#mdd-status-card .text-sm').className = "text-sm font-bold text-yellow-600 mb-1";
+        } else if (currentDrawdown >= -30) {
+            badgeDisplay.innerText = "🟠 약세장 진입 (분할 매수)";
+            cardDisplay.className = "bg-orange-50 p-5 rounded-2xl shadow-sm border border-orange-200 text-center";
+            ddDisplay.className = "text-4xl font-black text-orange-600 font-mono";
+            document.querySelector('#mdd-status-card .text-sm').className = "text-sm font-bold text-orange-600 mb-1";
         } else {
-             resultDisplay.innerHTML = `
-                🚨 <b>${ticker}</b> 최근 5년 최대 낙폭(MDD): ${maxDrawdown.toFixed(2)}% <br>
-                <span class="text-sm font-normal text-slate-500">아래 차트의 붉은 면적이 깊을수록 고점 대비 많이 물려있던 뼈아픈 시기입니다.</span>
-             `;
-             resultDisplay.style.color = "#ef4444";
+            badgeDisplay.innerText = "🔥 역대급 폭락 (기업가치 점검)";
+            cardDisplay.className = "bg-red-50 p-5 rounded-2xl shadow-sm border border-red-200 text-center";
+            ddDisplay.className = "text-4xl font-black text-red-600 font-mono";
+            document.querySelector('#mdd-status-card .text-sm').className = "text-sm font-bold text-red-600 mb-1";
         }
 
-        // 5. Chart.js 로 언더워터 차트 그리기
-        drawUnderwaterChart(dates, drawdowns, ticker);
+        // 주요 통계창 업데이트
+        document.getElementById('stat-max-dd').innerText = `${maxDrawdown.toFixed(2)}%`;
+        document.getElementById('stat-max-date').innerText = maxDrawdownDate;
+        document.getElementById('stat-start-date').innerText = dates[0];
+        document.getElementById('stat-total-days').innerText = `${prices.length.toLocaleString()}일`;
+
+        // 할인 가격표 업데이트
+        document.getElementById('price-drop-10').innerText = `$${(athPrice * 0.90).toFixed(2)}`;
+        document.getElementById('price-drop-20').innerText = `$${(athPrice * 0.80).toFixed(2)}`;
+        document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
+        document.getElementById('price-drop-40').innerText = `$${(athPrice * 0.60).toFixed(2)}`;
+
+        // 성공 메시지 및 결과창 표시
+        statusMsg.innerHTML = `✅ ${tickerInput} 데이터 ${prices.length}일치 로드 완료!`;
+        statusMsg.className = "text-xs text-green-600 mt-2 font-bold";
+        resultContainer.classList.remove('hidden');
+
+        // 차트 그리기
+        renderUnderwaterChart(dates, drawdowns, tickerInput);
 
     } catch (error) {
         console.error(error);
-        resultDisplay.innerHTML = `❌ <b>${ticker}</b> 데이터를 불러오지 못했습니다.<br><span class="text-sm font-normal text-slate-500">티커를 확인하거나 잠시 후 다시 시도해주세요.</span>`;
-        resultDisplay.style.color = "#ef4444";
+        statusMsg.innerHTML = `❌ 데이터를 불러오지 못했습니다. 티커명을 확인해주세요.`;
+        statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
     }
 }
 
-// 🎨 차트 렌더링 함수
-function drawUnderwaterChart(dates, drawdowns, ticker) {
+function renderUnderwaterChart(dates, drawdowns, ticker) {
     const ctx = document.getElementById('mddChartCanvas').getContext('2d');
-
-    // 기존에 그려진 차트가 있다면 지워야 에러가 안 남
-    if (mddChartInstance) {
-        mddChartInstance.destroy();
-    }
+    if (mddChartInstance) mddChartInstance.destroy();
 
     mddChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: dates,
             datasets: [{
-                label: `${ticker} Drawdown (%)`,
+                label: '고점 대비 하락률 (%)',
                 data: drawdowns,
-                borderColor: 'rgba(239, 68, 68, 1)',   // 테두리 붉은색
-                backgroundColor: 'rgba(239, 68, 68, 0.2)', // 속을 채울 투명한 붉은색
+                borderColor: 'rgba(239, 68, 68, 0.8)',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
                 borderWidth: 1.5,
-                fill: true,       // 0% 선 아래로 색칠하기
-                pointRadius: 0,   // 점 숨기기 (깔끔하게 선만 보이게)
-                tension: 0.1      // 살짝 부드러운 곡선
+                fill: true,
+                pointRadius: 0,
+                tension: 0.1
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
+            interaction: { mode: 'index', intersect: false },
             scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { maxTicksLimit: 8 } // 날짜 너무 많으면 텍스트 겹치므로 제한
-                },
-                y: {
-                    beginAtZero: true,
-                    max: 0, // y축 맨 위를 0%로 고정 (물수면)
-                    ticks: {
-                        callback: function(value) {
-                            return value + '%'; // y축 라벨에 % 붙이기
-                        }
-                    }
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+                y: { 
+                    beginAtZero: true, 
+                    max: 0, 
+                    ticks: { callback: value => value + '%' } 
                 }
             },
             plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return `하락률: ${context.parsed.y.toFixed(2)}%`;
-                        }
-                    }
-                },
-                legend: { display: false } // 상단 범례 숨기기
+                tooltip: { callbacks: { label: context => `하락률: ${context.parsed.y.toFixed(2)}%` } },
+                legend: { display: false }
             }
         }
     });
 }
 
-// 엔터키 연동
+// 엔터키 지원
 document.addEventListener('DOMContentLoaded', () => {
-    const mddInput = document.getElementById('mdd-price-input');
-    if(mddInput) {
-        mddInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') runMDDCalculation();
-        });
-    }
+    const input = document.getElementById('mdd-ticker-input');
+    if(input) input.addEventListener('keypress', e => { if (e.key === 'Enter') runAdvancedMDD(); });
 });
