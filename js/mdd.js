@@ -1,5 +1,5 @@
 // ==========================================
-// 📉 실시간 API 연동 MDD (최대 낙폭) 계산기
+// 📉 실시간 API 연동 MDD (최대 낙폭) 계산기 (V2 안정화 버전)
 // ==========================================
 
 async function runMDDCalculation() {
@@ -21,17 +21,21 @@ async function runMDDCalculation() {
         // 2. 야후 파이낸스 API 주소 생성 (최근 1년, 1일 간격 데이터)
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1y&interval=1d`;
         
-        // 깃허브 웹페이지에서 남의 서버(야후) 데이터를 직접 부를 때 생기는 보안(CORS) 에러를 우회하는 무료 프록시 거울
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        // ✨ 해결 포인트: 더 강력하고 안정적인 corsproxy.io 로 우회 터널 교체
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
         // API 데이터 호출
         const response = await fetch(proxyUrl);
-        const proxyData = await response.json();
         
-        // 야후가 준 원본 JSON 데이터 파싱
-        const data = JSON.parse(proxyData.contents);
+        // 서버가 터졌을 때 방어
+        if (!response.ok) {
+            throw new Error(`서버 응답 오류: ${response.status}`);
+        }
+        
+        // corsproxy는 데이터를 한 번 더 감싸지 않고 원본 그대로 줍니다.
+        const data = await response.json();
 
-        if (!data.chart.result || data.chart.result.length === 0) {
+        if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
             throw new Error("종목 없음");
         }
 
@@ -75,7 +79,7 @@ async function runMDDCalculation() {
 
     } catch (error) {
         console.error(error);
-        resultDisplay.innerHTML = `❌ <b>${ticker}</b> 데이터를 불러오지 못했습니다.<br><span class="text-sm font-normal text-slate-500">티커명을 확인해주세요. (※ 한국 주식은 005930.KS 또는 000000.KQ 처럼 뒤에 코드를 붙여야 합니다)</span>`;
+        resultDisplay.innerHTML = `❌ <b>${ticker}</b> 데이터를 불러오지 못했습니다.<br><span class="text-sm font-normal text-slate-500">티커명을 확인하거나, 일시적인 서버 오류일 수 있습니다. (※ 한국 주식은 005930.KS 형식)</span>`;
         resultDisplay.style.color = "#ef4444";
     }
 }
