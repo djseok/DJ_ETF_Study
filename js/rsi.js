@@ -111,7 +111,7 @@ function calculateManualRSI() {
     }
 }
 
-// 5. 🔍 티커 검색 및 데이터 Fetch (야후 파이낸스)
+// 5. 🔍 티커 검색 및 데이터 Fetch (야후 파이낸스 + CORS 우회 프록시)
 async function fetchAndCalculateRSI() {
     const ticker = document.getElementById('rsiTickerInput').value.trim().toUpperCase();
     if (!ticker) {
@@ -119,7 +119,7 @@ async function fetchAndCalculateRSI() {
         return;
     }
 
-    // 캐시에 이미 데이터가 있으면 즉시 계산 (속도 100배 최적화)
+    // 캐시에 이미 데이터가 있으면 즉시 계산 (속도 최적화)
     if (rsiCache[ticker]) {
         console.log("캐시된 데이터를 사용합니다: ", ticker);
         displayRSI(ticker, rsiCache[ticker], currentRsiPeriod);
@@ -137,16 +137,20 @@ async function fetchAndCalculateRSI() {
         let queryTicker = ticker;
         if (/^\d{6}$/.test(ticker)) queryTicker = ticker + ".KS"; // 한국 주식 지원
 
-        // 과거 3개월치 일봉 데이터를 가져옵니다.
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=3mo&interval=1d`;
+        // 🔥 [수정됨] 야후 파이낸스의 CORS 차단을 뚫기 위해 무료 프록시(allorigins)를 결합합니다.
+        const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=3mo&interval=1d`);
+        const url = `https://api.allorigins.win/raw?url=${targetUrl}`;
         
         const response = await fetch(url);
+        if (!response.ok) throw new Error("네트워크 응답이 정상이 아닙니다.");
+        
         const data = await response.json();
 
-        if (!data.chart.result) {
+        if (!data.chart || !data.chart.result) {
             throw new Error("데이터를 찾을 수 없습니다.");
         }
 
+        // 종가(close) 배열 추출
         const closePrices = data.chart.result[0].indicators.quote[0].close.filter(p => p !== null);
 
         // 캐시 저장
@@ -156,7 +160,7 @@ async function fetchAndCalculateRSI() {
         displayRSI(ticker, closePrices, currentRsiPeriod);
 
     } catch (error) {
-        console.error(error);
+        console.error("RSI Fetch Error:", error);
         alert(`데이터를 불러오지 못했습니다. 티커(${ticker})를 확인하거나 수동 입력을 이용해 주세요.`);
     } finally {
         btn.innerHTML = originalText;
