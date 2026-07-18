@@ -1,5 +1,5 @@
 // =========================================================
-// 📈 RSI 계산기 모듈 (Yahoo Finance API + CORS 우회 장착)
+// 📈 RSI 계산기 모듈 (Yahoo Finance API + CORS 우회 2.0 장착)
 // =========================================================
 
 let currentRsiPeriod = 14;
@@ -20,7 +20,8 @@ function setRSIPeriod(days) {
         if (ticker && rsiCache[ticker]) {
             displayRSI(ticker, rsiCache[ticker], currentRsiPeriod);
         } else {
-            calculateManualRSI();
+            // 수동 입력창에 데이터가 있을 경우를 대비한 함수 호출
+            if(typeof calculateManualRSI === 'function') calculateManualRSI();
         }
     }
 }
@@ -84,25 +85,42 @@ async function fetchAndCalculateRSI() {
     if (!ticker) return alert("티커를 입력하세요!");
 
     const btn = document.querySelector('button[onclick*="fetchAndCalculateRSI"]');
-    btn.disabled = true;
-    btn.innerHTML = '조회 중...';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '조회 중...';
+    }
 
     try {
-        // [CORS 우회 적용] AllOrigins API를 사용하여 야후 파이낸스 데이터 획득
-        const encodedUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1mo&interval=1d`);
-        const response = await fetch(`https://api.allorigins.win/get?url=${encodedUrl}`);
-        const data = await response.json();
+        // [CORS 우회 2.0 적용] 강력하고 안정적인 corsproxy.io 터널 사용
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1mo&interval=1d`;
+        const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
         
-        const chartData = JSON.parse(data.contents);
+        // JSON 파싱 에러 방지용 안전망
+        if (!response.ok) {
+            throw new Error(`서버 응답 오류: ${response.status}`);
+        }
+        
+        const chartData = await response.json(); 
+        
+        // 야후 파이낸스 데이터 구조가 꼬였을 때를 대비한 이중 방어막
+        if (!chartData.chart || !chartData.chart.result || !chartData.chart.result[0].indicators.quote[0].close) {
+            throw new Error("야후 파이낸스에서 유효한 주가 데이터를 반환하지 않았습니다.");
+        }
+
+        // null 값(휴장일 등 빈 데이터) 필터링 후 순수 종가만 추출
         const prices = chartData.chart.result[0].indicators.quote[0].close.filter(p => p !== null);
         
+        // 캐시에 저장하여 재조회 시 로딩 속도 향상
         rsiCache[ticker] = prices;
         displayRSI(ticker, prices, currentRsiPeriod);
+        
     } catch (err) {
-        console.error(err);
-        alert("데이터를 가져올 수 없습니다. 티커를 확인하세요.");
+        console.error("RSI Fetch Error:", err);
+        alert(`데이터를 가져올 수 없습니다. 티커(${ticker})가 정확한지 확인해 주세요.`);
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '📈 조회하기';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '📈 조회하기';
+        }
     }
 }
