@@ -200,6 +200,32 @@
                 <div id="extraBuyGuide" class="space-y-2"></div>
             </div>
 
+            <div class="bg-red-50 p-6 rounded-2xl shadow-sm border border-red-200 mt-6 relative overflow-hidden">
+                <i class="fas fa-meteor absolute -right-4 -bottom-4 text-8xl text-red-500 opacity-10"></i>
+                <h4 class="font-black text-lg text-red-900 mb-4 relative z-10"><i class="fas fa-shield-alt text-red-600 mr-2"></i>폭락장 스트레스 테스트 (What-If)</h4>
+                
+                <div class="mb-4 relative z-10">
+                    <label class="block text-sm font-bold text-red-800 mb-2">만약 오늘 밤 나스닥이 <span id="stressDropLabel" class="text-xl text-red-600 font-black">-5%</span> 폭락한다면?</label>
+                    <input type="range" id="stressSlider" min="0" max="20" step="1" value="5" class="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer accent-red-600">
+                    <div class="flex justify-between text-xs font-bold text-red-400 mt-1">
+                        <span>0% (평온)</span>
+                        <span>-10% (조정장)</span>
+                        <span>-20% (약세장)</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-4 border border-red-100 shadow-sm relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <div class="text-xs font-bold text-slate-400">선택된 투자자 (<span id="stressUserName">-</span>)의 내일 예상 계좌 잔고</div>
+                        <div id="stressResultBalance" class="text-2xl font-black text-slate-800 mono tracking-tighter">₩0</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs font-bold text-slate-400">예상 평가손익</div>
+                        <div id="stressResultLoss" class="text-xl font-black text-red-500 mono bg-red-100/50 px-3 py-1 rounded-lg">-₩0</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="bg-slate-800 p-6 rounded-2xl shadow-md text-white border border-slate-700 mt-6">
                 <h4 class="font-black text-lg mb-4 text-emerald-400"><i class="fas fa-history mr-2"></i>타임머신 백테스팅 시뮬레이터</h4>
                 <div class="flex flex-col md:flex-row gap-4 mb-4">
