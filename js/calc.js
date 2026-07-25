@@ -1,5 +1,5 @@
 // =========================================================
-// 🧮 구매 계산기 (V17 통합 포트폴리오 연동 완벽 패치)
+// 🧮 구매 계산기 (V17 통합 포트폴리오 연동 완벽 패치 + 🚨 스트레스 테스트)
 // =========================================================
 
 document.getElementById('inputCash').addEventListener('input', calculateRebalancing);
@@ -72,6 +72,9 @@ function calculateRebalancing() {
         input.addEventListener('input', updateManualCalculator);
     });
     updateManualCalculator();
+
+    // 🚨 구매 계산기가 다시 그려질 때마다 스트레스 테스트도 최신 유저 기준으로 자동 갱신
+    if (typeof runStressTest === 'function') runStressTest();
 }
 
 function updateManualCalculator() {
@@ -115,4 +118,76 @@ function updateManualCalculator() {
     }
     const extraGuide = document.getElementById('extraBuyGuide');
     if (extraGuide) extraGuide.innerHTML = guideHtml;
+}
+
+// =========================================================
+// 🚨 추가: 폭락장 스트레스 테스트 계산 로직
+// =========================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    const stressSlider = document.getElementById('stressSlider');
+    const userSelector = document.getElementById('calcUserSelector');
+    
+    if (stressSlider) {
+        stressSlider.addEventListener('input', runStressTest);
+    }
+    if (userSelector) {
+        userSelector.addEventListener('change', runStressTest);
+    }
+});
+
+function runStressTest() {
+    const slider = document.getElementById('stressSlider');
+    const userSelector = document.getElementById('calcUserSelector');
+    if (!slider || !userSelector || !userSelector.value) return;
+
+    const dropPct = parseFloat(slider.value) * -1; // 예: -5
+    document.getElementById('stressDropLabel').innerText = `${dropPct}%`;
+    document.getElementById('stressUserName').innerText = userSelector.value;
+
+    const userObj = globalParsedUsers[userSelector.value];
+    if (!userObj || !userObj.items) return;
+
+    // 대략적인 종목별 베타(Beta) 하드코딩 매핑 (안전망)
+    const betaMap = {
+        '반도체': 1.5,
+        '나스닥': 1.2,
+        'S&P': 1.0,
+        '글로벌AI': 1.3,
+        '배당': 0.8,
+        '커버드콜': 0.6
+    };
+
+    let originalTotal = 0;
+    let stressedTotal = 0;
+
+    userObj.items.forEach(item => {
+        if (item.qty <= 0) return;
+        originalTotal += item.current;
+
+        // 종목명 기반 베타 유추
+        let assetBeta = 1.0;
+        for (let key in betaMap) {
+            if (item.stock.includes(key)) {
+                assetBeta = betaMap[key];
+                break;
+            }
+        }
+
+        // 스트레스 적용 가격 계산 (시장 하락률 * 베타)
+        let assetDrop = dropPct * assetBeta;
+        let expectedPrice = item.currPrice * (1 + (assetDrop / 100));
+        stressedTotal += (expectedPrice * item.qty);
+    });
+
+    let totalLoss = stressedTotal - originalTotal;
+
+    const balanceEl = document.getElementById('stressResultBalance');
+    const lossEl = document.getElementById('stressResultLoss');
+
+    if (balanceEl) balanceEl.innerText = `₩${Math.round(stressedTotal).toLocaleString()}`;
+    if (lossEl) {
+        lossEl.innerText = `${totalLoss >= 0 ? '+' : ''}₩${Math.round(totalLoss).toLocaleString()}`;
+        lossEl.className = `text-xl font-black mono px-3 py-1 rounded-lg ${totalLoss >= 0 ? 'text-blue-500 bg-blue-100/50' : 'text-red-500 bg-red-100/50'}`;
+    }
 }
