@@ -23,7 +23,6 @@
             </span>
         </h1>
 
-        <!-- 🚀 1. 상단 메뉴 탭에 $1 프로젝트 버튼 추가 -->
         <div class="flex flex-col md:flex-row flex-wrap gap-2 mb-6">
             <button id="btnTabQuant" onclick="switchTab('quant')" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap">📊 예측 엔진</button>
             <button id="btnTabPort" onclick="switchTab('port')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🏆 클럽 현황</button>
@@ -31,8 +30,8 @@
             <button id="btnTabDiv" onclick="switchTab('div')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-emerald-50 whitespace-nowrap text-emerald-700">💰 배당&총알</button>
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
             <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
-            <!-- 새로 추가된 버튼 -->
-            <button id="btnTabOneDollar" onclick="switchTab('oneDollar'); if(typeof loadDollarData === 'function') loadDollarData();" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
+            <!-- 🚀 추가된 1달러 프로젝트 탭 버튼 -->
+            <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
         </div>
 
         <div id="viewQuant" class="space-y-6 block">
@@ -555,14 +554,13 @@
             </div>
         </div>
 
-        <!-- 🚀 2. 새롭게 추가되는 1달러 프로젝트 메인 뷰 (viewOneDollar) -->
+        <!-- 🚀 추가된 1달러 프로젝트 컨테이너 화면 -->
         <div id="viewOneDollar" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-4 flex items-center">
                     <i class="fas fa-rocket text-yellow-500 mr-2"></i> $1 복리 프로젝트
                 </h2>
                 
-                <!-- 서브 탭 버튼 -->
                 <div class="flex flex-wrap gap-2 mb-6">
                     <button id="btnDollarScanner" onclick="switchDollarSubTab('scanner')" class="px-4 py-2 bg-slate-800 text-white rounded-lg font-bold text-sm shadow-sm transition-all">🔍 1달러 생산성 스캐너</button>
                     <button id="btnDollarMember" onclick="switchDollarSubTab('member')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-200 shadow-sm transition-all">👥 멤버별 자급자족 현황</button>
@@ -570,7 +568,6 @@
 
                 <!-- 서브 화면 1: 1달러 스캐너 -->
                 <div id="tab-dollar-scanner" class="block">
-                    <!-- 필터 영역 -->
                     <div class="flex flex-wrap gap-4 mb-4 text-sm font-bold text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100">
                         <label class="flex items-center gap-2 cursor-pointer hover:text-orange-600 transition-colors">
                             <input type="checkbox" id="filter-limit" onchange="renderDollarTable()" class="w-4 h-4 accent-orange-500"> 구매제한 없는 종목만 (X)
@@ -580,7 +577,6 @@
                         </label>
                     </div>
                     
-                    <!-- 스캐너 테이블 -->
                     <div class="overflow-x-auto rounded-xl border border-slate-200">
                         <table class="w-full text-sm text-left whitespace-nowrap">
                             <thead class="text-xs text-slate-500 font-bold bg-slate-50 border-b border-slate-200">
@@ -609,15 +605,13 @@
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-500 mb-1">👨‍💻 분석할 멤버 선택</label>
                         <select id="member-select" onchange="renderMemberDashboard()" class="w-full md:w-64 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-lg p-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm">
-                            <option value="all">멤버 선택</option>
+                            <option value="all">멤버를 선택해 주세요</option>
                         </select>
                     </div>
                     
-                    <div id="member-dashboard-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <!-- JS가 요약 카드를 여기에 그려줌 -->
-                    </div>
+                    <div id="member-dashboard-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
                     
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative w-full h-80">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative w-full h-72 md:h-96">
                         <canvas id="memberCashflowChart"></canvas>
                     </div>
                 </div>
@@ -626,7 +620,7 @@
 
     </div>
 
-    <!-- Chart.js (원본 코드에 이미 있음) -->
+    <!-- Chart.js 및 외부 JS 로드 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/main.js"></script>
     <script src="js/quant.js"></script>
@@ -636,7 +630,7 @@
     <script src="js/mdd.js"></script>
     <script src="js/backtest.js"></script>
     <script src="js/rsi.js"></script>
-    <!-- 🚀 3. 새로 추가된 1달러 프로젝트 자바스크립트 파일 -->
+    <!-- 🚀 추가된 1달러 프로젝트 엔진 -->
     <script src="js/one_dollar_project.js"></script>
 </body>
 </html>
