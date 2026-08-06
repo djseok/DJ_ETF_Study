@@ -1,24 +1,31 @@
-// 🌐 1달러 복리 프로젝트 전용 엔진 (가장 가볍고 에러 없는 클린 버전)
+// =========================================================
+// 🌐 $1 복리 프로젝트 전용 엔진 (충돌 방지 및 표(Table) 최적화 버전)
+// =========================================================
 
-// main.js에 있는 timestamp를 빌려와 캐시 갱신
-const d_stamp = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
-const DOLLAR_MASTER_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv&t=" + d_stamp;
-const DOLLAR_PORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv&t=" + d_stamp;
+// main.js에 있는 timestamp를 빌려와 캐시 갱신 (없으면 현재 시간)
+const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
+const DOLLAR_MASTER_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv&t=" + DOLLAR_TIMESTAMP;
+const DOLLAR_PORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv&t=" + DOLLAR_TIMESTAMP;
 
-let globalDollarMaster = [];
-let globalDollarPort = [];
-let currentDollarSortKey = 'efficiency'; 
-let currentDollarSortAsc = false; 
-let dollarCashflowChart = null; 
+// 충돌을 막기 위해 모든 변수를 하나의 객체(Object) 안에 가둬둡니다.
+const dollarApp = {
+    masterData: [],
+    portData: [],
+    sortKey: 'efficiency',
+    sortAsc: false,
+    chartInstance: null
+};
 
-// 서브 탭(스캐너 vs 멤버) 전환 기능
+// ---------------------------------------------------------
+// 1. UI 전환 및 파싱 함수
+// ---------------------------------------------------------
 function switchDollarSubTab(tabName) {
     const btnScan = document.getElementById('btnDollarScanner');
     const btnMem = document.getElementById('btnDollarMember');
     const viewScan = document.getElementById('tab-dollar-scanner');
     const viewMem = document.getElementById('tab-dollar-member');
 
-    if (!btnScan || !btnMem || !viewScan || !viewMem) return; // 요소 없으면 스킵
+    if (!btnScan || !btnMem || !viewScan || !viewMem) return;
 
     if (tabName === 'scanner') {
         btnScan.className = "px-4 py-2 bg-slate-800 text-white rounded-lg font-bold text-sm shadow-sm transition-all";
@@ -33,7 +40,6 @@ function switchDollarSubTab(tabName) {
     }
 }
 
-// 눈에 안보이는 특수기호나 빈 칸으로 인한 에러를 완벽 차단하는 CSV 파서
 function parseBulletproofCSV(text) {
     if(!text) return [];
     text = text.replace(/^\uFEFF/, '');
@@ -53,33 +59,39 @@ function parseBulletproofCSV(text) {
     });
 }
 
-// 1달러 탭을 처음 눌렀을 때 데이터를 다운로드하는 함수
+// ---------------------------------------------------------
+// 2. 데이터 다운로드 엔진
+// ---------------------------------------------------------
 async function loadDollarData() {
-    if (globalDollarMaster.length > 0) return; // 한 번 받으면 다시 안 받음
+    if (dollarApp.masterData.length > 0) return; // 이미 있으면 패스
     try {
         const [masterRes, portRes] = await Promise.all([
             fetch(DOLLAR_MASTER_URL), fetch(DOLLAR_PORT_URL)
         ]);
-        globalDollarMaster = parseBulletproofCSV(await masterRes.text());
-        globalDollarPort = parseBulletproofCSV(await portRes.text());
+        dollarApp.masterData = parseBulletproofCSV(await masterRes.text());
+        dollarApp.portData = parseBulletproofCSV(await portRes.text());
         renderDollarTable();
         populateDollarMemberSelect();
     } catch (error) {
         console.error("$1 데이터 로딩 에러:", error);
         const tbody = document.getElementById('dollar-table-body');
-        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>`;
+        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다. 구글 시트 웹 게시 상태를 확인하세요.</td></tr>`;
     }
 }
 
-// 테이블 그리기
+// ---------------------------------------------------------
+// 3. 생산성 스캐너 렌더링 (테이블)
+// ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
     if(!tbody) return;
     
-    const isLimitFilter = document.getElementById('filter-limit') ? document.getElementById('filter-limit').checked : false;
-    const isDecimalFilter = document.getElementById('filter-decimal') ? document.getElementById('filter-decimal').checked : false;
+    const filterLimitObj = document.getElementById('filter-limit');
+    const filterDecimalObj = document.getElementById('filter-decimal');
+    const isLimitFilter = filterLimitObj ? filterLimitObj.checked : false;
+    const isDecimalFilter = filterDecimalObj ? filterDecimalObj.checked : false;
 
-    let tableData = globalDollarMaster.map(row => {
+    let tableData = dollarApp.masterData.map(row => {
         const ticker = row['종목이름'] || row['티커'] || row['이름'] || '';
         const price = parseFloat(row['주가']) || 0;
         const rawDiv = parseFloat(row['최근4주평균분배금(달러)']) || 0;
@@ -94,9 +106,9 @@ function renderDollarTable() {
     if (isDecimalFilter) tableData = tableData.filter(d => d.decimal === 'O');
 
     tableData.sort((a, b) => {
-        let valA = a[currentDollarSortKey];
-        let valB = b[currentDollarSortKey];
-        return currentDollarSortAsc ? valA - valB : valB - valA;
+        let valA = a[dollarApp.sortKey];
+        let valB = b[dollarApp.sortKey];
+        return dollarApp.sortAsc ? valA - valB : valB - valA;
     });
 
     tbody.innerHTML = '';
@@ -121,19 +133,21 @@ function renderDollarTable() {
 }
 
 function sortDollarTable(key) {
-    if (currentDollarSortKey === key) { currentDollarSortAsc = !currentDollarSortAsc; } 
-    else { currentDollarSortKey = key; currentDollarSortAsc = false; }
+    if (dollarApp.sortKey === key) { dollarApp.sortAsc = !dollarApp.sortAsc; } 
+    else { dollarApp.sortKey = key; dollarApp.sortAsc = false; }
     renderDollarTable();
 }
 
-// 멤버 셀렉트 박스 채우기
+// ---------------------------------------------------------
+// 4. 멤버별 자급자족 현황 (그래프 제외, 카드 + 표 UI 적용)
+// ---------------------------------------------------------
 function populateDollarMemberSelect() {
-    if (!globalDollarPort || globalDollarPort.length === 0) return;
+    if (!dollarApp.portData || dollarApp.portData.length === 0) return;
     const select = document.getElementById('member-select');
     if(!select) return;
     
-    let userKey = Object.keys(globalDollarPort[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
-    const members = [...new Set(globalDollarPort.map(d => d[userKey]).filter(v => v))];
+    let userKey = Object.keys(dollarApp.portData[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
+    const members = [...new Set(dollarApp.portData.map(d => d[userKey]).filter(v => v))];
     
     select.innerHTML = '<option value="all">분석할 멤버 선택</option>';
     members.forEach(m => {
@@ -143,20 +157,22 @@ function populateDollarMemberSelect() {
     });
 }
 
-// 멤버별 현황판 그리기
 function renderMemberDashboard() {
     const member = document.getElementById('member-select').value;
+    const container = document.getElementById('member-dashboard-cards');
+    if (!container) return;
+
     if (member === 'all') {
-        document.getElementById('member-dashboard-cards').innerHTML = '';
-        if (dollarCashflowChart) dollarCashflowChart.destroy();
+        container.innerHTML = '';
         return;
     }
 
-    let userKey = Object.keys(globalDollarPort[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
-    const myPort = globalDollarPort.filter(d => d[userKey] === member);
+    let userKey = Object.keys(dollarApp.portData[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
+    const myPort = dollarApp.portData.filter(d => d[userKey] === member);
 
     let weeklyIncome = 0;
     let weeklyExpense = 0;
+    let listRows = '';
 
     myPort.forEach(row => {
         const ticker = row['종목이름'] || row['티커'] || row['종목'] || '';
@@ -164,62 +180,79 @@ function renderMemberDashboard() {
         const dailyBuyStr = row['모으기금액'] || row['일일모으기금액($)'] || row['일일모으기'] || '0';
         const dailyBuy = parseFloat(dailyBuyStr) || 0;
 
-        const masterItem = globalDollarMaster.find(m => (m['종목이름'] || m['티커']) === ticker);
+        let divExpected = 0;
+        const masterItem = dollarApp.masterData.find(m => (m['종목이름'] || m['티커']) === ticker);
         if (masterItem) {
             const rawDiv = parseFloat(masterItem['최근4주평균분배금(달러)']) || 0;
-            weeklyIncome += (holdQty * rawDiv * 0.85); 
+            divExpected = (holdQty * rawDiv * 0.85);
+            weeklyIncome += divExpected; 
         }
-        weeklyExpense += (dailyBuy * 5); 
+        
+        const expenseExpected = (dailyBuy * 5);
+        weeklyExpense += expenseExpected; 
+
+        // 종목별 표에 들어갈 데이터 조립
+        if(holdQty > 0 || dailyBuy > 0) {
+            listRows += `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="p-3 font-bold text-slate-700">${ticker}</td>
+                    <td class="p-3 text-right"><span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">${holdQty}주</span></td>
+                    <td class="p-3 text-right text-green-600 font-mono font-bold">+$${divExpected.toFixed(2)}</td>
+                    <td class="p-3 text-right text-red-500 font-mono font-bold">-$${expenseExpected.toFixed(2)}</td>
+                </tr>
+            `;
+        }
     });
 
     const netCash = weeklyIncome - weeklyExpense;
     const ratio = weeklyExpense > 0 ? ((weeklyIncome / weeklyExpense) * 100).toFixed(1) : (weeklyIncome > 0 ? "100+" : "0.0");
     const isSurplus = netCash >= 0;
 
-    const cardHtml = `
-        <div class="bg-gradient-to-br from-green-50 to-emerald-100 p-5 rounded-2xl border border-green-200 shadow-sm">
-            <div class="text-xs font-bold text-green-700 mb-1">📈 주간 공짜 배당 수입</div>
-            <div class="text-3xl font-black text-green-800 font-mono">$${weeklyIncome.toFixed(2)}</div>
-        </div>
-        <div class="bg-gradient-to-br from-red-50 to-rose-100 p-5 rounded-2xl border border-red-200 shadow-sm">
-            <div class="text-xs font-bold text-red-700 mb-1">💸 주간 모으기 총 지출</div>
-            <div class="text-3xl font-black text-red-800 font-mono">$${weeklyExpense.toFixed(2)}</div>
-        </div>
-        <div class="bg-gradient-to-br ${isSurplus ? 'from-blue-50 to-indigo-100 border-blue-200' : 'from-orange-50 to-amber-100 border-orange-200'} p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
-            <div class="text-xs font-bold ${isSurplus ? 'text-blue-700' : 'text-orange-700'} mb-1">
-                ${isSurplus ? '🔥 무자본 자급자족 상태!' : '⚠️ 자급자족 미달 (보충 필요)'}
+    // 카드를 깔끔하게 그리기 + 그 아래에 상세 표(Table) 붙이기
+    const uiHtml = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-green-50 to-emerald-100 p-5 rounded-2xl border border-green-200 shadow-sm">
+                <div class="text-xs font-bold text-green-700 mb-1">📈 주간 공짜 배당 수입</div>
+                <div class="text-3xl font-black text-green-800 font-mono">$${weeklyIncome.toFixed(2)}</div>
             </div>
-            <div class="text-3xl font-black ${isSurplus ? 'text-blue-800' : 'text-orange-800'} font-mono flex items-end justify-between">
-                <span>${isSurplus ? '+' : '-'}$${Math.abs(netCash).toFixed(2)}</span>
-                <span class="text-sm bg-white/50 px-2 py-1 rounded-lg">효율 ${ratio}%</span>
+            <div class="bg-gradient-to-br from-red-50 to-rose-100 p-5 rounded-2xl border border-red-200 shadow-sm">
+                <div class="text-xs font-bold text-red-700 mb-1">💸 주간 모으기 총 지출</div>
+                <div class="text-3xl font-black text-red-800 font-mono">$${weeklyExpense.toFixed(2)}</div>
+            </div>
+            <div class="bg-gradient-to-br ${isSurplus ? 'from-blue-50 to-indigo-100 border-blue-200' : 'from-orange-50 to-amber-100 border-orange-200'} p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
+                <div class="text-xs font-bold ${isSurplus ? 'text-blue-700' : 'text-orange-700'} mb-1">
+                    ${isSurplus ? '🔥 무자본 자급자족 상태!' : '⚠️ 자급자족 미달 (보충 필요)'}
+                </div>
+                <div class="text-3xl font-black ${isSurplus ? 'text-blue-800' : 'text-orange-800'} font-mono flex items-end justify-between">
+                    <span>${isSurplus ? '+' : '-'}$${Math.abs(netCash).toFixed(2)}</span>
+                    <span class="text-sm bg-white/50 px-2 py-1 rounded-lg">효율 ${ratio}%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="bg-slate-800 text-white p-3 font-bold text-sm">📋 ${member}님의 종목별 주간 현금흐름 요약</div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left whitespace-nowrap">
+                    <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-xs">
+                        <tr>
+                            <th class="p-3">종목명</th>
+                            <th class="p-3 text-right">거치 수량</th>
+                            <th class="p-3 text-right">예상 주수입</th>
+                            <th class="p-3 text-right">모으기 주지출</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${listRows || '<tr><td colspan="4" class="p-4 text-center text-slate-400">데이터가 없습니다.</td></tr>'}
+                    </tbody>
+                </table>
             </div>
         </div>
     `;
-    const cardsContainer = document.getElementById('member-dashboard-cards');
-    if(cardsContainer) cardsContainer.innerHTML = cardHtml;
     
-    drawDollarChart(weeklyIncome, weeklyExpense);
-}
-
-function drawDollarChart(income, expense) {
-    const canvas = document.getElementById('memberCashflowChart');
-    if(!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (dollarCashflowChart) dollarCashflowChart.destroy();
-
-    dollarCashflowChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['주간 자금 흐름 ($)'],
-            datasets: [
-                { label: '주간 배당 수입', data: [income], backgroundColor: 'rgba(16, 185, 129, 0.85)', borderRadius: 8, barPercentage: 0.4 },
-                { label: '주간 모으기 지출', data: [expense], backgroundColor: 'rgba(239, 68, 68, 0.85)', borderRadius: 8, barPercentage: 0.4 }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false, 
-            plugins: { legend: { position: 'top', labels: { font: { weight: 'bold' } } } },
-            scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
-        }
-    });
+    container.innerHTML = uiHtml;
+    
+    // 차트는 안 쓰기로 했으므로 캔버스 숨김 처리
+    const chartArea = document.getElementById('memberCashflowChart');
+    if(chartArea) chartArea.parentElement.style.display = 'none';
 }
