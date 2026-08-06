@@ -33,35 +33,41 @@ var globalActualDividendLogs = [];
 var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    // 💡 변경점 1: 'OneDollar' 탭 배열에 추가
+    // 💡 모든 탭 이름을 배열에 안전하게 등록합니다.
     var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi', 'OneDollar'];
+    
+    // 1. 모든 탭 숨기기 및 버튼 초기화
     for (var i = 0; i < tabs.length; i++) {
         var t = tabs[i];
         var view = document.getElementById('view' + t);
         var btn = document.getElementById('btnTab' + t);
         if(view) view.classList.add('hidden');
+        if(view) view.classList.remove('block');
         if(btn) btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
     }
     
+    // 2. 선택한 탭만 보이기 및 버튼 강조
     var capTabName = tabName.charAt(0).toUpperCase() + tabName.slice(1);
     var activeView = document.getElementById('view' + capTabName);
     var activeBtn = document.getElementById('btnTab' + capTabName);
     
-    if(activeView) activeView.classList.remove('hidden');
+    if(activeView) {
+        activeView.classList.remove('hidden');
+        activeView.classList.add('block');
+    }
+    
     if(activeBtn) {
         if(tabName === 'div') activeBtn.className = "flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else if(tabName === 'mdd') activeBtn.className = "flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else if(tabName === 'rsi') activeBtn.className = "flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
-        // 💡 변경점 2: $1 프로젝트 탭 버튼 스타일 지정
         else if(tabName === 'oneDollar') activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-500";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
 
+    // 3. 각 탭에 맞는 데이터 로딩 함수 연결 (함수가 존재할 때만 실행되도록 안전장치 typeof 적용)
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
-    
-    // 💡 변경점 3: $1 탭 클릭 시 데이터 로딩 함수 연결
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
 }
 
@@ -107,7 +113,7 @@ async function initDashboard() {
 
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
         
-        // ✨ 필터 엔진 초기화! (새 옷을 입은 HTML과 연결하는 핵심)
+        // ✨ 필터 엔진 초기화
         if (typeof initFilters === 'function') initFilters(); 
 
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
@@ -127,6 +133,7 @@ async function initDashboard() {
             await loadPortfolioData('init'); 
         }
 
+        // 초기 화면을 Quant 탭으로 띄웁니다.
         switchTab('quant');
     } catch (err) { 
         console.error("데이터 초기화 실패:", err); 
