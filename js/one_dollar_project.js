@@ -1,7 +1,9 @@
-// 🌐 1달러 복리 프로젝트 전용 엔진 (가장 깔끔하고 안전한 버전)
+// 🌐 1달러 복리 프로젝트 전용 엔진 (가장 가볍고 에러 없는 클린 버전)
 
-const DOLLAR_MASTER_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv";
-const DOLLAR_PORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv";
+// main.js에 있는 timestamp를 빌려와 캐시 갱신
+const d_stamp = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
+const DOLLAR_MASTER_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv&t=" + d_stamp;
+const DOLLAR_PORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv&t=" + d_stamp;
 
 let globalDollarMaster = [];
 let globalDollarPort = [];
@@ -9,63 +11,14 @@ let currentDollarSortKey = 'efficiency';
 let currentDollarSortAsc = false; 
 let dollarCashflowChart = null; 
 
-// --- main.js 에서 호출할 전용 함수들 --- //
-
-// $1 프로젝트 탭 열기
-window.showOneDollarView = function() {
-    // 기존 화면 강제 숨김
-    ['viewQuant', 'viewPort', 'viewCalc', 'viewDiv', 'viewMdd', 'viewRsi'].forEach(v => {
-        const el = document.getElementById(v);
-        if(el) { el.classList.add('hidden'); el.classList.remove('block'); }
-    });
-    
-    // 내 화면 켜기
-    const viewOneDollar = document.getElementById('viewOneDollar');
-    if (viewOneDollar) {
-        viewOneDollar.classList.remove('hidden');
-        viewOneDollar.classList.add('block');
-    }
-    
-    // 버튼 색상 처리
-    const tabs = ['btnTabQuant', 'btnTabPort', 'btnTabCalc', 'btnTabDiv', 'btnTabMdd', 'btnTabRsi'];
-    tabs.forEach(id => {
-        const btn = document.getElementById(id);
-        if(btn) {
-            btn.classList.remove('bg-slate-800', 'text-white');
-            btn.classList.add('bg-white', 'text-slate-600');
-        }
-    });
-    
-    const activeBtn = document.getElementById('btnTabOneDollar');
-    if(activeBtn) {
-        activeBtn.classList.remove('bg-white', 'text-yellow-700');
-        activeBtn.classList.add('bg-slate-800', 'text-white');
-    }
-    
-    loadDollarData(); // 데이터 로드
-};
-
-// $1 프로젝트 탭 숨기기 (다른 탭 눌렀을 때)
-window.hideOneDollarView = function() {
-    const viewOneDollar = document.getElementById('viewOneDollar');
-    if (viewOneDollar) {
-        viewOneDollar.classList.add('hidden');
-        viewOneDollar.classList.remove('block');
-    }
-    const activeBtn = document.getElementById('btnTabOneDollar');
-    if(activeBtn) {
-        activeBtn.classList.remove('bg-slate-800', 'text-white');
-        activeBtn.classList.add('bg-white', 'text-yellow-700');
-    }
-};
-
-// --- 서브 기능들 --- //
-
+// 서브 탭(스캐너 vs 멤버) 전환 기능
 function switchDollarSubTab(tabName) {
     const btnScan = document.getElementById('btnDollarScanner');
     const btnMem = document.getElementById('btnDollarMember');
     const viewScan = document.getElementById('tab-dollar-scanner');
     const viewMem = document.getElementById('tab-dollar-member');
+
+    if (!btnScan || !btnMem || !viewScan || !viewMem) return; // 요소 없으면 스킵
 
     if (tabName === 'scanner') {
         btnScan.className = "px-4 py-2 bg-slate-800 text-white rounded-lg font-bold text-sm shadow-sm transition-all";
@@ -80,6 +33,7 @@ function switchDollarSubTab(tabName) {
     }
 }
 
+// 눈에 안보이는 특수기호나 빈 칸으로 인한 에러를 완벽 차단하는 CSV 파서
 function parseBulletproofCSV(text) {
     if(!text) return [];
     text = text.replace(/^\uFEFF/, '');
@@ -99,8 +53,9 @@ function parseBulletproofCSV(text) {
     });
 }
 
+// 1달러 탭을 처음 눌렀을 때 데이터를 다운로드하는 함수
 async function loadDollarData() {
-    if (globalDollarMaster.length > 0) return;
+    if (globalDollarMaster.length > 0) return; // 한 번 받으면 다시 안 받음
     try {
         const [masterRes, portRes] = await Promise.all([
             fetch(DOLLAR_MASTER_URL), fetch(DOLLAR_PORT_URL)
@@ -111,14 +66,18 @@ async function loadDollarData() {
         populateDollarMemberSelect();
     } catch (error) {
         console.error("$1 데이터 로딩 에러:", error);
-        document.getElementById('dollar-table-body').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>`;
+        const tbody = document.getElementById('dollar-table-body');
+        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>`;
     }
 }
 
+// 테이블 그리기
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
-    const isLimitFilter = document.getElementById('filter-limit').checked;
-    const isDecimalFilter = document.getElementById('filter-decimal').checked;
+    if(!tbody) return;
+    
+    const isLimitFilter = document.getElementById('filter-limit') ? document.getElementById('filter-limit').checked : false;
+    const isDecimalFilter = document.getElementById('filter-decimal') ? document.getElementById('filter-decimal').checked : false;
 
     let tableData = globalDollarMaster.map(row => {
         const ticker = row['종목이름'] || row['티커'] || row['이름'] || '';
@@ -167,9 +126,12 @@ function sortDollarTable(key) {
     renderDollarTable();
 }
 
+// 멤버 셀렉트 박스 채우기
 function populateDollarMemberSelect() {
     if (!globalDollarPort || globalDollarPort.length === 0) return;
     const select = document.getElementById('member-select');
+    if(!select) return;
+    
     let userKey = Object.keys(globalDollarPort[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
     const members = [...new Set(globalDollarPort.map(d => d[userKey]).filter(v => v))];
     
@@ -181,6 +143,7 @@ function populateDollarMemberSelect() {
     });
 }
 
+// 멤버별 현황판 그리기
 function renderMemberDashboard() {
     const member = document.getElementById('member-select').value;
     if (member === 'all') {
@@ -232,12 +195,16 @@ function renderMemberDashboard() {
             </div>
         </div>
     `;
-    document.getElementById('member-dashboard-cards').innerHTML = cardHtml;
+    const cardsContainer = document.getElementById('member-dashboard-cards');
+    if(cardsContainer) cardsContainer.innerHTML = cardHtml;
+    
     drawDollarChart(weeklyIncome, weeklyExpense);
 }
 
 function drawDollarChart(income, expense) {
-    const ctx = document.getElementById('memberCashflowChart').getContext('2d');
+    const canvas = document.getElementById('memberCashflowChart');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
     if (dollarCashflowChart) dollarCashflowChart.destroy();
 
     dollarCashflowChart = new Chart(ctx, {
