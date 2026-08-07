@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 시트 완벽 맞춤형 V3)
+// 🌐 $1 복리 프로젝트 전용 엔진 (인덱스 기반 매칭 패치)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -10,13 +10,9 @@ const dollarApp = {
     masterData: [],
     portData: [],
     sortKey: 'efficiency',
-    sortAsc: false,
-    chartInstance: null
+    sortAsc: false
 };
 
-// ---------------------------------------------------------
-// 1. UI 전환 및 파싱 함수
-// ---------------------------------------------------------
 function switchDollarSubTab(tabName) {
     const btnScan = document.getElementById('btnDollarScanner');
     const btnMem = document.getElementById('btnDollarMember');
@@ -38,71 +34,23 @@ function switchDollarSubTab(tabName) {
     }
 }
 
-// 💡 첫 번째 열(A열)을 무시하고, B열부터 헤더로 잡는 스마트 파서
-function parseMasterCSV(text) {
-    if(!text) return [];
-    text = text.replace(/^\uFEFF/, ''); // BOM 제거
-    const lines = text.split('\n').filter(l => l.trim() !== '');
-    if(lines.length === 0) return [];
-    
-    // 첫 번째 줄을 배열로 쪼갬
-    const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/\s/g, ''));
-    // 첫 번째 원소(A열)가 '종목'이거나 쓸모없는 값이면 제거, B열부터 진짜 헤더로 씀
-    let startIndex = 0;
-    if(rawHeaders[0].includes('종목') && !rawHeaders[0].includes('종목이름')) {
-        startIndex = 1; 
-    }
-
-    const headers = rawHeaders.slice(startIndex);
-    
-    return lines.slice(1).map(line => {
-        const values = line.split(',').slice(startIndex);
-        let obj = {};
-        headers.forEach((h, i) => {
-            let val = values[i] ? values[i].trim() : '';
-            if (val.startsWith('"') && val.endsWith('"')) val = val.substring(1, val.length - 1);
-            obj[h] = val;
-        });
-        return obj;
-    });
-}
-
-// 포트폴리오용 일반 파서
-function parsePortCSV(text) {
+// 순수 배열 형태로만 파싱하는 안전 함수
+function parseSimpleArrayCSV(text) {
     if(!text) return [];
     text = text.replace(/^\uFEFF/, '');
     const lines = text.split('\n').filter(l => l.trim() !== '');
     if(lines.length === 0) return [];
     
-    // 포트폴리오는 A1부터 정상적으로 '이름'이 적혀 있으므로 그대로 사용
-    const headers = lines[0].split(',').map(h => h.trim().replace(/\s/g, ''));
-    
-    return lines.slice(1).map(line => {
+    return lines.map(line => {
         const values = line.split(',');
-        let obj = {};
-        // 헤더 이름이 중복되는 경우(예: '이름'이 2개)를 대비해 인덱스 번호도 같이 저장
-        headers.forEach((h, i) => {
-            let val = values[i] ? values[i].trim() : '';
+        return values.map(val => {
+            val = val ? val.trim() : '';
             if (val.startsWith('"') && val.endsWith('"')) val = val.substring(1, val.length - 1);
-            
-            // 만약 이미 객체에 '이름'이 들어있다면, 두 번째 '이름'은 무시 (또는 다른 이름으로 저장)
-            if (obj[h] === undefined) {
-                obj[h] = val;
-            } else {
-                obj[h + '_2'] = val; // 중복 헤더 처리 방어막
-            }
-            
-            // 명시적으로 컬럼 번호(Index)로도 데이터 보존
-            obj[`col_${i}`] = val; 
+            return val;
         });
-        return obj;
     });
 }
 
-
-// ---------------------------------------------------------
-// 2. 데이터 다운로드 엔진
-// ---------------------------------------------------------
 async function loadDollarData() {
     if (dollarApp.masterData.length > 0) return;
     try {
@@ -110,40 +58,53 @@ async function loadDollarData() {
             fetch(DOLLAR_MASTER_URL), fetch(DOLLAR_PORT_URL)
         ]);
         
-        dollarApp.masterData = parseMasterCSV(await masterRes.text());
-        dollarApp.portData = parsePortCSV(await portRes.text());
+        // 0번째 인덱스(헤더)를 포함한 2차원 배열 그대로 가져옵니다.
+        dollarApp.masterData = parseSimpleArrayCSV(await masterRes.text());
+        dollarApp.portData = parseSimpleArrayCSV(await portRes.text());
         
         renderDollarTable();
         populateDollarMemberSelect();
     } catch (error) {
         console.error("$1 데이터 로딩 에러:", error);
         const tbody = document.getElementById('dollar-table-body');
-        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다. 구글 시트 웹 게시 상태를 확인하세요.</td></tr>`;
+        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터 로딩 에러 발생</td></tr>`;
     }
 }
 
-// ---------------------------------------------------------
-// 3. 생산성 스캐너 렌더링 (테이블)
-// ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
-    if(!tbody) return;
+    if(!tbody || dollarApp.masterData.length <= 1) return;
     
-    const filterLimitObj = document.getElementById('filter-limit');
-    const filterDecimalObj = document.getElementById('filter-decimal');
-    const isLimitFilter = filterLimitObj ? filterLimitObj.checked : false;
-    const isDecimalFilter = filterDecimalObj ? filterDecimalObj.checked : false;
+    const isLimitFilter = document.getElementById('filter-limit') ? document.getElementById('filter-limit').checked : false;
+    const isDecimalFilter = document.getElementById('filter-decimal') ? document.getElementById('filter-decimal').checked : false;
 
-    let tableData = dollarApp.masterData.map(row => {
-        const ticker = row['종목이름'] || row['티커'] || row['이름'] || '';
-        const price = parseFloat(row['주가']) || 0;
-        const rawDiv = parseFloat(row['최근4주평균분배금(달러)']) || parseFloat(row['최근4주평균분배금']) || 0;
+    let tableData = [];
+    // 1행(인덱스 0)은 헤더이므로 인덱스 1부터 시작
+    for (let i = 1; i < dollarApp.masterData.length; i++) {
+        const row = dollarApp.masterData[i];
+        if (!row || row.length < 5) continue;
+
+        // 마스터 시트 열 인덱스 매핑 (동진님 데이터 기준)
+        // 1번 인덱스: 종목이름, 2번 인덱스: 주가, 3번 인덱스: 배당금(달러), 10번 인덱스: 구매제한, 11번 인덱스: 소수점가능
+        const ticker = row[1] || '';
+        const price = parseFloat(row[2]) || 0;
+        const rawDiv = parseFloat(row[3]) || 0;
+        
+        if (!ticker || price <= 0) continue;
+
         const afterTaxDiv = rawDiv * 0.85; 
         const efficiency = price > 0 ? (afterTaxDiv / price) : 0;
         const efficiency_krw = efficiency * 1420; 
 
-        return { ticker: ticker, price: price, efficiency: efficiency, efficiency_krw: efficiency_krw, limit: row['구매제한'] || 'O', decimal: row['소수점가능'] || 'X' };
-    }).filter(d => d.ticker && d.price > 0);
+        tableData.push({ 
+            ticker: ticker, 
+            price: price, 
+            efficiency: efficiency, 
+            efficiency_krw: efficiency_krw, 
+            limit: row[10] || 'X', 
+            decimal: row[11] || 'O' 
+        });
+    }
 
     if (isLimitFilter) tableData = tableData.filter(d => d.limit === 'X');
     if (isDecimalFilter) tableData = tableData.filter(d => d.decimal === 'O');
@@ -173,11 +134,6 @@ function renderDollarTable() {
         `;
         tbody.appendChild(tr);
     });
-    
-    // 만약 데이터가 없으면 안내 문구 표시
-    if(tableData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">표시할 종목 데이터가 없습니다. 시트 양식을 확인해주세요.</td></tr>`;
-    }
 }
 
 function sortDollarTable(key) {
@@ -186,16 +142,17 @@ function sortDollarTable(key) {
     renderDollarTable();
 }
 
-// ---------------------------------------------------------
-// 4. 멤버별 자급자족 현황 (수동 인덱스 매핑)
-// ---------------------------------------------------------
 function populateDollarMemberSelect() {
-    if (!dollarApp.portData || dollarApp.portData.length === 0) return;
+    if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
     const select = document.getElementById('member-select');
     if(!select) return;
     
-    // 첫 번째 열 (col_0) 에 있는 D, S, J 등의 이름을 추출합니다.
-    const members = [...new Set(dollarApp.portData.map(d => d['col_0']).filter(v => v))];
+    // 포트폴리오 시트의 0번 인덱스가 이름(투자자명)
+    let members = [];
+    for(let i=1; i<dollarApp.portData.length; i++) {
+        let name = dollarApp.portData[i][0];
+        if(name && !members.includes(name)) members.push(name);
+    }
     
     select.innerHTML = '<option value="all">분석할 멤버 선택</option>';
     members.forEach(m => {
@@ -215,43 +172,38 @@ function renderMemberDashboard() {
         return;
     }
 
-    // 선택한 멤버의 데이터만 필터링 (첫 번째 열 col_0 기준)
-    const myPort = dollarApp.portData.filter(d => d['col_0'] === member);
-
     let weeklyIncome = 0;
     let weeklyExpense = 0;
     let listRows = '';
 
-    myPort.forEach(row => {
-        // 동진님의 시트 구조에 맞춘 하드코딩 매핑
-        // col_0: 투자자명 (D)
-        // col_1: 종목티커 (QLDY)
-        // col_2: 종목이름 (나스닥 주2배당...)
-        // col_3: 유형 (거치/모으기)
-        // col_4: 수량
-        // col_5: 일일모으기금액
-        const ticker = row['col_1'] || ''; 
-        const stockName = row['col_2'] || row['col_1'] || ''; 
-        const stockType = row['col_3'] || ''; 
-        const holdQty = parseFloat(row['col_4']) || 0;
-        const dailyBuy = parseFloat(row['col_5']) || 0;
+    // 포트폴리오 루프
+    for(let i=1; i<dollarApp.portData.length; i++) {
+        let row = dollarApp.portData[i];
+        if (row[0] !== member) continue; // 해당 멤버만 필터
+
+        // 포트폴리오 시트 인덱스: 0(이름), 1(종목티커), 2(이름/종목명), 3(유형), 4(수량), 5(모으기설정액)
+        const ticker = row[1] || ''; 
+        const stockName = row[2] || ticker; 
+        const stockType = row[3] || ''; 
+        const holdQty = parseFloat(row[4]) || 0;
+        const dailyBuy = parseFloat(row[5]) || 0;
 
         let divExpected = 0;
         
-        // 마스터 데이터에서 배당금 찾기 (티커명으로 1차, 종목이름으로 2차 검색)
-        const masterItem = dollarApp.masterData.find(m => 
-            (m['종목이름'] && m['종목이름'].includes(stockName)) || 
-            (m['티커'] && m['티커'].includes(ticker)) ||
-            (m['종목이름'] === ticker)
-        );
-
-        if (masterItem) {
-            const rawDiv = parseFloat(masterItem['최근4주평균분배금(달러)']) || parseFloat(masterItem['최근4주평균분배금']) || 0;
-            divExpected = (holdQty * rawDiv * 0.85); // 세후 수입 연산
-            weeklyIncome += divExpected; 
+        // 마스터 시트에서 배당금 찾기 루프
+        for(let j=1; j<dollarApp.masterData.length; j++) {
+            let mRow = dollarApp.masterData[j];
+            let mTicker = mRow[1] || ''; // 마스터의 종목이름
+            
+            if (mTicker === stockName || mTicker === ticker || mTicker.includes(stockName)) {
+                let rawDiv = parseFloat(mRow[3]) || 0; // 마스터의 최근4주평균분배금
+                divExpected = (holdQty * rawDiv * 0.85);
+                weeklyIncome += divExpected;
+                break;
+            }
         }
         
-        const expenseExpected = (dailyBuy * 5); // 1주일 5영업일 지출
+        const expenseExpected = (dailyBuy * 5); 
         weeklyExpense += expenseExpected; 
 
         if(holdQty > 0 || dailyBuy > 0) {
@@ -268,7 +220,7 @@ function renderMemberDashboard() {
                 </tr>
             `;
         }
-    });
+    }
 
     const netCash = weeklyIncome - weeklyExpense;
     const ratio = weeklyExpense > 0 ? ((weeklyIncome / weeklyExpense) * 100).toFixed(1) : (weeklyIncome > 0 ? "100+" : "0.0");
@@ -296,9 +248,7 @@ function renderMemberDashboard() {
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="bg-slate-800 text-white p-3 font-bold text-sm flex items-center justify-between">
-                <span>📋 ${member}님의 1달러 파이프라인 명세서</span>
-            </div>
+            <div class="bg-slate-800 text-white p-3 font-bold text-sm">📋 ${member}님의 1달러 파이프라인 명세서</div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left whitespace-nowrap">
                     <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-xs">
@@ -319,8 +269,4 @@ function renderMemberDashboard() {
     `;
     
     container.innerHTML = uiHtml;
-    
-    // 차트는 안 쓰기로 했으므로 캔버스 숨김 처리
-    const chartArea = document.getElementById('memberCashflowChart');
-    if(chartArea) chartArea.parentElement.style.display = 'none';
 }
