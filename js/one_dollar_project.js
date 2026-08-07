@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 시트 완벽 맞춤형)
+// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 맞춤형 최적화 버전)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -43,7 +43,8 @@ function parseBulletproofCSV(text) {
     text = text.replace(/^\uFEFF/, '');
     const lines = text.split('\n').filter(l => l.trim() !== '');
     if(lines.length === 0) return [];
-    // 헤더에서 공백을 완벽히 제거하여 매칭 에러 방지
+    
+    // 💡 띄어쓰기를 모두 없애서 코드가 인식하기 쉽게 변환
     const headers = lines[0].split(',').map(h => h.trim().replace(/\s/g, ''));
     
     return lines.slice(1).map(line => {
@@ -91,14 +92,24 @@ function renderDollarTable() {
     const isDecimalFilter = filterDecimalObj ? filterDecimalObj.checked : false;
 
     let tableData = dollarApp.masterData.map(row => {
-        const ticker = row['종목이름'] || row['티커'] || row['이름'] || '';
+        // 💡 동진님의 시트 열 이름에 맞게 수정
+        const ticker = row['종목이름'] || row['티커'] || '';
         const price = parseFloat(row['주가']) || 0;
+        
+        // 💡 '최근4주평균분배금(달러)'로 공백 없이 인식
         const rawDiv = parseFloat(row['최근4주평균분배금(달러)']) || 0;
         const afterTaxDiv = rawDiv * 0.85; 
         const efficiency = price > 0 ? (afterTaxDiv / price) : 0;
-        const efficiency_krw = efficiency * 1420; 
+        const efficiency_krw = efficiency * 1420; // 1420원으로 임의 고정 (필요시 수정)
 
-        return { ticker: ticker, price: price, efficiency: efficiency, efficiency_krw: efficiency_krw, limit: row['구매제한'] || 'O', decimal: row['소수점가능'] || 'X' };
+        return { 
+            ticker: ticker, 
+            price: price, 
+            efficiency: efficiency, 
+            efficiency_krw: efficiency_krw, 
+            limit: row['구매제한'] || 'O', 
+            decimal: row['소수점가능'] || 'X' 
+        };
     }).filter(d => d.ticker && d.price > 0);
 
     if (isLimitFilter) tableData = tableData.filter(d => d.limit === 'X');
@@ -145,7 +156,6 @@ function populateDollarMemberSelect() {
     const select = document.getElementById('member-select');
     if(!select) return;
     
-    // 첫 번째 열(이름)을 기준으로 멤버 추출
     const members = [...new Set(dollarApp.portData.map(d => d['이름']).filter(v => v))];
     
     select.innerHTML = '<option value="all">분석할 멤버 선택</option>';
@@ -166,7 +176,6 @@ function renderMemberDashboard() {
         return;
     }
 
-    // 선택한 멤버의 데이터만 추출
     const myPort = dollarApp.portData.filter(d => d['이름'] === member);
 
     let weeklyIncome = 0;
@@ -174,17 +183,15 @@ function renderMemberDashboard() {
     let listRows = '';
 
     myPort.forEach(row => {
-        // 시트의 컬럼명과 정확히 매칭
-        const ticker = row['종목티커'] || ''; // 티커 열
-        const stockName = row['종목이름'] || row['종목티커'] || ''; // 이름이 없으면 티커로 대체
+        const ticker = row['종목티커'] || ''; 
+        const stockName = row['종목이름'] || row['종목티커'] || ''; 
         const holdQty = parseFloat(row['수량']) || 0;
-        const dailyBuyStr = row['일일모으기설정액(1$)'] || '0'; // 모으기 금액 열
+        const dailyBuyStr = row['일일모으기설정액(1$)'] || '0'; 
         const dailyBuy = parseFloat(dailyBuyStr) || 0;
-        const stockType = row['이름유형'] || row['유형'] || ''; // 거치/모으기 유형 (표시용)
+        const stockType = row['이름유형'] || row['유형'] || ''; 
 
         let divExpected = 0;
         
-        // 마스터 데이터에서 배당금 찾기 (티커 또는 이름으로 검색)
         const masterItem = dollarApp.masterData.find(m => 
             (m['종목이름'] && m['종목이름'].includes(stockName)) || 
             (m['티커'] && m['티커'].includes(ticker)) ||
@@ -197,10 +204,9 @@ function renderMemberDashboard() {
             weeklyIncome += divExpected; 
         }
         
-        const expenseExpected = (dailyBuy * 5); // 1주일 5일 기준 지출
+        const expenseExpected = (dailyBuy * 5); 
         weeklyExpense += expenseExpected; 
 
-        // 종목별 표에 들어갈 데이터 조립 (보유 수량이 있거나 모으기 금액이 있을 때만 표출)
         if(holdQty > 0 || dailyBuy > 0) {
             listRows += `
                 <tr class="border-b border-slate-100 hover:bg-slate-50">
@@ -221,7 +227,6 @@ function renderMemberDashboard() {
     const ratio = weeklyExpense > 0 ? ((weeklyIncome / weeklyExpense) * 100).toFixed(1) : (weeklyIncome > 0 ? "100+" : "0.0");
     const isSurplus = netCash >= 0;
 
-    // 카드를 깔끔하게 그리기 + 그 아래에 상세 표(Table) 붙이기
     const uiHtml = `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-emerald-100 p-5 rounded-2xl border border-green-200 shadow-sm">
@@ -268,7 +273,6 @@ function renderMemberDashboard() {
     
     container.innerHTML = uiHtml;
     
-    // 차트는 안 쓰기로 했으므로 캔버스 숨김 처리
     const chartArea = document.getElementById('memberCashflowChart');
     if(chartArea) chartArea.parentElement.style.display = 'none';
 }
