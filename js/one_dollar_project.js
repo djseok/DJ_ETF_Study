@@ -1,13 +1,10 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (URL 타임스탬프 오류 완벽 해결)
+// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 시트 열 번호 100% 맞춤형)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
-
-// 🔴 수정된 부분: 주소 맨 끝에 &t= 가 확실하게 들어가도록 분리해서 적었습니다. 🔴
 const DOLLAR_MASTER_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv";
 const DOLLAR_MASTER_URL = DOLLAR_MASTER_BASE + "&t=" + DOLLAR_TIMESTAMP;
-
 const DOLLAR_PORT_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv";
 const DOLLAR_PORT_URL = DOLLAR_PORT_BASE + "&t=" + DOLLAR_TIMESTAMP;
 
@@ -75,6 +72,9 @@ async function loadDollarData() {
     }
 }
 
+// ---------------------------------------------------------
+// 1달러 생산성 스캐너 렌더링
+// ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
     if(!tbody || dollarApp.masterData.length <= 1) return;
@@ -83,39 +83,55 @@ function renderDollarTable() {
     const isDecimalFilter = document.getElementById('filter-decimal') ? document.getElementById('filter-decimal').checked : false;
 
     let tableData = [];
+    
+    // 1행(헤더) 무시하고 데이터부터 스캔
     for (let i = 1; i < dollarApp.masterData.length; i++) {
         const row = dollarApp.masterData[i];
         if (!row || row.length < 5) continue;
 
-        const ticker = row[1] || '';
-        const price = parseFloat(row[2]) || 0;
-        const rawDiv = parseFloat(row[3]) || 0;
+        // 🎯 동진님의 '마스터 시트' 실제 열 번호 (A=0, B=1, C=2, D=3...)
+        // B열(1번): 티커, C열(2번): 종목이름, D열(3번): 주가, E열(4번): 4주평균분배금($)
+        // L열(11번): 구매제한, M열(12번): 소수점가능
+        const ticker = row[1] || '';           // B열 (티커)
+        const name = row[2] || '';             // C열 (종목이름)
+        const price = parseFloat(row[3]) || 0; // D열 (주가)
+        const rawDiv = parseFloat(row[4]) || 0;// E열 (분배금)
         
+        const limit = row[11] || 'X';          // L열 (구매제한)
+        const decimal = row[12] || 'O';        // M열 (소수점가능)
+        
+        // 티커나 가격이 없으면 패스
         if (!ticker || price <= 0) continue;
 
-        const afterTaxDiv = rawDiv * 0.85; 
+        const afterTaxDiv = rawDiv * 0.85; // 세후 15% 공제
         const efficiency = price > 0 ? (afterTaxDiv / price) : 0;
         const efficiency_krw = efficiency * 1420; 
 
+        // 화면에 보여줄 이름: 티커와 종목명을 함께 표시
+        const displayName = `${ticker} <span class="text-xs text-slate-400 ml-1">(${name})</span>`;
+
         tableData.push({ 
-            ticker: ticker, 
+            displayName: displayName, 
             price: price, 
             efficiency: efficiency, 
             efficiency_krw: efficiency_krw, 
-            limit: row[10] || 'X', 
-            decimal: row[11] || 'O' 
+            limit: limit, 
+            decimal: decimal 
         });
     }
 
+    // 필터링 적용
     if (isLimitFilter) tableData = tableData.filter(d => d.limit === 'X');
     if (isDecimalFilter) tableData = tableData.filter(d => d.decimal === 'O');
 
+    // 정렬 적용
     tableData.sort((a, b) => {
         let valA = a[dollarApp.sortKey];
         let valB = b[dollarApp.sortKey];
         return dollarApp.sortAsc ? valA - valB : valB - valA;
     });
 
+    // 화면에 그리기
     tbody.innerHTML = '';
     tableData.forEach((item, idx) => {
         const tr = document.createElement('tr');
@@ -126,7 +142,7 @@ function renderDollarTable() {
         else if (idx === 2) rankBadge = '<i class="fas fa-medal text-orange-400 mr-1"></i>';
 
         tr.innerHTML = `
-            <td class="px-4 py-3 font-bold text-slate-800">${rankBadge}${item.ticker}</td>
+            <td class="px-4 py-3 font-bold text-slate-800">${rankBadge}${item.displayName}</td>
             <td class="px-4 py-3 text-right font-mono text-slate-600">$${item.price.toFixed(2)}</td>
             <td class="px-4 py-3 text-right font-mono font-black text-red-600 bg-red-50/30">$${item.efficiency.toFixed(5)}</td>
             <td class="px-4 py-3 text-right font-mono font-black text-blue-600 bg-blue-50/30">${item.efficiency_krw.toFixed(1)}원</td>
@@ -143,11 +159,15 @@ function sortDollarTable(key) {
     renderDollarTable();
 }
 
+// ---------------------------------------------------------
+// 멤버별 자급자족 현황판 렌더링
+// ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
     const select = document.getElementById('member-select');
     if(!select) return;
     
+    // 포트폴리오 시트의 A열(0번 인덱스)에 있는 D, S, J 등의 이름 추출
     let members = [];
     for(let i=1; i<dollarApp.portData.length; i++) {
         let name = dollarApp.portData[i][0];
@@ -176,10 +196,13 @@ function renderMemberDashboard() {
     let weeklyExpense = 0;
     let listRows = '';
 
+    // 포트폴리오 시트 스캔
     for(let i=1; i<dollarApp.portData.length; i++) {
         let row = dollarApp.portData[i];
-        if (row[0] !== member) continue; 
+        if (row[0] !== member) continue; // 선택한 멤버가 아니면 패스
 
+        // 🎯 동진님의 '포트폴리오 시트' 실제 열 번호 (A=0, B=1, C=2, D=3...)
+        // B열(1번): 종목티커, C열(2번): 종목이름, D열(3번): 유형, E열(4번): 수량, F열(5번): 일일모으기설정액
         const ticker = row[1] || ''; 
         const stockName = row[2] || ticker; 
         const stockType = row[3] || ''; 
@@ -188,21 +211,26 @@ function renderMemberDashboard() {
 
         let divExpected = 0;
         
+        // 마스터 데이터에서 배당금 찾기 (티커명 매칭)
         for(let j=1; j<dollarApp.masterData.length; j++) {
             let mRow = dollarApp.masterData[j];
-            let mTicker = mRow[1] || ''; 
+            let mTicker = mRow[1] || ''; // 마스터 시트 B열(티커)
+            let mName = mRow[2] || '';   // 마스터 시트 C열(이름)
             
-            if (mTicker === stockName || mTicker === ticker || mTicker.includes(stockName)) {
-                let rawDiv = parseFloat(mRow[3]) || 0; 
-                divExpected = (holdQty * rawDiv * 0.85);
+            // 포트폴리오의 티커명과 마스터의 티커명이 같거나 이름이 같으면
+            if (mTicker === ticker || mName === stockName || mName.includes(stockName)) {
+                let rawDiv = parseFloat(mRow[4]) || 0; // 마스터 시트 E열(4주평균배당)
+                divExpected = (holdQty * rawDiv * 0.85); // 세후 15% 제외 수익
                 weeklyIncome += divExpected;
                 break;
             }
         }
         
+        // 일일 모으기 금액은 주 5일 기준으로 주간 지출 산정
         const expenseExpected = (dailyBuy * 5); 
         weeklyExpense += expenseExpected; 
 
+        // 수량이 있거나 모으기 금액이 설정된 종목만 테이블에 표시
         if(holdQty > 0 || dailyBuy > 0) {
             listRows += `
                 <tr class="border-b border-slate-100 hover:bg-slate-50">
