@@ -1,13 +1,11 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (충돌 방지 및 표(Table) 최적화 버전)
+// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 시트 완벽 맞춤형)
 // =========================================================
 
-// main.js에 있는 timestamp를 빌려와 캐시 갱신 (없으면 현재 시간)
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
 const DOLLAR_MASTER_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv&t=" + DOLLAR_TIMESTAMP;
 const DOLLAR_PORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv&t=" + DOLLAR_TIMESTAMP;
 
-// 충돌을 막기 위해 모든 변수를 하나의 객체(Object) 안에 가둬둡니다.
 const dollarApp = {
     masterData: [],
     portData: [],
@@ -45,6 +43,7 @@ function parseBulletproofCSV(text) {
     text = text.replace(/^\uFEFF/, '');
     const lines = text.split('\n').filter(l => l.trim() !== '');
     if(lines.length === 0) return [];
+    // 헤더에서 공백을 완벽히 제거하여 매칭 에러 방지
     const headers = lines[0].split(',').map(h => h.trim().replace(/\s/g, ''));
     
     return lines.slice(1).map(line => {
@@ -63,7 +62,7 @@ function parseBulletproofCSV(text) {
 // 2. 데이터 다운로드 엔진
 // ---------------------------------------------------------
 async function loadDollarData() {
-    if (dollarApp.masterData.length > 0) return; // 이미 있으면 패스
+    if (dollarApp.masterData.length > 0) return;
     try {
         const [masterRes, portRes] = await Promise.all([
             fetch(DOLLAR_MASTER_URL), fetch(DOLLAR_PORT_URL)
@@ -75,7 +74,7 @@ async function loadDollarData() {
     } catch (error) {
         console.error("$1 데이터 로딩 에러:", error);
         const tbody = document.getElementById('dollar-table-body');
-        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다. 구글 시트 웹 게시 상태를 확인하세요.</td></tr>`;
+        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>`;
     }
 }
 
@@ -139,15 +138,15 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 4. 멤버별 자급자족 현황 (그래프 제외, 카드 + 표 UI 적용)
+// 4. 멤버별 자급자족 현황 (동진님 시트 양식 100% 매칭)
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length === 0) return;
     const select = document.getElementById('member-select');
     if(!select) return;
     
-    let userKey = Object.keys(dollarApp.portData[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
-    const members = [...new Set(dollarApp.portData.map(d => d[userKey]).filter(v => v))];
+    // 첫 번째 열(이름)을 기준으로 멤버 추출
+    const members = [...new Set(dollarApp.portData.map(d => d['이름']).filter(v => v))];
     
     select.innerHTML = '<option value="all">분석할 멤버 선택</option>';
     members.forEach(m => {
@@ -167,36 +166,50 @@ function renderMemberDashboard() {
         return;
     }
 
-    let userKey = Object.keys(dollarApp.portData[0]).find(k => k.includes('투자자') || k.includes('이름')) || '투자자';
-    const myPort = dollarApp.portData.filter(d => d[userKey] === member);
+    // 선택한 멤버의 데이터만 추출
+    const myPort = dollarApp.portData.filter(d => d['이름'] === member);
 
     let weeklyIncome = 0;
     let weeklyExpense = 0;
     let listRows = '';
 
     myPort.forEach(row => {
-        const ticker = row['종목이름'] || row['티커'] || row['종목'] || '';
-        const holdQty = parseFloat(row['보유수량'] || row['거치수량']) || 0;
-        const dailyBuyStr = row['모으기금액'] || row['일일모으기금액($)'] || row['일일모으기'] || '0';
+        // 시트의 컬럼명과 정확히 매칭
+        const ticker = row['종목티커'] || ''; // 티커 열
+        const stockName = row['종목이름'] || row['종목티커'] || ''; // 이름이 없으면 티커로 대체
+        const holdQty = parseFloat(row['수량']) || 0;
+        const dailyBuyStr = row['일일모으기설정액(1$)'] || '0'; // 모으기 금액 열
         const dailyBuy = parseFloat(dailyBuyStr) || 0;
+        const stockType = row['이름유형'] || row['유형'] || ''; // 거치/모으기 유형 (표시용)
 
         let divExpected = 0;
-        const masterItem = dollarApp.masterData.find(m => (m['종목이름'] || m['티커']) === ticker);
+        
+        // 마스터 데이터에서 배당금 찾기 (티커 또는 이름으로 검색)
+        const masterItem = dollarApp.masterData.find(m => 
+            (m['종목이름'] && m['종목이름'].includes(stockName)) || 
+            (m['티커'] && m['티커'].includes(ticker)) ||
+            (m['종목이름'] === ticker)
+        );
+
         if (masterItem) {
             const rawDiv = parseFloat(masterItem['최근4주평균분배금(달러)']) || 0;
             divExpected = (holdQty * rawDiv * 0.85);
             weeklyIncome += divExpected; 
         }
         
-        const expenseExpected = (dailyBuy * 5);
+        const expenseExpected = (dailyBuy * 5); // 1주일 5일 기준 지출
         weeklyExpense += expenseExpected; 
 
-        // 종목별 표에 들어갈 데이터 조립
+        // 종목별 표에 들어갈 데이터 조립 (보유 수량이 있거나 모으기 금액이 있을 때만 표출)
         if(holdQty > 0 || dailyBuy > 0) {
             listRows += `
                 <tr class="border-b border-slate-100 hover:bg-slate-50">
-                    <td class="p-3 font-bold text-slate-700">${ticker}</td>
-                    <td class="p-3 text-right"><span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">${holdQty}주</span></td>
+                    <td class="p-3">
+                        <div class="font-bold text-slate-700">${stockName}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">${ticker}</div>
+                    </td>
+                    <td class="p-3 text-center"><span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded font-bold">${stockType}</span></td>
+                    <td class="p-3 text-right"><span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">${holdQty}주</span></td>
                     <td class="p-3 text-right text-green-600 font-mono font-bold">+$${divExpected.toFixed(2)}</td>
                     <td class="p-3 text-right text-red-500 font-mono font-bold">-$${expenseExpected.toFixed(2)}</td>
                 </tr>
@@ -231,19 +244,22 @@ function renderMemberDashboard() {
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="bg-slate-800 text-white p-3 font-bold text-sm">📋 ${member}님의 종목별 주간 현금흐름 요약</div>
+            <div class="bg-slate-800 text-white p-3 font-bold text-sm flex items-center justify-between">
+                <span>📋 ${member}님의 1달러 파이프라인 명세서</span>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left whitespace-nowrap">
                     <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-xs">
                         <tr>
-                            <th class="p-3">종목명</th>
+                            <th class="p-3">종목명/티커</th>
+                            <th class="p-3 text-center">전략 유형</th>
                             <th class="p-3 text-right">거치 수량</th>
                             <th class="p-3 text-right">예상 주수입</th>
                             <th class="p-3 text-right">모으기 주지출</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${listRows || '<tr><td colspan="4" class="p-4 text-center text-slate-400">데이터가 없습니다.</td></tr>'}
+                        ${listRows || '<tr><td colspan="5" class="p-4 text-center text-slate-400">데이터가 없습니다.</td></tr>'}
                     </tbody>
                 </table>
             </div>
