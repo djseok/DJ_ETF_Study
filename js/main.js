@@ -33,10 +33,8 @@ var globalActualDividendLogs = [];
 var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    // 💡 모든 탭 이름을 배열에 안전하게 등록합니다.
     var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi', 'OneDollar'];
     
-    // 1. 모든 탭 숨기기 및 버튼 초기화
     for (var i = 0; i < tabs.length; i++) {
         var t = tabs[i];
         var view = document.getElementById('view' + t);
@@ -46,7 +44,6 @@ function switchTab(tabName) {
         if(btn) btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
     }
     
-    // 2. 선택한 탭만 보이기 및 버튼 강조
     var capTabName = tabName.charAt(0).toUpperCase() + tabName.slice(1);
     var activeView = document.getElementById('view' + capTabName);
     var activeBtn = document.getElementById('btnTab' + capTabName);
@@ -64,35 +61,44 @@ function switchTab(tabName) {
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
 
-    // 3. 각 탭에 맞는 데이터 로딩 함수 연결 (함수가 존재할 때만 실행되도록 안전장치 typeof 적용)
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
 }
 
+// 🛡️ [핵심 패치] 어떤 쓰레기 값이 들어와도 에러를 내지 않도록 보호막 추가
 function parseCsvToMatrix(text) {
     if (!text) return [];
+    text = text.replace(/^\uFEFF/, ''); // BOM 제거
     var lines = text.split('\n');
     var result = [];
+    
     for (var j = 0; j < lines.length; j++) {
         var line = lines[j];
+        if (!line || line.trim() === '') continue; // 빈 줄 완벽 차단
+        
         var rowResult = [];
         var current = '';
         var inQuotes = false;
+        
         for (var i = 0; i < line.length; i++) {
             var char = line[i];
             if (char === '"') {
                 inQuotes = !inQuotes;
             } else if (char === ',' && !inQuotes) {
-                rowResult.push(current.trim().replace(/^"|"$/g, ''));
+                // undefined 방지를 위해 강제 문자열 치환 후 trim
+                rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
                 current = '';
             } else {
                 current += char;
             }
         }
-        rowResult.push(current.trim().replace(/^"|"$/g, ''));
-        if (rowResult.length > 0 && rowResult[0] !== '') {
+        rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
+        
+        // 쉼표만 있는 빈 깡통 배열(,,,,) 거르기
+        var isAllEmpty = rowResult.every(val => val === '');
+        if (!isAllEmpty) {
             result.push(rowResult);
         }
     }
