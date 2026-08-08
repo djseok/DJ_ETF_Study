@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (멤버별 자급자족 카드타입 UI 전면 개편)
+// 🌐 $1 복리 프로젝트 전용 엔진 (시트 H열: $1 투입 시 분배금 효율 중심)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -11,7 +11,7 @@ const DOLLAR_PORT_URL = DOLLAR_PORT_BASE + "&t=" + DOLLAR_TIMESTAMP;
 const dollarApp = {
     masterData: [],
     portData: [],
-    sortKey: 'efficiency',
+    sortKey: 'efficiency_krw', // 🎯 기본 정렬: 시트 H열 (1달러당 분배금 원화)
     sortAsc: false,
     liveFxRate: 1420,
     selectedLumpTickers: []
@@ -75,7 +75,7 @@ function cleanNumber(val) {
     return isNaN(num) || !isFinite(num) ? 0 : num;
 }
 
-// 🎯 주가 찾기 레이더 (포트폴리오 시트 G열 우선 스캔 ➔ 마스터 D열 백업)
+// 🎯 주가 찾기 레이더 (포트폴리오 G열 우선 ➔ 마스터 D열 백업)
 function getLivePrice(ticker) {
     if (!ticker) return 0;
     const t = ticker.toUpperCase().trim();
@@ -141,7 +141,7 @@ async function loadDollarData() {
 }
 
 // ---------------------------------------------------------
-// 2. 1달러 생산성 스캐너
+// 2. 1달러 생산성 스캐너 (🎯 시트 H열: 1달러 투입 시 분배금 효율 표출)
 // ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
@@ -158,23 +158,27 @@ function renderDollarTable() {
         const ticker = (row[1] || '').trim();
         const name = (row[2] || '').trim();
         
-        const price = getLivePrice(ticker); 
-        const rawDiv = cleanNumber(row[4]); 
+        const price = getLivePrice(ticker); // 주가 ($)
+        const rawDiv = cleanNumber(row[4]); // 주당 분배금 ($)
         
         const limit = row[11] || 'X';
         const decimal = row[12] || 'O';
         
         if (!ticker || price <= 0) continue;
 
+        // 🎯 1달러 투입 시 분배금 효율 연산 ($ 및 원화 H열 파싱)
         const afterTaxDiv = rawDiv * 0.85; 
-        const efficiency = (afterTaxDiv / price);
-        const efficiency_krw = efficiency * dollarApp.liveFxRate; 
+        const efficiency_usd = price > 0 ? (afterTaxDiv / price) : 0; // $1 구매 시 배당($)
+        
+        // 시트 H열(row[7])에 계산되어 있는 "1달러 구매시 분배금(원화)" 직접 수치 추출
+        let sheetH_krw = row[7] ? cleanNumber(row[7]) : 0;
+        const efficiency_krw = sheetH_krw > 0 ? sheetH_krw : (efficiency_usd * dollarApp.liveFxRate);
 
         tableData.push({ 
             displayName: `${ticker} <span class="text-xs text-slate-400 ml-1">(${name})</span>`, 
             price: price, 
-            efficiency: efficiency, 
-            efficiency_krw: efficiency_krw, 
+            efficiency: efficiency_usd, 
+            efficiency_krw: efficiency_krw, // 🎯 H열 원화 효율 수치
             limit: limit, 
             decimal: decimal 
         });
@@ -198,8 +202,8 @@ function renderDollarTable() {
         tr.innerHTML = `
             <td class="px-4 py-3 font-bold text-slate-800">${rankBadge}${item.displayName}</td>
             <td class="px-4 py-3 text-right font-mono text-slate-600">$${item.price.toFixed(2)}</td>
-            <td class="px-4 py-3 text-right font-mono font-black text-red-600 bg-red-50/30">$${item.efficiency.toFixed(5)}</td>
-            <td class="px-4 py-3 text-right font-mono font-black text-blue-600 bg-blue-50/30">${item.efficiency_krw.toFixed(1)}원</td>
+            <td class="px-4 py-3 text-right font-mono font-bold text-slate-700 bg-slate-50/50">$${item.efficiency.toFixed(5)}</td>
+            <td class="px-4 py-3 text-right font-mono font-black text-blue-600 bg-blue-50/30">${item.efficiency_krw.toFixed(1)}원 <span class="text-[10px] text-slate-400 font-normal">(H열)</span></td>
             <td class="px-4 py-3 text-center text-xs font-bold ${item.limit === 'X' ? 'text-green-600' : 'text-red-500'}">${item.limit}</td>
             <td class="px-4 py-3 text-center text-xs font-bold ${item.decimal === 'O' ? 'text-blue-600' : 'text-slate-400'}">${item.decimal}</td>
         `;
@@ -214,7 +218,7 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 3. 멤버별 자급자족 현황판 (✨ 완전히 새로워진 스마트 카드 타입 UI)
+// 3. 멤버별 자급자족 현황판 (스마트 카드 UI)
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
@@ -284,7 +288,6 @@ function renderMemberDashboard() {
         if(holdQty > 0 || dailyBuy > 0) {
             let formattedQty = holdQty === 0 ? "0" : (Number.isInteger(holdQty) ? holdQty.toLocaleString() : holdQty.toFixed(4).replace(/\.?0+$/, ''));
             
-            // 🎨 개별 종목 스마트 카드
             stockCardsHtml += `
                 <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden">
                     <div>
