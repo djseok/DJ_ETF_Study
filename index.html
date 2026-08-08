@@ -30,7 +30,6 @@
             <button id="btnTabDiv" onclick="switchTab('div')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-emerald-50 whitespace-nowrap text-emerald-700">💰 배당&총알</button>
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
             <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
-            <!-- 🚀 추가된 1달러 프로젝트 탭 버튼 -->
             <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
         </div>
 
@@ -554,7 +553,6 @@
             </div>
         </div>
 
-        <!-- 🚀 추가된 1달러 프로젝트 컨테이너 화면 -->
         <div id="viewOneDollar" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-4 flex items-center">
@@ -564,9 +562,9 @@
                 <div class="flex flex-wrap gap-2 mb-6">
                     <button id="btnDollarScanner" onclick="switchDollarSubTab('scanner')" class="px-4 py-2 bg-slate-800 text-white rounded-lg font-bold text-sm shadow-sm transition-all">🔍 1달러 생산성 스캐너</button>
                     <button id="btnDollarMember" onclick="switchDollarSubTab('member')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-200 shadow-sm transition-all">👥 멤버별 자급자족 현황</button>
+                    <button id="btnDollarLump" onclick="switchDollarSubTab('lump')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-200 shadow-sm transition-all">💼 거치 시뮬레이션</button>
                 </div>
 
-                <!-- 서브 화면 1: 1달러 스캐너 -->
                 <div id="tab-dollar-scanner" class="block">
                     <div class="flex flex-wrap gap-4 mb-4 text-sm font-bold text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100">
                         <label class="flex items-center gap-2 cursor-pointer hover:text-orange-600 transition-colors">
@@ -600,7 +598,6 @@
                     </div>
                 </div>
 
-                <!-- 서브 화면 2: 멤버별 자급자족 현황 -->
                 <div id="tab-dollar-member" class="hidden">
                     <div class="mb-4">
                         <label class="block text-xs font-bold text-slate-500 mb-1">👨‍💻 분석할 멤버 선택</label>
@@ -615,12 +612,69 @@
                         <canvas id="memberCashflowChart"></canvas>
                     </div>
                 </div>
+
+                <div id="tab-dollar-lump" class="hidden space-y-6">
+                    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                                <i class="fas fa-calculator text-yellow-500"></i> 거치 조건 및 자금 설정
+                            </h3>
+                            <div id="lump-fx-badge" class="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-full border border-emerald-200 shadow-sm">
+                                <i class="fas fa-exchange-alt mr-1"></i> 실시간 A2 환율: <span id="lump-fx-rate-text" class="font-mono">₩1,416.55</span> / $
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">👨‍💻 대상 멤버 선택</label>
+                                <select id="lump-member-select" onchange="renderLumpSimulator()" class="w-full bg-white border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-2.5 focus:ring-yellow-500 focus:border-yellow-500 shadow-sm">
+                                    <option value="all">멤버를 선택하세요</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">💵 거치 투자금 ($ 달러)</label>
+                                <input type="number" id="lump-amount-usd" value="1000" step="100" oninput="syncLumpAmount('usd')" class="w-full bg-white border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-2.5 font-mono shadow-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">₩ 거치 투자금 (원화 ₩)</label>
+                                <input type="number" id="lump-amount-krw" value="1416550" step="100000" oninput="syncLumpAmount('krw')" class="w-full bg-white border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-2.5 font-mono shadow-sm">
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-600 border-t border-slate-200 pt-3">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-orange-600 transition-colors">
+                                <input type="checkbox" id="lump-filter-limit" onchange="renderLumpStockSelector()" class="w-4 h-4 accent-orange-500"> 구매제한 없는 종목만 (X)
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-orange-600 transition-colors">
+                                <input type="checkbox" id="lump-filter-decimal" onchange="renderLumpStockSelector()" class="w-4 h-4 accent-orange-500"> 소수점 구매 가능만 (O)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fas fa-check-double text-blue-500"></i> 비교할 종목 선택 <span id="lump-select-count" class="text-xs text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full font-bold border border-orange-200">(0/4개 선택)</span>
+                            </h4>
+                            <span class="text-xs text-slate-400 font-medium">* 원하는 종목을 1~4개 체크하세요.</span>
+                        </div>
+                        <div id="lump-stock-checkbox-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-52 overflow-y-auto p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                            <div class="col-span-full p-4 text-center text-xs text-slate-400 font-bold">데이터를 로딩 중입니다...</div>
+                        </div>
+                    </div>
+
+                    <div id="lump-comparison-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="col-span-full p-8 bg-white rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">
+                            위 종목 리스트에서 비교하고 싶은 종목을 체크해보세요! 🚀
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
     </div>
 
-    <!-- Chart.js 및 외부 JS 로드 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/main.js"></script>
     <script src="js/quant.js"></script>
@@ -630,8 +684,6 @@
     <script src="js/mdd.js"></script>
     <script src="js/backtest.js"></script>
     <script src="js/rsi.js"></script>
-    <!-- 🚀 추가된 1달러 프로젝트 엔진 -->
     <script src="js/one_dollar_project.js"></script>
 </body>
 </html>
-
