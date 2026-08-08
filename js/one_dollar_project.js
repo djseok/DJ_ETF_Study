@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (강력 교차 검증 & 무적 파싱 탑재)
+// 🌐 $1 복리 프로젝트 전용 엔진 (멤버별 자급자족 카드타입 UI 전면 개편)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -18,7 +18,7 @@ const dollarApp = {
 };
 
 // ---------------------------------------------------------
-// 1. 유틸리티 함수 (파싱 및 크로스체크)
+// 1. 서브 탭 전환 제어
 // ---------------------------------------------------------
 function switchDollarSubTab(tabName) {
     const btnScan = document.getElementById('btnDollarScanner');
@@ -66,21 +66,20 @@ function parseSimpleArrayCSV(text) {
     });
 }
 
-// 🎯 무적의 숫자 추출기 (콤마, 기호 섞여도 NaN 절대 안 뜸!)
+// 🛡️ 무적의 숫자 정제 함수 (콤마, 원화, 달러, 주 등 문자를 완벽 제거)
 function cleanNumber(val) {
     if (val === undefined || val === null || val === '') return 0;
-    if (typeof val === 'number') return val;
+    if (typeof val === 'number') return isNaN(val) || !isFinite(val) ? 0 : val;
     let str = String(val).replace(/,/g, '').replace(/\$/g, '').replace(/₩/g, '').replace(/원/g, '').replace(/주/g, '').replace(/%/g, '').trim();
     let num = parseFloat(str);
-    return isNaN(num) ? 0 : num;
+    return isNaN(num) || !isFinite(num) ? 0 : num;
 }
 
-// 🎯 주가 찾기 레이더 (포트폴리오 시트 G열 최우선 스캔)
+// 🎯 주가 찾기 레이더 (포트폴리오 시트 G열 우선 스캔 ➔ 마스터 D열 백업)
 function getLivePrice(ticker) {
     if (!ticker) return 0;
     const t = ticker.toUpperCase().trim();
     
-    // 1순위: 포트폴리오 시트 G열(인덱스 6) 스캔
     for (let i = 1; i < dollarApp.portData.length; i++) {
         let pTicker = (dollarApp.portData[i][1] || '').toUpperCase().trim();
         if (pTicker === t) {
@@ -89,7 +88,6 @@ function getLivePrice(ticker) {
         }
     }
     
-    // 2순위: 마스터 시트 D열(인덱스 3) 스캔 (백업용)
     for (let i = 1; i < dollarApp.masterData.length; i++) {
         let mTicker = (dollarApp.masterData[i][1] || '').toUpperCase().trim();
         if (mTicker === t) {
@@ -127,16 +125,12 @@ async function loadDollarData() {
         dollarApp.masterData = parseSimpleArrayCSV(await masterRes.text());
         dollarApp.portData = parseSimpleArrayCSV(await portRes.text());
 
-        // A2 셀 실시간 환율 추출 (오류 완벽 방어)
         if (dollarApp.masterData.length > 0) {
             let candidate0 = cleanNumber(dollarApp.masterData[0][0]);
             let candidate1 = dollarApp.masterData[1] ? cleanNumber(dollarApp.masterData[1][0]) : 0;
             
-            if (candidate0 > 1000 && candidate0 < 2500) {
-                dollarApp.liveFxRate = candidate0;
-            } else if (candidate1 > 1000 && candidate1 < 2500) {
-                dollarApp.liveFxRate = candidate1;
-            }
+            if (candidate0 > 1000 && candidate0 < 2500) dollarApp.liveFxRate = candidate0;
+            else if (candidate1 > 1000 && candidate1 < 2500) dollarApp.liveFxRate = candidate1;
         }
         
         renderDollarTable();
@@ -147,7 +141,7 @@ async function loadDollarData() {
 }
 
 // ---------------------------------------------------------
-// 2. 1달러 생산성 스캐너 렌더링
+// 2. 1달러 생산성 스캐너
 // ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
@@ -164,8 +158,8 @@ function renderDollarTable() {
         const ticker = (row[1] || '').trim();
         const name = (row[2] || '').trim();
         
-        const price = getLivePrice(ticker); // 🎯 주가는 2중 레이더로 찾음
-        const rawDiv = cleanNumber(row[4]); // 배당금은 마스터 E열 고정
+        const price = getLivePrice(ticker); 
+        const rawDiv = cleanNumber(row[4]); 
         
         const limit = row[11] || 'X';
         const decimal = row[12] || 'O';
@@ -220,7 +214,7 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 3. 멤버별 자급자족 현황판
+// 3. 멤버별 자급자족 현황판 (✨ 완전히 새로워진 스마트 카드 타입 UI)
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
@@ -229,7 +223,7 @@ function populateDollarMemberSelect() {
     
     let members = [];
     for(let i=1; i<dollarApp.portData.length; i++) {
-        let name = dollarApp.portData[i][0];
+        let name = (dollarApp.portData[i][0] || '').trim();
         if(name && !members.includes(name)) members.push(name);
     }
     
@@ -251,50 +245,90 @@ function renderMemberDashboard() {
     const container = document.getElementById('member-dashboard-cards');
     if (!container) return;
 
-    if (member === 'all') { container.innerHTML = ''; return; }
+    if (member === 'all') { 
+        container.innerHTML = `
+            <div class="p-8 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">
+                <i class="fas fa-user-circle text-3xl mb-2 text-slate-300 block"></i>
+                상단 드롭다운 메뉴에서 분석하고 싶은 멤버(D, S, J)를 선택해 주세요!
+            </div>
+        `; 
+        return; 
+    }
 
     let weeklyIncome = 0;
     let weeklyExpense = 0;
-    let listRows = '';
+    let stockCardsHtml = '';
 
     for(let i=1; i<dollarApp.portData.length; i++) {
         let row = dollarApp.portData[i];
         if (!row || row.length < 5) continue;
-        if (row[0] !== member) continue;
+        if ((row[0] || '').trim() !== member) continue;
 
         const ticker = (row[1] || '').trim(); 
         const stockName = (row[2] || '').trim() || ticker; 
         const stockType = (row[3] || '').trim() || '거치'; 
         
-        // 🎯 콤마, 기호 완벽 파싱
-        const holdQty = cleanNumber(row[4]);      // E열 수량
-        const dailyBuy = cleanNumber(row[5]);     // F열 일일모으기
+        const holdQty = cleanNumber(row[4]);      // E열 보유수량
+        const dailyBuy = cleanNumber(row[5]);     // F열 일일모으기금액
+        const price = getLivePrice(ticker);        // 현재주가
         
-        // 🎯 배당금 마스터 시트에서 안전하게 룩업
         let rawDiv = getDividend(ticker, stockName);
-        let divExpected = (holdQty * rawDiv * 0.85); 
+        let divExpected = (holdQty * rawDiv * 0.85); // 세후 15% 공제
         weeklyIncome += divExpected;
         
-        const expenseExpected = (dailyBuy * 5); 
+        const expenseExpected = (dailyBuy * 5); // 주 5일 거래 기준
         weeklyExpense += expenseExpected; 
+
+        const itemNet = divExpected - expenseExpected;
 
         if(holdQty > 0 || dailyBuy > 0) {
             let formattedQty = holdQty === 0 ? "0" : (Number.isInteger(holdQty) ? holdQty.toLocaleString() : holdQty.toFixed(4).replace(/\.?0+$/, ''));
-            listRows += `
-                <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td class="p-3 pl-4">
-                        <div class="font-bold text-slate-800">${stockName}</div>
-                        <div class="text-[11px] text-slate-400 font-mono">${ticker}</div>
-                    </td>
-                    <td class="p-3 text-center">
-                        <span class="text-xs ${stockType.includes('거치') ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'} px-2.5 py-1 rounded-md font-bold">${stockType}</span>
-                    </td>
-                    <td class="p-3 text-right">
-                        <span class="text-xs bg-slate-100 px-2.5 py-1 rounded-md text-slate-700 font-bold font-mono">${formattedQty}주</span>
-                    </td>
-                    <td class="p-3 text-right text-emerald-600 font-mono font-bold">+$${divExpected.toFixed(2)}</td>
-                    <td class="p-3 text-right pr-4 text-rose-500 font-mono font-bold">-$${expenseExpected.toFixed(2)}</td>
-                </tr>
+            
+            // 🎨 개별 종목 스마트 카드
+            stockCardsHtml += `
+                <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 mb-3 pb-3 border-b border-slate-100">
+                            <div>
+                                <h4 class="font-extrabold text-slate-800 text-base leading-snug truncate">${stockName}</h4>
+                                <span class="text-xs text-slate-400 font-mono font-bold">${ticker}</span>
+                            </div>
+                            <span class="text-xs ${stockType.includes('거치') ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'} px-2.5 py-1 rounded-lg font-black shrink-0">
+                                ${stockType}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <span class="text-[11px] font-bold text-slate-400 block mb-0.5">📦 보유 수량</span>
+                                <span class="text-sm font-extrabold text-slate-800 font-mono">${formattedQty} <span class="text-xs font-normal">주</span></span>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <span class="text-[11px] font-bold text-slate-400 block mb-0.5">💵 현재 주가</span>
+                                <span class="text-sm font-extrabold text-slate-800 font-mono">$${price > 0 ? price.toFixed(2) : '-'}</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5 text-xs font-medium bg-slate-50/60 p-3 rounded-xl border border-slate-100 mb-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 font-bold">📈 주간 예상 배당:</span>
+                                <span class="font-extrabold text-emerald-600 font-mono">+$${divExpected.toFixed(2)} <span class="text-[10px] text-slate-400">(₩${Math.round(divExpected * dollarApp.liveFxRate).toLocaleString()})</span></span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 font-bold">💸 주간 모으기 지출:</span>
+                                <span class="font-extrabold text-rose-500 font-mono">-$${expenseExpected.toFixed(2)} <span class="text-[10px] text-slate-400">(₩${Math.round(expenseExpected * dollarApp.liveFxRate).toLocaleString()})</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold">
+                        <span class="text-slate-400">종목 수지:</span>
+                        ${itemNet >= 0 
+                            ? `<span class="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 font-mono"><i class="fas fa-check-circle mr-1"></i>흑자 +$${itemNet.toFixed(2)}</span>` 
+                            : `<span class="text-rose-700 bg-rose-50 px-2.5 py-1 rounded-md border border-rose-200 font-mono"><i class="fas fa-minus-circle mr-1"></i>적자 -$${Math.abs(itemNet).toFixed(2)}</span>`
+                        }
+                    </div>
+                </div>
             `;
         }
     }
@@ -305,45 +339,46 @@ function renderMemberDashboard() {
 
     container.innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-gradient-to-br from-emerald-50 to-teal-100 p-5 rounded-2xl border border-emerald-200 shadow-sm">
-                <div class="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1"><i class="fas fa-arrow-trend-up"></i> 주간 예상 배당 수입 (세후)</div>
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-100 p-5 rounded-2xl border border-emerald-200 shadow-sm flex flex-col justify-between">
+                <div class="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1">
+                    <i class="fas fa-arrow-trend-up"></i> 주간 예상 배당 수입 (세후)
+                </div>
                 <div class="text-3xl font-black text-emerald-800 font-mono">$${weeklyIncome.toFixed(2)}</div>
+                <div class="text-xs text-emerald-600/80 font-bold mt-1 font-mono">≈ ₩${Math.round(weeklyIncome * dollarApp.liveFxRate).toLocaleString()} 원</div>
             </div>
-            <div class="bg-gradient-to-br from-rose-50 to-red-100 p-5 rounded-2xl border border-rose-200 shadow-sm">
-                <div class="text-xs font-bold text-rose-700 mb-1 flex items-center gap-1"><i class="fas fa-coins"></i> 주간 모으기 지출 (5일 기준)</div>
+
+            <div class="bg-gradient-to-br from-rose-50 to-red-100 p-5 rounded-2xl border border-rose-200 shadow-sm flex flex-col justify-between">
+                <div class="text-xs font-bold text-rose-700 mb-1 flex items-center gap-1">
+                    <i class="fas fa-coins"></i> 주간 모으기 지출 (5일 기준)
+                </div>
                 <div class="text-3xl font-black text-rose-800 font-mono">$${weeklyExpense.toFixed(2)}</div>
+                <div class="text-xs text-rose-600/80 font-bold mt-1 font-mono">≈ ₩${Math.round(weeklyExpense * dollarApp.liveFxRate).toLocaleString()} 원</div>
             </div>
+
             <div class="bg-gradient-to-br ${isSurplus ? 'from-indigo-50 to-blue-100 border-indigo-200' : 'from-amber-50 to-orange-100 border-amber-200'} p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
                 <div class="text-xs font-bold ${isSurplus ? 'text-indigo-700' : 'text-amber-700'} mb-1 flex items-center gap-1">
-                    ${isSurplus ? '<i class="fas fa-fire text-blue-600"></i> 무자본 자급자족 상태!' : '<i class="fas fa-triangle-exclamation text-amber-600"></i> 자급자족 미달 (보충 필요)'}
+                    ${isSurplus ? '<i class="fas fa-fire text-blue-600"></i> 무자본 자급자족 성공!' : '<i class="fas fa-triangle-exclamation text-amber-600"></i> 자급자족 미달 (보충 필요)'}
                 </div>
                 <div class="text-3xl font-black ${isSurplus ? 'text-indigo-900' : 'text-amber-900'} font-mono flex items-end justify-between">
                     <span>${isSurplus ? '+' : '-'}$${Math.abs(netCash).toFixed(2)}</span>
-                    <span class="text-xs bg-white/70 text-slate-700 px-2 py-1 rounded-lg font-bold">충당률 ${ratio}%</span>
+                    <span class="text-xs bg-white/80 text-slate-700 px-2.5 py-1 rounded-lg font-extrabold border border-slate-200">충당률 ${ratio}%</span>
+                </div>
+                <div class="text-xs ${isSurplus ? 'text-indigo-700' : 'text-amber-700'} font-bold mt-1 font-mono">
+                    ${isSurplus ? '매주 남는 배당금으로 재투자 가능 🚀' : `주간 $${Math.abs(netCash).toFixed(2)} (₩${Math.round(Math.abs(netCash)*dollarApp.liveFxRate).toLocaleString()}원) 추가 필요`}
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="bg-slate-800 text-white p-4 font-bold text-sm flex items-center justify-between">
-                <span class="flex items-center gap-2"><i class="fas fa-clipboard-list text-yellow-400"></i> ${member}님의 $1 파이프라인 명세서</span>
-                <span class="text-xs font-normal text-slate-300">주 5일 연산 기준</span>
+        <div class="space-y-4">
+            <div class="flex items-center justify-between px-1">
+                <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                    <i class="fas fa-cubes text-yellow-500"></i> ${member}님의 종목별 $1 파이프라인 카드
+                </h3>
+                <span class="text-xs font-bold text-slate-400">실시간 연산 가동 중</span>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left whitespace-nowrap">
-                    <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-xs">
-                        <tr>
-                            <th class="p-3.5 pl-4">종목명 / 티커</th>
-                            <th class="p-3.5 text-center">전략 유형</th>
-                            <th class="p-3.5 text-right">보유 수량</th>
-                            <th class="p-3.5 text-right">주간 예상 수입</th>
-                            <th class="p-3.5 text-right pr-4">주간 모으기 지출</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium">
-                        ${listRows || '<tr><td colspan="5" class="p-6 text-center text-slate-400 font-bold">등록된 종목 데이터가 없습니다.</td></tr>'}
-                    </tbody>
-                </table>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${stockCardsHtml || '<div class="col-span-full p-8 bg-white rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">보유 중이거나 모으는 종목 데이터가 없습니다.</div>'}
             </div>
         </div>
     `;
@@ -391,7 +426,7 @@ function renderLumpStockSelector() {
 
         let ticker = (row[1] || '').trim();
         let name = (row[2] || '').trim();
-        let price = getLivePrice(ticker); // 🎯 주가 교차 검증 추출
+        let price = getLivePrice(ticker); 
         let limit = row[11] || 'X';
         let decimal = row[12] || 'O';
 
@@ -448,7 +483,6 @@ function updateLumpCountText() {
     if(countSpan) countSpan.textContent = `(${dollarApp.selectedLumpTickers.length}/4개 선택)`;
 }
 
-// 복리(DRIP) 회복 주수 계산 
 function calculateDRIPPaybackWeeks(startShares, payoutPerShare, price, targetInvestAmount) {
     if (targetInvestAmount <= 0 || payoutPerShare <= 0 || price <= 0) return 9999;
     
@@ -456,7 +490,7 @@ function calculateDRIPPaybackWeeks(startShares, payoutPerShare, price, targetInv
     let cumDiv = 0;
     let weeks = 0;
     
-    while (cumDiv < targetInvestAmount && weeks < 520) { // 최대 10년 컷
+    while (cumDiv < targetInvestAmount && weeks < 520) {
         weeks++;
         let weeklyDiv = currentShares * payoutPerShare;
         cumDiv += weeklyDiv;
@@ -466,7 +500,6 @@ function calculateDRIPPaybackWeeks(startShares, payoutPerShare, price, targetInv
     return weeks;
 }
 
-// 🎯 거치 시뮬레이션 대시보드 렌더링
 function renderLumpSimulator() {
     const container = document.getElementById('lump-comparison-cards');
     if(!container) return;
@@ -493,13 +526,12 @@ function renderLumpSimulator() {
         let limit = mRow[11] || 'X';
         let decimal = mRow[12] || 'O';
         
-        // 🎯 2중 크로스체크 엔진 적용 (가격=포트폴리오 G열 우선 / 배당=마스터 E열)
         let price = getLivePrice(ticker);
         let rawDiv = getDividend(ticker, name);
-        let netDivPerShare = rawDiv * 0.85; // 세후 15% 적용
+        let netDivPerShare = rawDiv * 0.85; 
 
         if(price <= 0) {
-            html += `<div class="bg-red-50 rounded-2xl border border-red-200 p-5 flex flex-col justify-center items-center text-center"><i class="fas fa-exclamation-triangle text-red-400 text-3xl mb-2"></i><span class="text-sm font-bold text-red-700">${ticker}</span><span class="text-xs text-red-500 mt-1">주가 데이터가 시트에 없습니다.<br>(포트폴리오 G열 확인 필요)</span></div>`;
+            html += `<div class="bg-red-50 rounded-2xl border border-red-200 p-5 flex flex-col justify-center items-center text-center"><i class="fas fa-exclamation-triangle text-red-400 text-3xl mb-2"></i><span class="text-sm font-bold text-red-700">${ticker}</span><span class="text-xs text-red-500 mt-1">주가 데이터가 시트에 없습니다.</span></div>`;
             return;
         }
 
@@ -512,7 +544,6 @@ function renderLumpSimulator() {
             remainingCash = investUsd - (newBoughtShares * price);
         }
 
-        // [독립형 연산]
         let indepWeeklyIncUsd = newBoughtShares * netDivPerShare;
         let indepWeeklyIncKrw = indepWeeklyIncUsd * dollarApp.liveFxRate;
 
@@ -522,13 +553,12 @@ function renderLumpSimulator() {
         let dripWeeksIndep = calculateDRIPPaybackWeeks(newBoughtShares, netDivPerShare, price, investUsd);
         let dripYearsIndep = dripWeeksIndep === 9999 ? "∞" : (dripWeeksIndep / 52).toFixed(1);
 
-        // [결합형 연산]
         let existingMemberShares = 0;
         if (selectedMember !== 'all') {
             for(let k=1; k<dollarApp.portData.length; k++) {
                 let pRow = dollarApp.portData[k];
-                if(pRow[0] === selectedMember && pRow[1] === ticker) {
-                    existingMemberShares += cleanNumber(pRow[4]); // 수량 E열 파싱
+                if((pRow[0]||'').trim() === selectedMember && (pRow[1]||'').trim() === ticker) {
+                    existingMemberShares += cleanNumber(pRow[4]); 
                 }
             }
         }
