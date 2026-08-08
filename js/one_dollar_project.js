@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (동진님 시트 열 번호 100% 맞춤형)
+// 🌐 $1 복리 프로젝트 전용 엔진 (자급자족 현황 UI/계산 완벽 보정)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -68,12 +68,12 @@ async function loadDollarData() {
     } catch (error) {
         console.error("$1 데이터 로딩 에러:", error);
         const tbody = document.getElementById('dollar-table-body');
-        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터 로딩 에러 발생</td></tr>`;
+        if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-red-500 font-bold">데이터 로딩 에러가 발생했습니다.</td></tr>`;
     }
 }
 
 // ---------------------------------------------------------
-// 1달러 생산성 스캐너 렌더링
+// 1. 1달러 생산성 스캐너 렌더링
 // ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
@@ -84,14 +84,10 @@ function renderDollarTable() {
 
     let tableData = [];
     
-    // 1행(헤더) 무시하고 데이터부터 스캔
     for (let i = 1; i < dollarApp.masterData.length; i++) {
         const row = dollarApp.masterData[i];
         if (!row || row.length < 5) continue;
 
-        // 🎯 동진님의 '마스터 시트' 실제 열 번호 (A=0, B=1, C=2, D=3...)
-        // B열(1번): 티커, C열(2번): 종목이름, D열(3번): 주가, E열(4번): 4주평균분배금($)
-        // L열(11번): 구매제한, M열(12번): 소수점가능
         const ticker = row[1] || '';           // B열 (티커)
         const name = row[2] || '';             // C열 (종목이름)
         const price = parseFloat(row[3]) || 0; // D열 (주가)
@@ -100,14 +96,12 @@ function renderDollarTable() {
         const limit = row[11] || 'X';          // L열 (구매제한)
         const decimal = row[12] || 'O';        // M열 (소수점가능)
         
-        // 티커나 가격이 없으면 패스
         if (!ticker || price <= 0) continue;
 
-        const afterTaxDiv = rawDiv * 0.85; // 세후 15% 공제
+        const afterTaxDiv = rawDiv * 0.85; 
         const efficiency = price > 0 ? (afterTaxDiv / price) : 0;
         const efficiency_krw = efficiency * 1420; 
 
-        // 화면에 보여줄 이름: 티커와 종목명을 함께 표시
         const displayName = `${ticker} <span class="text-xs text-slate-400 ml-1">(${name})</span>`;
 
         tableData.push({ 
@@ -120,18 +114,15 @@ function renderDollarTable() {
         });
     }
 
-    // 필터링 적용
     if (isLimitFilter) tableData = tableData.filter(d => d.limit === 'X');
     if (isDecimalFilter) tableData = tableData.filter(d => d.decimal === 'O');
 
-    // 정렬 적용
     tableData.sort((a, b) => {
         let valA = a[dollarApp.sortKey];
         let valB = b[dollarApp.sortKey];
         return dollarApp.sortAsc ? valA - valB : valB - valA;
     });
 
-    // 화면에 그리기
     tbody.innerHTML = '';
     tableData.forEach((item, idx) => {
         const tr = document.createElement('tr');
@@ -160,14 +151,13 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 멤버별 자급자족 현황판 렌더링
+// 2. 멤버별 자급자족 현황판 렌더링
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
     const select = document.getElementById('member-select');
     if(!select) return;
     
-    // 포트폴리오 시트의 A열(0번 인덱스)에 있는 D, S, J 등의 이름 추출
     let members = [];
     for(let i=1; i<dollarApp.portData.length; i++) {
         let name = dollarApp.portData[i][0];
@@ -183,7 +173,9 @@ function populateDollarMemberSelect() {
 }
 
 function renderMemberDashboard() {
-    const member = document.getElementById('member-select').value;
+    const memberSelect = document.getElementById('member-select');
+    if(!memberSelect) return;
+    const member = memberSelect.value;
     const container = document.getElementById('member-dashboard-cards');
     if (!container) return;
 
@@ -196,52 +188,52 @@ function renderMemberDashboard() {
     let weeklyExpense = 0;
     let listRows = '';
 
-    // 포트폴리오 시트 스캔
     for(let i=1; i<dollarApp.portData.length; i++) {
         let row = dollarApp.portData[i];
-        if (row[0] !== member) continue; // 선택한 멤버가 아니면 패스
+        if (!row || row.length < 5) continue;
+        if (row[0] !== member) continue;
 
-        // 🎯 동진님의 '포트폴리오 시트' 실제 열 번호 (A=0, B=1, C=2, D=3...)
-        // B열(1번): 종목티커, C열(2번): 종목이름, D열(3번): 유형, E열(4번): 수량, F열(5번): 일일모으기설정액
         const ticker = row[1] || ''; 
         const stockName = row[2] || ticker; 
-        const stockType = row[3] || ''; 
+        const stockType = row[3] || '거치'; 
         const holdQty = parseFloat(row[4]) || 0;
         const dailyBuy = parseFloat(row[5]) || 0;
 
         let divExpected = 0;
         
-        // 마스터 데이터에서 배당금 찾기 (티커명 매칭)
         for(let j=1; j<dollarApp.masterData.length; j++) {
             let mRow = dollarApp.masterData[j];
-            let mTicker = mRow[1] || ''; // 마스터 시트 B열(티커)
-            let mName = mRow[2] || '';   // 마스터 시트 C열(이름)
+            if (!mRow || mRow.length < 5) continue;
+            let mTicker = mRow[1] || ''; 
+            let mName = mRow[2] || '';   
             
-            // 포트폴리오의 티커명과 마스터의 티커명이 같거나 이름이 같으면
-            if (mTicker === ticker || mName === stockName || mName.includes(stockName)) {
-                let rawDiv = parseFloat(mRow[4]) || 0; // 마스터 시트 E열(4주평균배당)
-                divExpected = (holdQty * rawDiv * 0.85); // 세후 15% 제외 수익
+            if (mTicker === ticker || mName === stockName || (mTicker && ticker && mTicker.toUpperCase() === ticker.toUpperCase())) {
+                let rawDiv = parseFloat(mRow[4]) || 0; 
+                divExpected = (holdQty * rawDiv * 0.85); 
                 weeklyIncome += divExpected;
                 break;
             }
         }
         
-        // 일일 모으기 금액은 주 5일 기준으로 주간 지출 산정
         const expenseExpected = (dailyBuy * 5); 
         weeklyExpense += expenseExpected; 
 
-        // 수량이 있거나 모으기 금액이 설정된 종목만 테이블에 표시
         if(holdQty > 0 || dailyBuy > 0) {
+            let formattedQty = holdQty === 0 ? "0" : (Number.isInteger(holdQty) ? holdQty.toLocaleString() : holdQty.toFixed(4).replace(/\.?0+$/, ''));
             listRows += `
-                <tr class="border-b border-slate-100 hover:bg-slate-50">
-                    <td class="p-3">
-                        <div class="font-bold text-slate-700">${stockName}</div>
-                        <div class="text-[10px] text-slate-400 font-mono">${ticker}</div>
+                <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td class="p-3 pl-4">
+                        <div class="font-bold text-slate-800">${stockName}</div>
+                        <div class="text-[11px] text-slate-400 font-mono">${ticker}</div>
                     </td>
-                    <td class="p-3 text-center"><span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded font-bold">${stockType}</span></td>
-                    <td class="p-3 text-right"><span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">${holdQty}주</span></td>
-                    <td class="p-3 text-right text-green-600 font-mono font-bold">+$${divExpected.toFixed(2)}</td>
-                    <td class="p-3 text-right text-red-500 font-mono font-bold">-$${expenseExpected.toFixed(2)}</td>
+                    <td class="p-3 text-center">
+                        <span class="text-xs ${stockType === '거치' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'} px-2.5 py-1 rounded-md font-bold">${stockType}</span>
+                    </td>
+                    <td class="p-3 text-right">
+                        <span class="text-xs bg-slate-100 px-2.5 py-1 rounded-md text-slate-700 font-bold font-mono">${formattedQty}주</span>
+                    </td>
+                    <td class="p-3 text-right text-emerald-600 font-mono font-bold">+$${divExpected.toFixed(2)}</td>
+                    <td class="p-3 text-right pr-4 text-rose-500 font-mono font-bold">-$${expenseExpected.toFixed(2)}</td>
                 </tr>
             `;
         }
@@ -253,40 +245,47 @@ function renderMemberDashboard() {
 
     const uiHtml = `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-gradient-to-br from-green-50 to-emerald-100 p-5 rounded-2xl border border-green-200 shadow-sm">
-                <div class="text-xs font-bold text-green-700 mb-1">📈 주간 공짜 배당 수입</div>
-                <div class="text-3xl font-black text-green-800 font-mono">$${weeklyIncome.toFixed(2)}</div>
-            </div>
-            <div class="bg-gradient-to-br from-red-50 to-rose-100 p-5 rounded-2xl border border-red-200 shadow-sm">
-                <div class="text-xs font-bold text-red-700 mb-1">💸 주간 모으기 총 지출</div>
-                <div class="text-3xl font-black text-red-800 font-mono">$${weeklyExpense.toFixed(2)}</div>
-            </div>
-            <div class="bg-gradient-to-br ${isSurplus ? 'from-blue-50 to-indigo-100 border-blue-200' : 'from-orange-50 to-amber-100 border-orange-200'} p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
-                <div class="text-xs font-bold ${isSurplus ? 'text-blue-700' : 'text-orange-700'} mb-1">
-                    ${isSurplus ? '🔥 무자본 자급자족 상태!' : '⚠️ 자급자족 미달 (보충 필요)'}
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-100 p-5 rounded-2xl border border-emerald-200 shadow-sm">
+                <div class="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1">
+                    <i class="fas fa-arrow-trend-up"></i> 주간 예상 배당 수입 (세후)
                 </div>
-                <div class="text-3xl font-black ${isSurplus ? 'text-blue-800' : 'text-orange-800'} font-mono flex items-end justify-between">
+                <div class="text-3xl font-black text-emerald-800 font-mono">$${weeklyIncome.toFixed(2)}</div>
+            </div>
+            <div class="bg-gradient-to-br from-rose-50 to-red-100 p-5 rounded-2xl border border-rose-200 shadow-sm">
+                <div class="text-xs font-bold text-rose-700 mb-1 flex items-center gap-1">
+                    <i class="fas fa-coins"></i> 주간 모으기 지출 (5일 기준)
+                </div>
+                <div class="text-3xl font-black text-rose-800 font-mono">$${weeklyExpense.toFixed(2)}</div>
+            </div>
+            <div class="bg-gradient-to-br ${isSurplus ? 'from-indigo-50 to-blue-100 border-indigo-200' : 'from-amber-50 to-orange-100 border-amber-200'} p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
+                <div class="text-xs font-bold ${isSurplus ? 'text-indigo-700' : 'text-amber-700'} mb-1 flex items-center gap-1">
+                    ${isSurplus ? '<i class="fas fa-fire text-blue-600"></i> 무자본 자급자족 상태!' : '<i class="fas fa-triangle-exclamation text-amber-600"></i> 자급자족 미달 (보충 필요)'}
+                </div>
+                <div class="text-3xl font-black ${isSurplus ? 'text-indigo-900' : 'text-amber-900'} font-mono flex items-end justify-between">
                     <span>${isSurplus ? '+' : '-'}$${Math.abs(netCash).toFixed(2)}</span>
-                    <span class="text-sm bg-white/50 px-2 py-1 rounded-lg">효율 ${ratio}%</span>
+                    <span class="text-xs bg-white/70 text-slate-700 px-2 py-1 rounded-lg font-bold">충당률 ${ratio}%</span>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="bg-slate-800 text-white p-3 font-bold text-sm">📋 ${member}님의 1달러 파이프라인 명세서</div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="bg-slate-800 text-white p-4 font-bold text-sm flex items-center justify-between">
+                <span class="flex items-center gap-2"><i class="fas fa-clipboard-list text-yellow-400"></i> ${member}님의 $1 파이프라인 명세서</span>
+                <span class="text-xs font-normal text-slate-300">주 5일 연산 기준</span>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left whitespace-nowrap">
                     <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-xs">
                         <tr>
-                            <th class="p-3">종목명/티커</th>
-                            <th class="p-3 text-center">전략 유형</th>
-                            <th class="p-3 text-right">거치 수량</th>
-                            <th class="p-3 text-right">예상 주수입</th>
-                            <th class="p-3 text-right">모으기 주지출</th>
+                            <th class="p-3.5 pl-4">종목명 / 티커</th>
+                            <th class="p-3.5 text-center">전략 유형</th>
+                            <th class="p-3.5 text-right">보유 수량</th>
+                            <th class="p-3.5 text-right">주간 예상 수입</th>
+                            <th class="p-3.5 text-right pr-4">주간 모으기 지출</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        ${listRows || '<tr><td colspan="5" class="p-4 text-center text-slate-400">데이터가 없습니다.</td></tr>'}
+                    <tbody class="divide-y divide-slate-100 font-medium">
+                        ${listRows || '<tr><td colspan="5" class="p-6 text-center text-slate-400 font-bold">등록된 종목 데이터가 없습니다.</td></tr>'}
                     </tbody>
                 </table>
             </div>
