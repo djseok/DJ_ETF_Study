@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (셀 병합 파싱 무적 패치 탑재)
+// 🌐 $1 복리 프로젝트 전용 엔진 (레이아웃 찌그러짐 완벽 방어 패치)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -216,7 +216,7 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 3. 멤버별 자급자족 현황판 (🎯 셀 병합 스마트 추적 로직 적용)
+// 3. 멤버별 자급자족 현황판 (🎯 레이아웃 찌그러짐 해제 무적 보정)
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
@@ -227,7 +227,6 @@ function populateDollarMemberSelect() {
     let currentMem = '';
     for(let i=1; i<dollarApp.portData.length; i++) {
         let name = (dollarApp.portData[i][0] || '').trim();
-        // 🎯 A열에 이름이 있으면 갱신 (병합된 셀 대비)
         if(name !== '') currentMem = name;
         if(currentMem && !members.includes(currentMem)) members.push(currentMem);
     }
@@ -250,6 +249,9 @@ function renderMemberDashboard() {
     const container = document.getElementById('member-dashboard-cards');
     if (!container) return;
 
+    // 🚀 핵심 교정: index.html에 걸려있던 grid-cols-3 부모 스타일을 수직 전개(space-y-6)로 강제 변경!
+    container.className = "space-y-6 w-full";
+
     if (member === 'all') { 
         container.innerHTML = `
             <div class="p-8 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">
@@ -263,25 +265,25 @@ function renderMemberDashboard() {
     let weeklyIncome = 0;
     let weeklyExpense = 0;
     let stockCardsHtml = '';
-    let currentMember = ''; // 🎯 핵심: 구글 시트 셀 병합(Merged Cells) 추적 기억 변수
+    let currentMember = '';
 
     for(let i=1; i<dollarApp.portData.length; i++) {
         let row = dollarApp.portData[i];
         if (!row || row.length < 2) continue;
 
-        // A열에 멤버 이름이 있으면 그 이름을 기억하고, 빈칸이면 이전 행의 멤버 이름을 유지함!
         let rawMemberName = (row[0] || '').trim();
         if (rawMemberName !== '') {
             currentMember = rawMemberName;
         }
 
-        // 선택한 멤버(D, S, J)가 아니면 다음 행으로!
         if (currentMember !== member) continue;
 
         const ticker = (row[1] || '').trim(); 
         const stockName = (row[2] || '').trim() || ticker; 
         const stockType = (row[3] || '').trim() || '거치'; 
         
+        if(!ticker) continue; 
+
         const holdQty = cleanNumber(row[4]);      // E열 보유수량
         const dailyBuy = cleanNumber(row[5]);     // F열 일일모으기금액
         const price = getLivePrice(ticker);        // 현재주가
@@ -295,7 +297,7 @@ function renderMemberDashboard() {
 
         const itemNet = divExpected - expenseExpected;
 
-        if(holdQty > 0 || dailyBuy > 0 || ticker !== '') {
+        if(holdQty > 0 || dailyBuy > 0) {
             let formattedQty = holdQty === 0 ? "0" : (Number.isInteger(holdQty) ? holdQty.toLocaleString() : holdQty.toFixed(4).replace(/\.?0+$/, ''));
             
             stockCardsHtml += `
@@ -351,7 +353,7 @@ function renderMemberDashboard() {
     const isSurplus = netCash >= 0;
 
     container.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-gradient-to-br from-emerald-50 to-teal-100 p-5 rounded-2xl border border-emerald-200 shadow-sm flex flex-col justify-between">
                 <div class="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1">
                     <i class="fas fa-arrow-trend-up"></i> 주간 예상 배당 수입 (세후)
@@ -382,7 +384,7 @@ function renderMemberDashboard() {
             </div>
         </div>
 
-        <div class="space-y-4">
+        <div class="space-y-4 pt-2">
             <div class="flex items-center justify-between px-1">
                 <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
                     <i class="fas fa-cubes text-yellow-500"></i> ${member}님의 종목별 $1 파이프라인 카드
