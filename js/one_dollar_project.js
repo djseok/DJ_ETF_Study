@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (시트 H열: $1 투입 시 분배금 효율 중심)
+// 🌐 $1 복리 프로젝트 전용 엔진 (셀 병합 파싱 무적 패치 탑재)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -11,14 +11,14 @@ const DOLLAR_PORT_URL = DOLLAR_PORT_BASE + "&t=" + DOLLAR_TIMESTAMP;
 const dollarApp = {
     masterData: [],
     portData: [],
-    sortKey: 'efficiency_krw', // 🎯 기본 정렬: 시트 H열 (1달러당 분배금 원화)
+    sortKey: 'efficiency_krw',
     sortAsc: false,
     liveFxRate: 1420,
     selectedLumpTickers: []
 };
 
 // ---------------------------------------------------------
-// 1. 서브 탭 전환 제어
+// 1. 유틸리티 및 파서 함수
 // ---------------------------------------------------------
 function switchDollarSubTab(tabName) {
     const btnScan = document.getElementById('btnDollarScanner');
@@ -66,7 +66,7 @@ function parseSimpleArrayCSV(text) {
     });
 }
 
-// 🛡️ 무적의 숫자 정제 함수 (콤마, 원화, 달러, 주 등 문자를 완벽 제거)
+// 🛡️ 숫자 정제 함수 (문자, 콤마, 기호 완벽 제거)
 function cleanNumber(val) {
     if (val === undefined || val === null || val === '') return 0;
     if (typeof val === 'number') return isNaN(val) || !isFinite(val) ? 0 : val;
@@ -75,7 +75,7 @@ function cleanNumber(val) {
     return isNaN(num) || !isFinite(num) ? 0 : num;
 }
 
-// 🎯 주가 찾기 레이더 (포트폴리오 G열 우선 ➔ 마스터 D열 백업)
+// 🎯 주가 레이더 (포트폴리오 G열 우선 ➔ 마스터 D열 백업)
 function getLivePrice(ticker) {
     if (!ticker) return 0;
     const t = ticker.toUpperCase().trim();
@@ -98,7 +98,7 @@ function getLivePrice(ticker) {
     return 0;
 }
 
-// 🎯 배당금 찾기 레이더 (마스터 시트 E열 전용)
+// 🎯 배당금 레이더 (마스터 시트 E열)
 function getDividend(ticker, stockName) {
     const t = ticker ? ticker.toUpperCase().trim() : '';
     const n = stockName ? stockName.toUpperCase().trim() : '';
@@ -141,7 +141,7 @@ async function loadDollarData() {
 }
 
 // ---------------------------------------------------------
-// 2. 1달러 생산성 스캐너 (🎯 시트 H열: 1달러 투입 시 분배금 효율 표출)
+// 2. 1달러 생산성 스캐너 렌더링
 // ---------------------------------------------------------
 function renderDollarTable() {
     const tbody = document.getElementById('dollar-table-body');
@@ -158,19 +158,17 @@ function renderDollarTable() {
         const ticker = (row[1] || '').trim();
         const name = (row[2] || '').trim();
         
-        const price = getLivePrice(ticker); // 주가 ($)
-        const rawDiv = cleanNumber(row[4]); // 주당 분배금 ($)
+        const price = getLivePrice(ticker); 
+        const rawDiv = cleanNumber(row[4]); 
         
         const limit = row[11] || 'X';
         const decimal = row[12] || 'O';
         
         if (!ticker || price <= 0) continue;
 
-        // 🎯 1달러 투입 시 분배금 효율 연산 ($ 및 원화 H열 파싱)
         const afterTaxDiv = rawDiv * 0.85; 
-        const efficiency_usd = price > 0 ? (afterTaxDiv / price) : 0; // $1 구매 시 배당($)
+        const efficiency_usd = price > 0 ? (afterTaxDiv / price) : 0;
         
-        // 시트 H열(row[7])에 계산되어 있는 "1달러 구매시 분배금(원화)" 직접 수치 추출
         let sheetH_krw = row[7] ? cleanNumber(row[7]) : 0;
         const efficiency_krw = sheetH_krw > 0 ? sheetH_krw : (efficiency_usd * dollarApp.liveFxRate);
 
@@ -178,7 +176,7 @@ function renderDollarTable() {
             displayName: `${ticker} <span class="text-xs text-slate-400 ml-1">(${name})</span>`, 
             price: price, 
             efficiency: efficiency_usd, 
-            efficiency_krw: efficiency_krw, // 🎯 H열 원화 효율 수치
+            efficiency_krw: efficiency_krw,
             limit: limit, 
             decimal: decimal 
         });
@@ -218,7 +216,7 @@ function sortDollarTable(key) {
 }
 
 // ---------------------------------------------------------
-// 3. 멤버별 자급자족 현황판 (스마트 카드 UI)
+// 3. 멤버별 자급자족 현황판 (🎯 셀 병합 스마트 추적 로직 적용)
 // ---------------------------------------------------------
 function populateDollarMemberSelect() {
     if (!dollarApp.portData || dollarApp.portData.length <= 1) return;
@@ -226,9 +224,12 @@ function populateDollarMemberSelect() {
     const lumpSelect = document.getElementById('lump-member-select');
     
     let members = [];
+    let currentMem = '';
     for(let i=1; i<dollarApp.portData.length; i++) {
         let name = (dollarApp.portData[i][0] || '').trim();
-        if(name && !members.includes(name)) members.push(name);
+        // 🎯 A열에 이름이 있으면 갱신 (병합된 셀 대비)
+        if(name !== '') currentMem = name;
+        if(currentMem && !members.includes(currentMem)) members.push(currentMem);
     }
     
     if(select) {
@@ -262,11 +263,20 @@ function renderMemberDashboard() {
     let weeklyIncome = 0;
     let weeklyExpense = 0;
     let stockCardsHtml = '';
+    let currentMember = ''; // 🎯 핵심: 구글 시트 셀 병합(Merged Cells) 추적 기억 변수
 
     for(let i=1; i<dollarApp.portData.length; i++) {
         let row = dollarApp.portData[i];
-        if (!row || row.length < 5) continue;
-        if ((row[0] || '').trim() !== member) continue;
+        if (!row || row.length < 2) continue;
+
+        // A열에 멤버 이름이 있으면 그 이름을 기억하고, 빈칸이면 이전 행의 멤버 이름을 유지함!
+        let rawMemberName = (row[0] || '').trim();
+        if (rawMemberName !== '') {
+            currentMember = rawMemberName;
+        }
+
+        // 선택한 멤버(D, S, J)가 아니면 다음 행으로!
+        if (currentMember !== member) continue;
 
         const ticker = (row[1] || '').trim(); 
         const stockName = (row[2] || '').trim() || ticker; 
@@ -285,7 +295,7 @@ function renderMemberDashboard() {
 
         const itemNet = divExpected - expenseExpected;
 
-        if(holdQty > 0 || dailyBuy > 0) {
+        if(holdQty > 0 || dailyBuy > 0 || ticker !== '') {
             let formattedQty = holdQty === 0 ? "0" : (Number.isInteger(holdQty) ? holdQty.toLocaleString() : holdQty.toFixed(4).replace(/\.?0+$/, ''));
             
             stockCardsHtml += `
@@ -388,7 +398,7 @@ function renderMemberDashboard() {
 }
 
 // ---------------------------------------------------------
-// 🚀 4. 거치 시뮬레이션 전용 연산 및 UI 엔진
+// 4. 거치 시뮬레이션 전용 연산 및 UI 엔진
 // ---------------------------------------------------------
 function initLumpSimulatorView() {
     const rateText = document.getElementById('lump-fx-rate-text');
@@ -558,9 +568,14 @@ function renderLumpSimulator() {
 
         let existingMemberShares = 0;
         if (selectedMember !== 'all') {
+            let currentMem = '';
             for(let k=1; k<dollarApp.portData.length; k++) {
                 let pRow = dollarApp.portData[k];
-                if((pRow[0]||'').trim() === selectedMember && (pRow[1]||'').trim() === ticker) {
+                if(!pRow || pRow.length < 2) continue;
+                let mName = (pRow[0] || '').trim();
+                if(mName !== '') currentMem = mName;
+
+                if(currentMem === selectedMember && (pRow[1]||'').trim().toUpperCase() === ticker.toUpperCase()) {
                     existingMemberShares += cleanNumber(pRow[4]); 
                 }
             }
