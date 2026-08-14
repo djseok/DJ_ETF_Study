@@ -1,5 +1,5 @@
 // =========================================================
-// 🌐 $1 복리 프로젝트 전용 엔진 (💎 TR & J/K/L 누적배당 연동 완벽 패치)
+// 🌐 $1 복리 프로젝트 전용 엔진 (💎 TR & J/K/L 누적배당 연동 완벽 패치 및 G,H열 다이렉트 연동)
 // =========================================================
 
 const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
@@ -154,16 +154,14 @@ function renderDollarTable() {
         const ticker = (row[1] || '').trim();
         const name = (row[2] || '').trim();
         const price = getLivePrice(ticker); 
-        const rawDiv = cleanNumber(row[4]); 
         const limit = row[11] || 'X';
         const decimal = row[12] || 'O';
         
         if (!ticker || price <= 0) continue;
 
-        const afterTaxDiv = rawDiv * 0.85; 
-        const efficiency_usd = price > 0 ? (afterTaxDiv / price) : 0;
-        let sheetH_krw = row[7] ? cleanNumber(row[7]) : 0;
-        const efficiency_krw = sheetH_krw > 0 ? sheetH_krw : (efficiency_usd * dollarApp.liveFxRate);
+        // 🔥 동진님 맞춤 패치: 구글 시트 G열(인덱스 6)과 H열(인덱스 7)을 직접 읽어옵니다.
+        const efficiency_usd = cleanNumber(row[6]); // G열: 1달러당 분배금(달러)
+        const efficiency_krw = cleanNumber(row[7]); // H열: 1달러당 분배금(원화)
 
         tableData.push({ 
             displayName: `${ticker} <span class="text-xs text-slate-400 ml-1">(${name})</span>`, 
@@ -193,7 +191,7 @@ function renderDollarTable() {
         tr.innerHTML = `
             <td class="px-4 py-3 font-bold text-slate-800">${rankBadge}${item.displayName}</td>
             <td class="px-4 py-3 text-right font-mono text-slate-600">$${item.price.toFixed(2)}</td>
-            <td class="px-4 py-3 text-right font-mono font-bold text-slate-700 bg-slate-50/50">$${item.efficiency.toFixed(5)}</td>
+            <td class="px-4 py-3 text-right font-mono font-bold text-slate-700 bg-slate-50/50">$${item.efficiency.toFixed(5)} <span class="text-[10px] text-slate-400 font-normal">(G열)</span></td>
             <td class="px-4 py-3 text-right font-mono font-black text-blue-600 bg-blue-50/30">${item.efficiency_krw.toFixed(1)}원 <span class="text-[10px] text-slate-400 font-normal">(H열)</span></td>
             <td class="px-4 py-3 text-center text-xs font-bold ${item.limit === 'X' ? 'text-green-600' : 'text-red-500'}">${item.limit}</td>
             <td class="px-4 py-3 text-center text-xs font-bold ${item.decimal === 'O' ? 'text-blue-600' : 'text-slate-400'}">${item.decimal}</td>
