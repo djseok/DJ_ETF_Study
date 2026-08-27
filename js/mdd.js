@@ -23,10 +23,12 @@ async function runAdvancedMDD() {
     try {
         // 1. 야후 파이낸스 5년치 일봉 데이터 호출
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=5y&interval=1d`;
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        
+        // 💡 403 에러 해결: corsproxy.io 대신 api.codetabs.com으로 프록시 우회 서버 교체
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${targetUrl}`;
 
         const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error("서ver 응답 실패");
+        if (!response.ok) throw new Error("서버 응답 실패");
         
         const data = await response.json();
         if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("종목 없음");
