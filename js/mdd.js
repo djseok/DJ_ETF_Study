@@ -24,8 +24,8 @@ async function runAdvancedMDD() {
         // 1. 야후 파이낸스 5년치 일봉 데이터 호출
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=5y&interval=1d`;
         
-        // 💡 403 에러 해결: corsproxy.io 대신 api.codetabs.com으로 프록시 우회 서버 교체
-        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${targetUrl}`;
+        // 💡 해결: api.allorigins.win의 raw 엔드포인트로 프록시 서버 교체 (URL 인코딩 필수)
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
 
         const response = await fetch(proxyUrl);
         if (!response.ok) throw new Error("서버 응답 실패");
@@ -145,28 +145,22 @@ async function runAdvancedMDD() {
 // 📊 [구간별 회복률] 동적 연산 및 테이블 생성 함수
 function calculateRecoveryMatrix(prices, drawdowns) {
     const totalDays = prices.length;
-    // 계산할 하락률 바스켓 기준값 설정
     const levels = [-5, -10, -15, -20, -25, -30, -35, -40, -45, -50];
     let html = "";
 
     levels.forEach(level => {
-        let reachedCount = 0;   // 해당 하락률에 도달했던 총 영업일 수
-        let recoveredCount = 0; // 도달했던 날들 중, '미래'에 전고점을 복구한 일 수
+        let reachedCount = 0;   
+        let recoveredCount = 0; 
 
         for (let i = 0; i < totalDays; i++) {
-            // 그날의 하락률이 타겟 레벨 이하로 깊게 파였는가?
             if (drawdowns[i] <= level) {
                 reachedCount++;
-
-                // 퀀트 전수 조사: 이 날(i) 이후로 미래에 새로운 최고가가 한 번이라도 나왔는지 체크
                 let isRecovered = false;
-                // 해당 시점 기준의 로컬 최고가 구하기
                 let localMax = prices[0];
                 for(let k = 0; k <= i; k++) {
                     if(prices[k] > localMax) localMax = prices[k];
                 }
 
-                // 미래 데이터를 탐색하며 고점을 회복했는지 검증
                 for (let j = i + 1; j < totalDays; j++) {
                     if (prices[j] >= localMax) {
                         isRecovered = true;
@@ -177,12 +171,9 @@ function calculateRecoveryMatrix(prices, drawdowns) {
             }
         }
 
-        // 전체 일수 대비 도달 빈도 비중
         const pctOfTotal = totalDays > 0 ? (reachedCount / totalDays) * 100 : 0;
-        // 회복률 확률 산출
         const recoveryRate = reachedCount > 0 ? (recoveredCount / reachedCount) * 100 : 0;
 
-        // UI에 그리기 위한 진행바 컬러 및 데이터 세팅
         let barColor = "bg-blue-500";
         if (recoveryRate < 100) barColor = "bg-orange-500";
         if (reachedCount === 0) barColor = "bg-slate-300";
