@@ -1,5 +1,5 @@
 // =========================================================
-// 📉 실시간 API 연동형 고급 MDD 및 구간 회복률 계산 엔진
+// 📉 실시간 API 연동형 고급 MDD 및 구간 회복률 계산 엔진 (FMP API V2)
 // =========================================================
 
 let mddChartInstance = null; // Chart.js 인스턴스 초기화용
@@ -16,61 +16,39 @@ async function runAdvancedMDD() {
     }
 
     // 로딩 UI 시작
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 최적의 데이터 터널을 찾는 중... ⏳`;
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 공식 API를 호출하고 있습니다... ⏳`;
     statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
     resultContainer.classList.add('hidden'); 
 
     try {
-        // 1. 야후 파이낸스 5년치 일봉 데이터 호출
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=5y&interval=1d`;
+        // 1. FMP 공식 API를 통한 5년치(약 1250거래일) 데이터 직접 호출 (CORS 에러 없음)
+        const FMP_API_KEY = "UJT2GZE4YWddOWp4SczYFpYufroPrlAy"; 
+        const targetUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${tickerInput}?timeseries=1250&apikey=${FMP_API_KEY}`;
+
+        const response = await fetch(targetUrl);
+        if (!response.ok) throw new Error("API 서버 응답 실패");
         
-        // 💡 핵심: 무적의 다중 프록시 (Fallback) 배열
-        const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-            `https://thingproxy.freeboard.io/fetch/${targetUrl}`
-        ];
-
-        let data = null;
-
-        // 프록시 서버가 막히면 다음 서버로 자동 재시도
-        for (let proxy of proxies) {
-            try {
-                const response = await fetch(proxy);
-                if (response.ok) {
-                    data = await response.json();
-                    break; // 성공하면 즉시 루프 탈출
-                }
-            } catch (e) {
-                console.warn(`[프록시 터널 막힘] 다음 서버로 자동 우회합니다: ${proxy}`);
-                continue;
-            }
+        const data = await response.json();
+        
+        if (!data.historical || data.historical.length === 0) {
+            throw new Error("종목을 찾을 수 없거나 데이터가 없습니다.");
         }
 
-        // 모든 프록시가 차단되었을 경우의 예외 처리
-        if (!data) throw new Error("서버 응답 실패: 현재 사용 가능한 모든 무료 데이터 터널이 혼잡합니다.");
-        if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("종목 없음");
-
-        const timestamps = data.chart.result[0].timestamp;
-        const quote = data.chart.result[0].indicators.quote[0];
-        const rawPrices = quote.close; 
+        // 2. FMP 데이터는 최신 날짜가 먼저 오므로(내림차순), MDD 계산을 위해 과거 순(오름차순)으로 뒤집기
+        const historical = data.historical.reverse();
 
         let dates = [];
         let prices = [];
         
-        // 데이터 정제 (null 제거)
-        for(let i = 0; i < rawPrices.length; i++) {
-            if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
-                const d = new Date(timestamps[i] * 1000);
-                dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
-                prices.push(rawPrices[i]);
-            }
+        // 데이터 정제 (날짜와 종가 추출)
+        for (let item of historical) {
+            dates.push(item.date); // 'YYYY-MM-DD' 형식으로 바로 들어옵니다.
+            prices.push(item.close);
         }
 
-        if (prices.length < 2) throw new Error("데이터 부족");
+        if (prices.length < 2) throw new Error("MDD를 계산하기 위한 데이터가 부족합니다.");
 
-        // 2. 기본 시계열 연산 (ATH, MDD 추출)
+        // 3. 기본 시계열 연산 (ATH, MDD 추출)
         let currentPrice = prices[prices.length - 1];
         let currentDate = dates[dates.length - 1];
         
@@ -103,7 +81,7 @@ async function runAdvancedMDD() {
 
         let currentDrawdown = ((currentPrice - athPrice) / athPrice) * 100;
 
-        // 3. UI 텍스트 꽂아넣기
+        // 4. UI 텍스트 꽂아넣기
         document.getElementById('mdd-current-price').innerText = `$${currentPrice.toFixed(2)}`;
         document.getElementById('mdd-current-date').innerText = currentDate;
         document.getElementById('mdd-ath-price').innerText = `$${athPrice.toFixed(2)}`;
@@ -144,13 +122,13 @@ async function runAdvancedMDD() {
         document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
         document.getElementById('price-drop-40').innerText = `$${(athPrice * 0.60).toFixed(2)}`;
 
-        // 4. 구간별 회복률 가동
+        // 5. 🔥 핵심: 구간별 회복률 고급 알고리즘 가동
         calculateRecoveryMatrix(prices, drawdowns);
 
-        // 5. 차트 렌더링
+        // 6. 차트 렌더링
         renderUnderwaterChart(dates, drawdowns, tickerInput);
 
-        statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (최신 시세 동기화)`;
+        statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (독립 API 서버 가동 중)`;
         statusMsg.className = "text-xs text-green-600 mt-2 font-bold";
         resultContainer.classList.remove('hidden');
 
@@ -164,16 +142,19 @@ async function runAdvancedMDD() {
 // 📊 [구간별 회복률] 동적 연산 및 테이블 생성 함수
 function calculateRecoveryMatrix(prices, drawdowns) {
     const totalDays = prices.length;
+    // 계산할 하락률 바스켓 기준값 설정
     const levels = [-5, -10, -15, -20, -25, -30, -35, -40, -45, -50];
     let html = "";
 
     levels.forEach(level => {
-        let reachedCount = 0;   
-        let recoveredCount = 0; 
+        let reachedCount = 0;   // 해당 하락률에 도달했던 총 영업일 수
+        let recoveredCount = 0; // 도달했던 날들 중, '미래'에 전고점을 복구한 일 수
 
         for (let i = 0; i < totalDays; i++) {
+            // 그날의 하락률이 타겟 레벨 이하로 깊게 파였는가?
             if (drawdowns[i] <= level) {
                 reachedCount++;
+
                 let isRecovered = false;
                 let localMax = prices[0];
                 for(let k = 0; k <= i; k++) {
