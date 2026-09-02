@@ -16,7 +16,7 @@ async function runAdvancedMDD() {
     }
 
     // 로딩 UI 시작
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 5년치 통계를 연산하므로 약 1~2초 소요됩니다... ⏳`;
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 최적의 데이터 터널을 찾는 중... ⏳`;
     statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
     resultContainer.classList.add('hidden'); 
 
@@ -24,13 +24,32 @@ async function runAdvancedMDD() {
         // 1. 야후 파이낸스 5년치 일봉 데이터 호출
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=5y&interval=1d`;
         
-        // 💡 해결: api.allorigins.win의 raw 엔드포인트로 프록시 서버 교체 (URL 인코딩 필수)
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        // 💡 핵심: 무적의 다중 프록시 (Fallback) 배열
+        const proxies = [
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+            `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+        ];
 
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error("서버 응답 실패");
-        
-        const data = await response.json();
+        let data = null;
+
+        // 프록시 서버가 막히면 다음 서버로 자동 재시도
+        for (let proxy of proxies) {
+            try {
+                const response = await fetch(proxy);
+                if (response.ok) {
+                    data = await response.json();
+                    break; // 성공하면 즉시 루프 탈출
+                }
+            } catch (e) {
+                console.warn(`[프록시 터널 막힘] 다음 서버로 자동 우회합니다: ${proxy}`);
+                continue;
+            }
+        }
+
+        // 모든 프록시가 차단되었을 경우의 예외 처리
+        if (!data) throw new Error("서버 응답 실패: 현재 사용 가능한 모든 무료 데이터 터널이 혼잡합니다.");
         if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("종목 없음");
 
         const timestamps = data.chart.result[0].timestamp;
@@ -125,7 +144,7 @@ async function runAdvancedMDD() {
         document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
         document.getElementById('price-drop-40').innerText = `$${(athPrice * 0.60).toFixed(2)}`;
 
-        // 4. 🔥 핵심: mddcalc 수준의 [구간별 회복률] 고급 알고리즘 가동
+        // 4. 구간별 회복률 가동
         calculateRecoveryMatrix(prices, drawdowns);
 
         // 5. 차트 렌더링
@@ -137,7 +156,7 @@ async function runAdvancedMDD() {
 
     } catch (error) {
         console.error(error);
-        statusMsg.innerHTML = `❌ 데이터를 가져오지 못했습니다. 티커명이 정확한지 확인해주세요.`;
+        statusMsg.innerHTML = `❌ ${error.message}`;
         statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
     }
 }
