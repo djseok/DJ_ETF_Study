@@ -672,7 +672,7 @@
             </div>
         </div>
 
-        <!-- 📜 배당투자설계도 (기존 배당/건보 백테스트) -->
+        <!-- 📜 배당투자설계도 -->
         <div id="viewBacktestDiv" class="hidden space-y-6">
             
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
@@ -790,35 +790,48 @@
                 </div>
             </div>
 
-            <!-- ✨ 10년 복리 시뮬레이터 (배당 vs 지수) -->
+            <!-- ✨ 10년 복리 시뮬레이터 (확장된 지수 비교군) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                 <div class="bg-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
-                    <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 vs 지수 복리 비교</h2>
+                    <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 vs 주요 지수 복리 비교</h2>
                 </div>
                 
                 <div class="p-6 space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-xl border border-slate-100">
-                        <div class="space-y-4">
+                        <div class="space-y-3">
                             <h3 class="text-sm font-black text-slate-700 border-b border-slate-200 pb-2">📈 지수 연평균 성장률(CAGR) 세팅</h3>
-                            <div class="flex items-center justify-between gap-2">
-                                <label class="text-xs font-bold text-slate-500 w-24">나스닥 (NDX)</label>
-                                <div class="relative flex-1">
-                                    <input type="number" id="cagrNdx" value="15" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
-                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">코스피</label>
+                                    <div class="relative w-20"><input type="number" id="cagrKospi" value="3" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
-                            </div>
-                            <div class="flex items-center justify-between gap-2">
-                                <label class="text-xs font-bold text-slate-500 w-24">S&P 500</label>
-                                <div class="relative flex-1">
-                                    <input type="number" id="cagrSpy" value="10" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
-                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">코스닥</label>
+                                    <div class="relative w-20"><input type="number" id="cagrKosdaq" value="4" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
-                            </div>
-                            <div class="flex items-center justify-between gap-2">
-                                <label class="text-xs font-bold text-slate-500 w-24">코스피 (KOSPI)</label>
-                                <div class="relative flex-1">
-                                    <input type="number" id="cagrKospi" value="3" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
-                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">QQQ (나스닥)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrNdx" value="15" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">QLD (나스닥2배)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrQld" value="28" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="QQQ 기준 2배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">TQQQ (나스닥3배)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrTqqq" value="38" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="QQQ 기준 3배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">SPY (S&P500)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrSpy" value="10" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">SSO (S&P 2배)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrSso" value="18" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="SPY 기준 2배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-1">
+                                    <label class="text-xs font-bold text-slate-500">UPRO (S&P 3배)</label>
+                                    <div class="relative w-20"><input type="number" id="cagrUpro" value="24" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="SPY 기준 3배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                             </div>
                         </div>
@@ -828,7 +841,7 @@
                             <div class="flex items-center justify-between gap-2">
                                 <label class="text-xs font-bold text-slate-500 w-32">배당 포트 원금 성장률</label>
                                 <div class="relative flex-1">
-                                    <input type="number" id="cagrBase" value="0" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right" title="커버드콜/고배당 특성상 주가 자체의 상승은 제한적입니다.">
+                                    <input type="number" id="cagrBase" value="0" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
                                     <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
                                 </div>
                             </div>
@@ -843,11 +856,14 @@
                                         <span class="text-sm font-bold text-slate-700">배당금 100% 재투자 대상:</span>
                                     </label>
                                     <select id="dripTarget" disabled class="flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50">
-                                        <option value="ndx">나스닥 100 (QQQ 등)</option>
-                                        <option value="spy">S&P 500 (SPY 등)</option>
-                                        <option value="qld">나스닥 2배 (QLD) - 변동성 차감</option>
-                                        <option value="tqqq">나스닥 3배 (TQQQ) - 변동성 차감</option>
-                                        <option value="kospi">코스피 (KODEX 200)</option>
+                                        <option value="ndx">QQQ (나스닥 100)</option>
+                                        <option value="qld">QLD (나스닥 2배)</option>
+                                        <option value="tqqq">TQQQ (나스닥 3배)</option>
+                                        <option value="spy">SPY (S&P 500)</option>
+                                        <option value="sso">SSO (S&P 2배)</option>
+                                        <option value="upro">UPRO (S&P 3배)</option>
+                                        <option value="kospi">코스피 (KOSPI)</option>
+                                        <option value="kosdaq">코스닥 (KOSDAQ)</option>
                                     </select>
                                 </div>
                             </div>
