@@ -1,16 +1,16 @@
 // =========================================================
-// 🛡️ 포트폴리오 통합 배당 & 건보료 시뮬레이터 (js/backtest_div.js)
+// 🛡️ 포트폴리오 통합 배당 & 10년 복리 시뮬레이터 (js/backtest_div.js)
 // =========================================================
 
 const BACKTEST_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=795942259&single=true&output=csv";
 let simEtfDatabase = {};
 let isDivDataLoaded = false;
 const SLOT_COUNT = 5;
+let div10YearChartInstance = null; // 10년 차트 인스턴스 전역 변수
 
 const fmtNum = (num) => new Intl.NumberFormat('ko-KR').format(Math.floor(num));
 const getNum = (str) => parseFloat(String(str).replace(/,/g, '')) || 0;
 
-// 1. 초기 데이터 로드 및 5개 슬롯 동적 생성
 async function fetchBacktestMasterData() {
     if (isDivDataLoaded) return;
 
@@ -19,7 +19,6 @@ async function fetchBacktestMasterData() {
         const csvText = await response.text();
         const lines = csvText.split('\n').filter(line => line.trim() !== '');
         
-        // 데이터 파싱
         for (let i = 1; i < lines.length; i++) {
             const columns = lines[i].split(',');
             if (columns.length >= 6) {
@@ -44,7 +43,6 @@ async function fetchBacktestMasterData() {
     }
 }
 
-// 2. 5개 슬롯 HTML 동적 생성
 function generateSlots() {
     const container = document.getElementById('simSlotsContainer');
     let html = '';
@@ -75,7 +73,6 @@ function generateSlots() {
     container.innerHTML = html;
 }
 
-// 3. 비율 ↔ 금액 동기화 엔진
 function syncFromRatio(index) {
     const totalAsset = getNum(document.getElementById('simTotalAsset').value);
     const ratioInput = document.getElementById(`simSlotRatio${index}`);
@@ -120,17 +117,13 @@ function syncAllFromTotal() {
     runPortfolioSimulator();
 }
 
-// 4. 통합 시뮬레이터 메인 엔진
 function runPortfolioSimulator() {
     let totalInvestedAmount = 0;
     let totalRatio = 0;
-    
     let sumMonthlyGrossDiv = 0;
     let sumMonthlyTaxBase = 0;
-
     let breakdownHtml = '';
     
-    // 테이블 헤더 수정 (최소/평균/최대 시나리오 추가)
     document.querySelector('#simBreakdownTableBody').previousElementSibling.innerHTML = `
         <tr>
             <th class="px-5 py-3">종목명</th>
@@ -156,8 +149,6 @@ function runPortfolioSimulator() {
             
             const monthlyGrossDiv = shares * etf.avgDiv;
             const monthlyTaxBase = shares * etf.taxBase;
-            
-            // 시나리오별 배당금 (세전) 계산
             const minGrossDiv = shares * etf.minDiv;
             const maxGrossDiv = shares * etf.maxDiv;
 
@@ -187,21 +178,19 @@ function runPortfolioSimulator() {
     } else {
         tbody.innerHTML = breakdownHtml;
     }
-
-    document.getElementById('simTotalGrossDiv').textContent = fmtNum(sumMonthlyGrossDiv) + "원";
-    document.getElementById('simTotalTaxBase').textContent = fmtNum(sumMonthlyTaxBase) + "원";
     
-    // Tfoot 합계 영역 레이아웃 조정
-    document.querySelector('#simTotalGrossDiv').parentElement.innerHTML = `
-        <td class="px-5 py-3 text-center">합계</td>
-        <td class="px-5 py-3 text-right">-</td>
-        <td id="simTotalTaxBase" class="px-5 py-3 text-right text-red-600 mono bg-red-50/50">${fmtNum(sumMonthlyTaxBase)}원</td>
-        <td class="px-5 py-3 text-right">-</td>
-        <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono font-black bg-blue-50/30">${fmtNum(sumMonthlyGrossDiv)}원</td>
-        <td class="px-5 py-3 text-right">-</td>
+    document.querySelector('#simBreakdownTableBody').nextElementSibling.innerHTML = `
+        <tr>
+            <td class="px-5 py-3 text-center">합계</td>
+            <td class="px-5 py-3 text-right">-</td>
+            <td id="simTotalTaxBase" class="px-5 py-3 text-right text-red-600 mono bg-red-50/50">${fmtNum(sumMonthlyTaxBase)}원</td>
+            <td class="px-5 py-3 text-right">-</td>
+            <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono font-black bg-blue-50/30">${fmtNum(sumMonthlyGrossDiv)}원</td>
+            <td class="px-5 py-3 text-right">-</td>
+        </tr>
     `;
 
-    // --- 5. 일반계좌 비교 카드 연산 ---
+    // 5. 일반계좌 비교
     const genAnnualTaxBase = sumMonthlyTaxBase * 12;
     const genMonthlyTax = sumMonthlyTaxBase * 0.154;
     const genMonthlyNetDiv = sumMonthlyGrossDiv - genMonthlyTax;
@@ -220,20 +209,189 @@ function runPortfolioSimulator() {
         warningBox.innerHTML = "✅ 피부양자 자격 안전 (1천만 원 이하)";
     }
 
-    // --- 6. ISA 계좌 비교 카드 연산 ---
+    // 6. ISA 계좌 비교 (실제 세법 100% 고증)
     const isaAnnualGross = sumMonthlyGrossDiv * 12;
-    const isaTax = isaAnnualGross > 2000000 ? (isaAnnualGross - 2000000) * 0.099 : 0;
+    const isaAnnualTaxable = sumMonthlyTaxBase * 12;
+    const isaTax = isaAnnualTaxable > 2000000 ? (isaAnnualTaxable - 2000000) * 0.099 : 0;
     const isaMonthlyNet = (isaAnnualGross - isaTax) / 12;
 
     document.getElementById('simIsaNetAvg').textContent = fmtNum(isaMonthlyNet) + "원";
     document.getElementById('simIsaAnnualGross').textContent = fmtNum(isaAnnualGross) + "원";
     document.getElementById('simIsaTax').textContent = "-" + fmtNum(isaTax) + "원";
+
+    // 7. 10년 복리 시뮬레이터 차트 업데이트 호출
+    // 일반 계좌 기준 월 세후 실수령액을 배당 파이프라인의 핵심 현금흐름으로 사용
+    update10YearChart(totalInvestedAmount, genMonthlyNetDiv);
 }
 
-// 이벤트 리스너 세팅
+// =========================================================
+// 📈 10년 장기 투자 시나리오: 배당 vs 지수 복리 차트 엔진
+// =========================================================
+function update10YearChart(initialInvestment, monthlyNetDiv) {
+    if (initialInvestment <= 0) return;
+
+    // 1. 사용자 세팅값 파싱
+    const cagrNdx = parseFloat(document.getElementById('cagrNdx').value) || 15;
+    const cagrSpy = parseFloat(document.getElementById('cagrSpy').value) || 10;
+    const cagrKospi = parseFloat(document.getElementById('cagrKospi').value) || 3;
+    const cagrBase = parseFloat(document.getElementById('cagrBase').value) || 0;
+    
+    const isDrip = document.querySelector('input[name="dripOption"]:checked').value === 'drip';
+    const dripTarget = document.getElementById('dripTarget').value;
+
+    // 2. 타겟 CAGR 매핑 (레버리지는 변동성 끌림 현상을 감안해 보수적으로 산정)
+    let targetCagr = 0;
+    if (dripTarget === 'ndx') targetCagr = cagrNdx;
+    else if (dripTarget === 'spy') targetCagr = cagrSpy;
+    else if (dripTarget === 'kospi') targetCagr = cagrKospi;
+    else if (dripTarget === 'qld') targetCagr = (cagrNdx * 2) - 5; // 레버리지 보수적 감가
+    else if (dripTarget === 'tqqq') targetCagr = (cagrNdx * 3) - 12; // 레버리지 보수적 감가
+
+    // 3. 10년치 데이터 배열 준비
+    const labels = [];
+    const dataNdx = [];
+    const dataSpy = [];
+    const dataKospi = [];
+    const dataPortfolio = [];
+
+    // 4. 연도별 복리 계산 엔진
+    for (let year = 0; year <= 10; year++) {
+        labels.push(`${year}년차`);
+        
+        // 벤치마크 지수 거치 시 (연단위 복리)
+        dataNdx.push(Math.floor(initialInvestment * Math.pow(1 + cagrNdx / 100, year)));
+        dataSpy.push(Math.floor(initialInvestment * Math.pow(1 + cagrSpy / 100, year)));
+        dataKospi.push(Math.floor(initialInvestment * Math.pow(1 + cagrKospi / 100, year)));
+
+        // 내 포트폴리오 연산
+        let portValue = 0;
+        if (!isDrip) {
+            // 시나리오 1: 생활비 전액 소모 (원금만 cagrBase 로 천천히 증가)
+            portValue = initialInvestment * Math.pow(1 + cagrBase / 100, year);
+        } else {
+            // 시나리오 2: 배당금 100% 기계적 재투자 (DRIP)
+            // - 본진은 cagrBase 로 성장
+            let principal = initialInvestment * Math.pow(1 + cagrBase / 100, year);
+            // - 재투자 통장은 매월 배당금을 넣고 targetCagr 의 월 복리로 성장
+            let reinvestBucket = 0;
+            let monthlyTargetRate = Math.pow(1 + targetCagr / 100, 1 / 12) - 1;
+            let totalMonths = year * 12;
+            
+            for (let m = 1; m <= totalMonths; m++) {
+                reinvestBucket = reinvestBucket * (1 + monthlyTargetRate) + monthlyNetDiv;
+            }
+            portValue = principal + reinvestBucket;
+        }
+        dataPortfolio.push(Math.floor(portValue));
+    }
+
+    // 5. Chart.js 렌더링
+    const ctx = document.getElementById('div10YearChart').getContext('2d');
+    
+    if (div10YearChartInstance) {
+        div10YearChartInstance.destroy();
+    }
+
+    div10YearChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: `내 포트폴리오 (${isDrip ? '배당 100% 재투자' : '배당 전액 소모'})`,
+                    data: dataPortfolio,
+                    borderColor: '#4f46e5', // Indigo-600
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    borderWidth: 4,
+                    pointRadius: 4,
+                    tension: 0.3,
+                    fill: true,
+                    order: 1
+                },
+                {
+                    label: '나스닥 100 몰빵',
+                    data: dataNdx,
+                    borderColor: '#0ea5e9', // Sky-500
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 2
+                },
+                {
+                    label: 'S&P 500 몰빵',
+                    data: dataSpy,
+                    borderColor: '#64748b', // Slate-500
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 3
+                },
+                {
+                    label: '코스피 몰빵',
+                    data: dataKospi,
+                    borderColor: '#cbd5e1', // Slate-300
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    order: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { weight: 'bold' } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + fmtNum(context.parsed.y) + '원';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            if(value >= 100000000) return (value / 100000000).toFixed(1) + '억';
+                            if(value >= 10000) return (value / 10000).toFixed(0) + '만';
+                            return value;
+                        },
+                        font: { weight: 'bold' }
+                    },
+                    grid: { color: '#f1f5f9' }
+                },
+                x: { grid: { display: false }, ticks: { font: { weight: 'bold' } } }
+            }
+        }
+    });
+}
+
 function setupEventListeners() {
     const totalInput = document.getElementById('simTotalAsset');
-    if(totalInput) {
-        totalInput.addEventListener('input', syncAllFromTotal);
-    }
+    if(totalInput) totalInput.addEventListener('input', syncAllFromTotal);
+
+    // 10년 차트 관련 변수들 리스너 등록
+    const cagrInputs = ['cagrNdx', 'cagrSpy', 'cagrKospi', 'cagrBase'];
+    cagrInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.addEventListener('input', runPortfolioSimulator);
+    });
+
+    const dripOptions = document.querySelectorAll('input[name="dripOption"]');
+    const dripTargetSelect = document.getElementById('dripTarget');
+
+    dripOptions.forEach(opt => {
+        opt.addEventListener('change', (e) => {
+            dripTargetSelect.disabled = e.target.value !== 'drip';
+            runPortfolioSimulator();
+        });
+    });
+
+    if(dripTargetSelect) dripTargetSelect.addEventListener('change', runPortfolioSimulator);
 }
