@@ -3,25 +3,13 @@
 // =========================================================
 var timestamp = new Date().getTime();
 
-// 1. 매크로 지표 시트 (Characteristic)
 var MACRO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=2016694665&single=true&output=csv&t=" + timestamp;
-
-// 2. 퀀트 신호 시트 (ETF_Quant_Signals)
 var SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1985460214&single=true&output=csv&t=" + timestamp;
-
-// 3. 개별 종목 마스터 시트 (MasterData)
 var MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
-
-// 4. 통합 포트폴리오 및 배당금 실수령 시트
 var PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
-
-// 5. 누적 배당 이력(과거 히스토리)
 var DIVIDEND_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1285467029&single=true&output=csv&t=" + timestamp;
-
-// 6. ETF 배당 규칙(주기 및 평균 예상액 마스터 룰북)
 var DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
 
-// 전역 공유 그릇 설정
 var macroData = [];
 var signalData = [];
 var masterData = []; 
@@ -33,15 +21,20 @@ var globalActualDividendLogs = [];
 var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi', 'OneDollar'];
+    // 배열에 새로 추가한 탭 'BacktestDiv' 포함
+    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi', 'OneDollar', 'BacktestDiv'];
     
     for (var i = 0; i < tabs.length; i++) {
         var t = tabs[i];
         var view = document.getElementById('view' + t);
         var btn = document.getElementById('btnTab' + t);
-        if(view) view.classList.add('hidden');
-        if(view) view.classList.remove('block');
-        if(btn) btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
+        if(view) {
+            view.classList.add('hidden');
+            view.classList.remove('block');
+        }
+        if(btn) {
+            btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
+        }
     }
     
     var capTabName = tabName.charAt(0).toUpperCase() + tabName.slice(1);
@@ -58,6 +51,7 @@ function switchTab(tabName) {
         else if(tabName === 'mdd') activeBtn.className = "flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else if(tabName === 'rsi') activeBtn.className = "flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
         else if(tabName === 'oneDollar') activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-500";
+        else if(tabName === 'backtestDiv') activeBtn.className = "flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-sm border border-slate-200 transition-all whitespace-nowrap";
         else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
     }
 
@@ -65,18 +59,18 @@ function switchTab(tabName) {
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
+    if(tabName === 'backtestDiv' && typeof fetchBacktestMasterData === 'function') fetchBacktestMasterData();
 }
 
-// 🛡️ [핵심 패치] 어떤 쓰레기 값이 들어와도 에러를 내지 않도록 보호막 추가
 function parseCsvToMatrix(text) {
     if (!text) return [];
-    text = text.replace(/^\uFEFF/, ''); // BOM 제거
+    text = text.replace(/^\uFEFF/, '');
     var lines = text.split('\n');
     var result = [];
     
     for (var j = 0; j < lines.length; j++) {
         var line = lines[j];
-        if (!line || line.trim() === '') continue; // 빈 줄 완벽 차단
+        if (!line || line.trim() === '') continue;
         
         var rowResult = [];
         var current = '';
@@ -87,7 +81,6 @@ function parseCsvToMatrix(text) {
             if (char === '"') {
                 inQuotes = !inQuotes;
             } else if (char === ',' && !inQuotes) {
-                // undefined 방지를 위해 강제 문자열 치환 후 trim
                 rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
                 current = '';
             } else {
@@ -96,7 +89,6 @@ function parseCsvToMatrix(text) {
         }
         rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
         
-        // 쉼표만 있는 빈 깡통 배열(,,,,) 거르기
         var isAllEmpty = rowResult.every(val => val === '');
         if (!isAllEmpty) {
             result.push(rowResult);
@@ -118,10 +110,7 @@ async function initDashboard() {
         if (masterRes) masterData = parseCsvToMatrix(await masterRes.text()); 
 
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
-        
-        // ✨ 필터 엔진 초기화
         if (typeof initFilters === 'function') initFilters(); 
-
         if (typeof populateAssetDropdownSelector === 'function') populateAssetDropdownSelector();
 
         var selector = document.getElementById('assetSelector');
@@ -139,7 +128,6 @@ async function initDashboard() {
             await loadPortfolioData('init'); 
         }
 
-        // 초기 화면을 Quant 탭으로 띄웁니다.
         switchTab('quant');
     } catch (err) { 
         console.error("데이터 초기화 실패:", err); 
