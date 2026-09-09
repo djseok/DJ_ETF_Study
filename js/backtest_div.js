@@ -291,7 +291,6 @@ function runPortfolioSimulator() {
     if(elIsaAnnualGross) elIsaAnnualGross.textContent = fmtNum(isaAnnualGross) + "원";
     if(elIsaTax) elIsaTax.textContent = "-" + fmtNum(isaTax) + "원";
 
-    // ✨ [동적 배당률 버그 수정] 거치금(0)과 무관하게 포트폴리오의 '가상 실효 배당수익률(%)'을 산출합니다.
     let yieldSimAmount = 10000000;
     let yieldSumGross = 0;
     let yieldSumTaxBase = 0;
@@ -309,17 +308,20 @@ function runPortfolioSimulator() {
     }
     const yieldGenTax = yieldSumTaxBase * 0.154;
     const yieldNetDiv = yieldSumGross - yieldGenTax;
-    const monthlyNetYield = yieldNetDiv / yieldSimAmount; // 이 포트폴리오 세팅의 "실제 월 배당률" 완성!
+    const monthlyNetYield = yieldNetDiv / yieldSimAmount; 
 
     const monthlyAddEl = document.getElementById('simMonthlyAdd');
     const monthlyAdd = monthlyAddEl ? getNum(monthlyAddEl.value) : 0;
     
-    // 산출된 % 수치를 10년 엔진으로 넘겨줍니다.
-    update10YearChart(totalInvestedAmount, monthlyAdd, monthlyNetYield);
+    // ✨ 차트를 그릴 때, 첫 달의 실제 배당금액(genMonthlyNetDiv)도 텍스트 브리핑용으로 함께 넘겨줍니다.
+    update10YearChart(totalInvestedAmount, monthlyAdd, monthlyNetYield, genMonthlyNetDiv);
 }
 
-function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield) {
-    if (initialInvestment <= 0 && monthlyAdd <= 0) return;
+function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, startingMonthlyDiv) {
+    if (initialInvestment <= 0 && monthlyAdd <= 0) {
+        document.getElementById('expertAdvicePanel').classList.add('hidden');
+        return;
+    }
 
     const cagrMap = {
         kospi: parseFloat(document.getElementById('cagrKospi')?.value) || 3,
@@ -362,19 +364,13 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield) {
         labels.push(`${year}년차`);
         
         for (let m = 1; m <= 12; m++) {
-            // 1. 벤치마크 (거치+월적립에 대해 지수 복리 적용)
             currentBmValue = currentBmValue * (1 + bmMonthlyRate) + monthlyAdd;
-            
-            // 2. 배당 포트 원금 성장 (거치+월적립에 대해 Base 원금 성장률 적용)
             portBaseValue = portBaseValue * (1 + baseMonthlyRate);
             portAddValue = portAddValue * (1 + baseMonthlyRate) + monthlyAdd;
             
             let currentPrincipal = portBaseValue + portAddValue;
-            
-            // ✨ [핵심 수정] 원금이 불어난 만큼, 이번 달 배당금도 동적으로 폭발하게 만듭니다!
             let currentMonthDiv = currentPrincipal * monthlyNetYield;
             
-            // 3. 재투자 통장 굴리기 (배당금을 타겟 지수로 계속 매수)
             if (isDrip) {
                 reinvestBucket = reinvestBucket * (1 + bmMonthlyRate) + currentMonthDiv;
             }
@@ -476,6 +472,61 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield) {
             }
         }
     });
+
+    // ✨ [전문가 브리핑 패널 자동 렌더링 로직]
+    renderExpertAdvice(initialInvestment, monthlyAdd, startingMonthlyDiv, isDrip, dripTarget, targetCagr, dataPrincipalOnly[10], dataDripGains[10], dataBenchmark[10], bmLabel);
+}
+
+function renderExpertAdvice(initial, monthly, startDiv, isDrip, dripTargetName, cagr, finalPrincipal, finalGains, finalBm, bmLabel) {
+    const panel = document.getElementById('expertAdvicePanel');
+    if (!panel) return;
+
+    const totalAsset = finalPrincipal + finalGains;
+    const diffToBm = totalAsset - finalBm;
+    
+    let adviceHtml = `
+        <h3 class="text-xl font-black mb-4 flex items-center text-emerald-400">
+            <i class="fas fa-lightbulb text-yellow-400 mr-2"></i> 퀀트 애널리스트의 포트폴리오 진단
+        </h3>
+        <p class="text-sm leading-relaxed mb-4 text-slate-300">
+            현재 설계하신 전략은 <strong>초기 거치금 ${fmtNum(initial)}원</strong>과 <strong>매월 ${fmtNum(monthly)}원</strong>의 추가 납입을 바탕으로 시작됩니다. 
+            해당 포트폴리오에서 발생하는 <span class="text-white font-bold bg-slate-700 px-2 py-0.5 rounded">첫 달 예상 배당금은 약 ${fmtNum(startDiv)}원</span>입니다.
+        </p>
+    `;
+
+    if (isDrip) {
+        adviceHtml += `
+            <p class="text-sm leading-relaxed mb-4 text-slate-300">
+                이 막대한 배당금을 10년 동안 생활비로 소모하지 않고, <strong>${dripTargetName.toUpperCase()} 지수(연평균 성장률 ${cagr}%)</strong>에 전액 재투자하는 <span class="text-emerald-400 font-bold">DRIP(배당 재투자) 복리 시나리오</span>를 선택하셨습니다.
+            </p>
+            <ul class="space-y-2 text-sm text-slate-200 bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4">
+                <li class="flex justify-between items-center border-b border-slate-700 pb-2"><span>📈 10년 뒤 내 포트폴리오 총 자산:</span> <strong class="text-lg text-emerald-400">${fmtNum(totalAsset)} 원</strong></li>
+                <li class="flex justify-between items-center border-b border-slate-700 pb-2 pt-1"><span class="pl-4 text-slate-400">↳ 내가 10년간 투입한 순수 원금:</span> <strong class="text-slate-300">${fmtNum(finalPrincipal)} 원</strong></li>
+                <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당금 재투자로 벌어들인 순수익:</span> <strong class="text-emerald-500">+ ${fmtNum(finalGains)} 원</strong></li>
+            </ul>
+        `;
+
+        if (diffToBm >= 0) {
+            adviceHtml += `<p class="text-sm text-emerald-300 font-bold"><i class="fas fa-check-circle mr-1"></i> 탁월한 전략입니다! 같은 금액을 변동성이 큰 ${bmLabel}에 단순히 몰빵했을 때(${fmtNum(finalBm)}원)보다 무려 <strong>${fmtNum(diffToBm)}원</strong>을 더 벌어들이며, 하락장 방어력과 수익률을 동시에 잡는 완벽한 자산 배분입니다.</p>`;
+        } else {
+            adviceHtml += `<p class="text-sm text-yellow-300 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i> 10년 뒤 결과는 ${bmLabel}에 몰빵했을 때(${fmtNum(finalBm)}원)가 <strong>${fmtNum(Math.abs(diffToBm))}원</strong> 더 높습니다. 하지만 지수 몰빵은 하락장(MDD)의 고통이 극심하므로, 심리적 안정감과 배당 현금흐름을 원하신다면 현재의 하이브리드 전략이 멘탈 관리에 훨씬 유리합니다.</p>`;
+        }
+
+    } else {
+        adviceHtml += `
+            <p class="text-sm leading-relaxed mb-4 text-slate-300">
+                현재 <strong>배당금을 전액 생활비로 소모하는 시나리오</strong>를 선택하셨습니다. 매월 현금흐름이 발생하여 삶의 질은 높아지지만, 복리 효과가 차단되어 원금 성장은 매우 더디게 진행됩니다.
+            </p>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4 text-sm flex justify-between items-center">
+                <span class="text-slate-200">📉 10년 뒤 내 포트폴리오 총 자산:</span> 
+                <strong class="text-lg text-slate-100">${fmtNum(finalPrincipal)} 원</strong>
+            </div>
+            <p class="text-sm text-yellow-300 font-bold"><i class="fas fa-info-circle mr-1"></i> 자산을 폭발적으로 불려야 하는 시기라면, 위 옵션에서 '배당금 100% 재투자'를 눌러 지수 복리의 마법이 어떻게 일어나는지 확인해 보세요.</p>
+        `;
+    }
+
+    panel.innerHTML = adviceHtml;
+    panel.classList.remove('hidden');
 }
 
 function setupEventListeners() {
