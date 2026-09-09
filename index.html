@@ -23,7 +23,6 @@
             </span>
         </h1>
 
-        <!-- 상단 메뉴 탭 -->
         <div class="flex flex-col md:flex-row flex-wrap gap-2 mb-6">
             <button id="btnTabQuant" onclick="switchTab('quant')" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap">📊 예측 엔진</button>
             <button id="btnTabPort" onclick="switchTab('port')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🏆 클럽 현황</button>
@@ -32,7 +31,6 @@
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
             <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
             <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
-            <!-- ✨ 신규 추가된 백테스트 탭 버튼 -->
             <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-indigo-50 whitespace-nowrap text-indigo-700">🛡️ 건보/배당 백테스트</button>
         </div>
 
@@ -674,83 +672,121 @@
             </div>
         </div>
 
-        <!-- ✨ 신규 추가된 백테스트 화면 (배당/건보료 시뮬레이터) -->
+        <!-- ✨ 신규 추가된 백테스트 화면 (건보료 및 배당 시뮬레이터) -->
         <div id="viewBacktestDiv" class="hidden space-y-6">
-            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
+                <h2 class="text-xl font-black text-slate-800 mb-4 flex items-center"><i class="fas fa-sack-dollar text-yellow-500 mr-2"></i>포트폴리오 총 자산 설정</h2>
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-2"><i class="fas fa-search text-orange-400 mr-2"></i>투자 종목 선택</label>
-                    <select id="simEtfSelector" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-3 shadow-sm">
-                        <option value="">데이터 불러오는 중...</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-2"><i class="fas fa-coins text-yellow-500 mr-2"></i>투자 금액 (원)</label>
-                    <input type="text" id="simInvestmentAmount" value="100,000,000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 text-right shadow-sm">
+                    <label class="block text-sm font-bold text-slate-500 mb-2">💰 운용할 총 투자 시드머니 (원)</label>
+                    <input type="text" id="simTotalAsset" value="100,000,000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xl font-black rounded-xl p-4 focus:ring-indigo-500 focus:border-indigo-500 shadow-inner text-right">
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="simResultPanel" style="display: none;">
-                <!-- 1. 일반 계좌 카드 -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="bg-slate-800 p-4 flex items-center">
-                        <h2 class="text-lg font-bold text-white flex items-center"><i class="fas fa-wallet mr-2"></i>일반 계좌 (건보료 감시)</h2>
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 overflow-x-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-black text-slate-800 flex items-center"><i class="fas fa-layer-group text-blue-500 mr-2"></i>종목별 자산 배분 (최대 5개)</h2>
+                    <span class="text-xs font-bold text-slate-400">* 비율(%)이나 금액을 입력하면 자동 환산됩니다.</span>
+                </div>
+                <div class="space-y-2 min-w-[600px]">
+                    <div class="grid grid-cols-12 gap-3 text-xs font-bold text-slate-500 text-center px-2 pb-1 border-b border-slate-100">
+                        <div class="col-span-5 text-left">투자 종목 선택</div>
+                        <div class="col-span-3">투자 비율 (%)</div>
+                        <div class="col-span-4 text-right">할당 금액 (원)</div>
                     </div>
-                    <div class="p-6 space-y-4">
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-500 text-sm font-bold">확보 수량</span>
-                            <span class="text-lg font-black text-slate-800 mono" id="simGenShares">0주</span>
+                    <div id="simSlotsContainer" class="space-y-2">
+                        <!-- JS에서 동적으로 슬롯 생성됨 -->
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-bold text-sm">
+                    <span class="text-slate-600">할당된 총 비율 / 금액:</span>
+                    <span id="simAllocatedStatus" class="text-indigo-600 font-black mono text-base">0% / 0원</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-50 p-4 border-b border-slate-100 flex items-center">
+                    <h3 class="text-base font-black text-slate-800"><i class="fas fa-receipt text-slate-500 mr-2"></i>포트폴리오 배당 & 과표 기여도 분석</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left whitespace-nowrap">
+                        <thead class="text-xs text-slate-500 font-bold bg-white border-b border-slate-200">
+                            <tr>
+                                <th class="px-5 py-3">종목명</th>
+                                <th class="px-5 py-3 text-right">매수 수량</th>
+                                <th class="px-5 py-3 text-right">월 평균 배당금</th>
+                                <th class="px-5 py-3 text-right text-red-500 bg-red-50/30">월 과세표준 발생액</th>
+                            </tr>
+                        </thead>
+                        <tbody id="simBreakdownTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                            <tr><td colspan="4" class="p-5 text-center text-slate-400 font-bold">자산을 배분하면 명세서가 나타납니다.</td></tr>
+                        </tbody>
+                        <tfoot class="bg-slate-50 font-black border-t-2 border-slate-200 text-slate-800">
+                            <tr>
+                                <td class="px-5 py-3 text-center">합계</td>
+                                <td class="px-5 py-3 text-right">-</td>
+                                <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono">0원</td>
+                                <td id="simTotalTaxBase" class="px-5 py-3 text-right text-red-600 mono bg-red-50/50">0원</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="simResultPanel">
+                <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden relative">
+                    <div class="bg-slate-800 p-5 flex items-center justify-between">
+                        <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-wallet mr-2"></i>일반 계좌 운용 시</h2>
+                        <span class="text-xs font-bold text-slate-300 bg-slate-700 px-2 py-1 rounded">건보료 방어 감시</span>
+                    </div>
+                    <div class="p-6 space-y-5">
+                        <div class="flex justify-between items-center pb-4 border-b border-slate-100">
+                            <span class="text-slate-500 font-bold">월 세후 실수령액 (최종)</span>
+                            <span class="text-2xl font-black text-blue-600 mono tracking-tighter" id="simGenNetAvg">0원</span>
                         </div>
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-500 text-sm font-bold">월 세후 실수령액 (평균)</span>
-                            <span class="text-xl font-black text-blue-600 mono" id="simGenNetAvg">0원</span>
+                        <div class="flex justify-between items-center text-sm font-bold text-slate-600 pb-2">
+                            <span>연간 누적 배당소득세 (15.4%)</span>
+                            <span class="text-red-500 mono" id="simGenAnnualTax">-0원</span>
                         </div>
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-400 text-xs font-semibold">↳ 시나리오 (최소 ~ 최대)</span>
-                            <span class="text-xs font-semibold text-slate-500 mono" id="simGenNetRange">0원 ~ 0원</span>
-                        </div>
-                        <div class="mt-6 pt-4 bg-slate-50 rounded-lg p-4 border border-slate-100">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-slate-600 text-sm font-bold">연간 누적 과세표준</span>
-                                <span class="text-sm font-black text-slate-800 mono" id="simGenTaxBase">0원</span>
+                        <div class="mt-4 pt-5 bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-inner">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-slate-700 font-black">🔥 연간 누적 과세표준</span>
+                                <span class="text-lg font-black text-slate-900 mono" id="simGenAnnualTaxBase">0원</span>
                             </div>
-                            <div id="simMedicareWarning" class="text-center py-2 rounded font-bold text-sm bg-emerald-100 text-emerald-700">
-                                ✅ 건보료 피부양자 안전
+                            <div id="simMedicareWarning" class="text-center py-2.5 rounded-lg font-black text-sm bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors">
+                                ✅ 피부양자 자격 안전 (1천만 원 이하)
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 2. ISA 계좌 카드 -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="bg-indigo-600 p-4 flex items-center">
-                        <h2 class="text-lg font-bold text-white flex items-center"><i class="fas fa-shield-alt mr-2"></i>ISA 계좌 (중개형)</h2>
+                <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden relative">
+                    <div class="bg-indigo-600 p-5 flex items-center justify-between">
+                        <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-shield-alt mr-2"></i>ISA 계좌 운용 시</h2>
+                        <span class="text-xs font-bold text-indigo-200 bg-indigo-800 px-2 py-1 rounded">비과세 & 9.9% 분리과세</span>
                     </div>
-                    <div class="p-6 space-y-4">
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-500 text-sm font-bold">확보 수량</span>
-                            <span class="text-lg font-black text-slate-800 mono" id="simIsaShares">0주</span>
+                    <div class="p-6 space-y-5">
+                        <div class="flex justify-between items-center pb-4 border-b border-slate-100">
+                            <span class="text-slate-500 font-bold">월 세후 실수령액 (연환산)</span>
+                            <span class="text-2xl font-black text-indigo-600 mono tracking-tighter" id="simIsaNetAvg">0원</span>
                         </div>
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-500 text-sm font-bold">월 세후 실수령액 (평균환산)</span>
-                            <span class="text-xl font-black text-indigo-600 mono" id="simIsaNetAvg">0원</span>
+                        <div class="flex justify-between items-center text-sm font-bold text-slate-600 pb-2">
+                            <span>연간 총 세전 배당금</span>
+                            <span class="text-indigo-800 mono" id="simIsaAnnualGross">0원</span>
                         </div>
-                        <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                            <span class="text-slate-400 text-xs font-semibold">↳ 과세표준 건보료 산정 제외</span>
-                            <span class="text-xs font-bold text-emerald-500">완전 방어</span>
-                        </div>
-                        <div class="mt-6 pt-4 bg-indigo-50 rounded-lg p-4 border border-indigo-100">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-indigo-800 text-sm font-bold">연간 세전 총 배당금</span>
-                                <span class="text-sm font-black text-indigo-900 mono" id="simIsaAnnualGross">0원</span>
+                        <div class="mt-4 pt-5 bg-indigo-50 rounded-xl p-5 border border-indigo-100 shadow-inner">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-indigo-900 font-black">📉 9.9% 분리과세 납부액</span>
+                                <span class="text-lg font-black text-red-500 mono" id="simIsaTax">-0원</span>
                             </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-indigo-800 text-sm font-bold">9.9% 분리과세액 (200만 초과분)</span>
-                                <span class="text-sm font-black text-red-500 mono" id="simIsaTax">0원</span>
+                            <div class="text-center py-2.5 rounded-lg font-black text-sm bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                🛡️ 과세표준 0원 (건보료 산정 제외)
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
 
     </div>
@@ -765,7 +801,6 @@
     <script src="js/backtest.js"></script>
     <script src="js/rsi.js"></script>
     <script src="js/one_dollar_project.js"></script>
-    <!-- ✨ 새로 만든 기능 연동 파일 -->
     <script src="js/backtest_div.js"></script>
 </body>
 </html>
