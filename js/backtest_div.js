@@ -293,20 +293,16 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
     const isDripOption = document.querySelector('input[name="dripOption"]:checked');
     const isDrip = isDripOption ? isDripOption.value === 'drip' : false;
     
-    // 분산투자 대상 및 비율 가져오기
     const t1 = document.getElementById('dripTarget1')?.value || 'spy';
     let r1 = parseFloat(document.getElementById('dripRatio1')?.value) || 0;
     const t2 = document.getElementById('dripTarget2')?.value || '';
     let r2 = parseFloat(document.getElementById('dripRatio2')?.value) || 0;
 
-    // 비율 보정 (합이 0이거나 100이 안될경우)
     let totalRatio = r1 + r2;
     if(totalRatio === 0) { r1 = 100; totalRatio = 100; }
 
     const cagr1 = cagrMap[t1] || 0;
     const cagr2 = t2 !== '' ? (cagrMap[t2] || 0) : 0;
-    
-    // 혼합 CAGR 연산 (가중 평균)
     const targetCagr = (cagr1 * (r1 / totalRatio)) + (cagr2 * (r2 / totalRatio));
 
     const bmNameMap = {
@@ -435,13 +431,12 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
                     grid: { color: '#f1f5f9' }
                 }
             }
-        });
+        }
+    });
 
-    // 동적 전문가 진단 생성기 호출
     renderDynamicExpertAdvice(initialInvestment, monthlyAdd, startingMonthlyDiv, isDrip, bmLabel, targetCagr.toFixed(1), dataPrincipalOnly[10], dataDripGains[10], dataBenchmark[10]);
 }
 
-// ✨ 무작위 배열을 활용한 다이나믹 텍스트 생성기
 function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetName, cagr, finalPrincipal, finalGains, finalBm) {
     const panel = document.getElementById('expertAdvicePanel');
     if (!panel) return;
