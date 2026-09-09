@@ -676,10 +676,24 @@
         <div id="viewBacktestDiv" class="hidden space-y-6">
             
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
-                <h2 class="text-xl font-black text-slate-800 mb-4 flex items-center"><i class="fas fa-sack-dollar text-yellow-500 mr-2"></i>포트폴리오 총 자산 설정</h2>
-                <div>
-                    <label class="block text-sm font-bold text-slate-500 mb-2">💰 운용할 총 투자 시드머니 (원)</label>
-                    <input type="text" id="simTotalAsset" value="100,000,000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xl font-black rounded-xl p-4 focus:ring-indigo-500 focus:border-indigo-500 shadow-inner text-right">
+                <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                    <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-sack-dollar text-yellow-500 mr-2"></i>포트폴리오 총 자산 및 적립 설정</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-500 mb-2">💰 현재 운용할 초기 목돈 (거치금)</label>
+                        <div class="relative">
+                            <input type="text" id="simTotalAsset" value="100,000,000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xl font-black rounded-xl p-3 pr-10 focus:ring-indigo-500 focus:border-indigo-500 shadow-inner text-right">
+                            <span class="absolute right-3 top-3.5 text-slate-500 font-bold">원</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-500 mb-2">🔄 매월 추가 투입할 금액 (적립금)</label>
+                        <div class="relative">
+                            <input type="text" id="simMonthlyAdd" value="1,000,000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xl font-black rounded-xl p-3 pr-10 focus:ring-indigo-500 focus:border-indigo-500 shadow-inner text-right" oninput="formatMonthlyAdd()">
+                            <span class="absolute right-3 top-3.5 text-slate-500 font-bold">원</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -692,7 +706,7 @@
                     <div class="grid grid-cols-12 gap-3 text-xs font-bold text-slate-500 text-center px-2 pb-1 border-b border-slate-100">
                         <div class="col-span-5 text-left">투자 종목 선택</div>
                         <div class="col-span-3">투자 비율 (%)</div>
-                        <div class="col-span-4 text-right">할당 금액 (원)</div>
+                        <div class="col-span-4 text-right">초기 할당 금액 (원)</div>
                     </div>
                     <div id="simSlotsContainer" class="space-y-2">
                     </div>
@@ -712,7 +726,7 @@
                         <thead class="text-xs text-slate-500 font-bold bg-white border-b border-slate-200">
                             <tr>
                                 <th class="px-5 py-3">종목명</th>
-                                <th class="px-5 py-3 text-right">매수 수량</th>
+                                <th class="px-5 py-3 text-right">초기 매수 수량</th>
                                 <th class="px-5 py-3 text-right text-red-500 bg-red-50/30">월 발생 과세표준</th>
                                 <th class="px-5 py-3 text-right text-slate-500 bg-slate-50 border-l border-slate-200">월 최소 배당</th>
                                 <th class="px-5 py-3 text-right text-blue-600 bg-blue-50/30 font-extrabold">월 평균 배당</th>
@@ -790,10 +804,10 @@
                 </div>
             </div>
 
-            <!-- ✨ 10년 복리 시뮬레이터 (확장된 지수 비교군) -->
+            <!-- ✨ 10년 복리 시뮬레이터 (1:1 진검승부 + 누적 막대 차트) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                 <div class="bg-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
-                    <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 vs 주요 지수 복리 비교</h2>
+                    <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 포트폴리오 🆚 벤치마크 지수 1:1 비교</h2>
                 </div>
                 
                 <div class="p-6 space-y-6">
@@ -815,11 +829,11 @@
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">QLD (나스닥2배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrQld" value="28" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="QQQ 기준 2배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrQld" value="28" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">TQQQ (나스닥3배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrTqqq" value="38" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="QQQ 기준 3배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrTqqq" value="38" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">SPY (S&P500)</label>
@@ -827,11 +841,11 @@
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">SSO (S&P 2배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrSso" value="18" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="SPY 기준 2배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrSso" value="18" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">UPRO (S&P 3배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrUpro" value="24" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right" title="SPY 기준 3배 연동"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrUpro" value="24" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                             </div>
                         </div>
@@ -848,7 +862,7 @@
                             <div class="mt-4 space-y-2">
                                 <label class="flex items-center gap-2 cursor-pointer">
                                     <input type="radio" name="dripOption" value="spend" checked class="w-4 h-4 accent-indigo-600">
-                                    <span class="text-sm font-bold text-slate-700">배당금 전액 소모 (생활비 사용)</span>
+                                    <span class="text-sm font-bold text-slate-700">배당금 전액 소모 (단순 원금만 표시)</span>
                                 </label>
                                 <div class="flex items-center gap-2">
                                     <label class="flex items-center gap-2 cursor-pointer shrink-0">
@@ -856,10 +870,10 @@
                                         <span class="text-sm font-bold text-slate-700">배당금 100% 재투자 대상:</span>
                                     </label>
                                     <select id="dripTarget" disabled class="flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50">
+                                        <option value="spy">SPY (S&P 500)</option>
                                         <option value="ndx">QQQ (나스닥 100)</option>
                                         <option value="qld">QLD (나스닥 2배)</option>
                                         <option value="tqqq">TQQQ (나스닥 3배)</option>
-                                        <option value="spy">SPY (S&P 500)</option>
                                         <option value="sso">SSO (S&P 2배)</option>
                                         <option value="upro">UPRO (S&P 3배)</option>
                                         <option value="kospi">코스피 (KOSPI)</option>
@@ -870,7 +884,7 @@
                         </div>
                     </div>
 
-                    <div class="relative w-full h-[400px]">
+                    <div class="relative w-full h-[450px]">
                         <canvas id="div10YearChart"></canvas>
                     </div>
                 </div>
