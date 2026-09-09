@@ -70,8 +70,9 @@ async function fetchBacktestMasterData() {
                 const taxBase = getNum(columns[5]);
 
                 if (name !== "") {
+                    // ✨ 1원 강제 방어막 해제: 가격이 없거나 오류면 0으로 정직하게 저장합니다.
                     simEtfDatabase[name] = { 
-                        price: price > 0 ? price : 1,
+                        price: price > 0 ? price : 0,
                         minDiv: minDiv || 0,
                         avgDiv: avgDiv || 0,
                         maxDiv: maxDiv || 0,
@@ -95,7 +96,9 @@ function generateSlots() {
     let html = '';
     let optionsHtml = `<option value="">선택 안 함 (비워둠)</option>`;
     for (const [name, data] of Object.entries(simEtfDatabase)) {
-        optionsHtml += `<option value="${name}">${name} (₩${fmtNum(data.price)})</option>`;
+        // ✨ UI 개선: 가격이 0원이면 '⚠️ 시세 오류'라고 명확히 경고합니다.
+        const priceLabel = data.price > 0 ? `₩${fmtNum(data.price)}` : `⚠️ 시세 오류`;
+        optionsHtml += `<option value="${name}">${name} (${priceLabel})</option>`;
     }
     for (let i = 1; i <= SLOT_COUNT; i++) {
         html += `
@@ -173,8 +176,19 @@ function runPortfolioSimulator() {
 
         if (etfName && amount > 0 && simEtfDatabase[etfName]) {
             const etf = simEtfDatabase[etfName];
-            const price = etf.price > 0 ? etf.price : 1;
-            const shares = Math.floor(amount / price);
+            const price = etf.price;
+            
+            let shares = 0;
+            let sharesHtml = '';
+
+            // ✨ 오류 방어막: 가격이 정상이면 사고, 0원이면 0주 처리
+            if (price > 0) {
+                shares = Math.floor(amount / price);
+                sharesHtml = `${fmtNum(shares)}주`;
+            } else {
+                sharesHtml = `<span class="text-red-500 text-xs font-black">시세 오류(0주)</span>`;
+            }
+
             const monthlyGrossDiv = shares * etf.avgDiv;
             const monthlyTaxBase = shares * etf.taxBase;
 
@@ -184,7 +198,7 @@ function runPortfolioSimulator() {
             breakdownHtml += `
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-5 py-3 font-bold text-slate-800">${etfName}</td>
-                    <td class="px-5 py-3 text-right font-mono">${fmtNum(shares)}주</td>
+                    <td class="px-5 py-3 text-right font-mono">${sharesHtml}</td>
                     <td class="px-5 py-3 text-right font-mono text-red-500 bg-red-50/20">${fmtNum(monthlyTaxBase)}원</td>
                     <td class="px-5 py-3 text-right font-mono text-slate-500 border-l border-slate-100">${fmtNum(shares * etf.minDiv)}원</td>
                     <td class="px-5 py-3 text-right font-mono text-blue-600 bg-blue-50/20 font-black">${fmtNum(monthlyGrossDiv)}원</td>
@@ -259,10 +273,13 @@ function runPortfolioSimulator() {
         const ratio = parseFloat(document.getElementById(`simSlotRatio${i}`)?.value) || 0;
         if (etfName && ratio > 0 && simEtfDatabase[etfName]) {
             const etf = simEtfDatabase[etfName];
-            const price = etf.price > 0 ? etf.price : 1;
-            const shares = Math.floor((yieldSimAmount * (ratio / 100)) / price);
-            yieldSumGross += shares * etf.avgDiv;
-            yieldSumTaxBase += shares * etf.taxBase;
+            const price = etf.price;
+            if (price > 0) {
+                const simAlloc = yieldSimAmount * (ratio / 100);
+                const shares = Math.floor(simAlloc / price);
+                yieldSumGross += shares * etf.avgDiv;
+                yieldSumTaxBase += shares * etf.taxBase;
+            }
         }
     }
     const monthlyNetYield = (yieldSumGross - (yieldSumTaxBase * 0.154)) / yieldSimAmount; 
@@ -445,7 +462,6 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
     const totalInvested = initial + (monthly * 120);
     const growthMultiplier = (totalAsset / totalInvested).toFixed(1);
     
-    // ✨ 핵심 수학 오류 수정: 10년 뒤 포트폴리오 원금 덩어리(finalPrincipal) 안에서, 내가 순수하게 넣은 돈(totalInvested)을 뺀 나머지가 순수 시세차익입니다.
     const baseCapitalGains = finalPrincipal - totalInvested;
     const baseCapitalGainsStr = baseCapitalGains >= 0 ? '+ ' + fmtNum(baseCapitalGains) : fmtNum(baseCapitalGains);
     
@@ -480,7 +496,6 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
 
         let ranEval = diffToBm >= 0 ? goodEvals[Math.floor(Math.random() * goodEvals.length)] : badEvals[Math.floor(Math.random() * badEvals.length)];
 
-        // ✨ 시세차익 항목을 추가하여 덧셈이 완벽하게 떨어지는 명세서 렌더링
         adviceHtml += `
             <p class="text-sm leading-relaxed mb-4 text-slate-300">
                 10년간 생활비로 쓰지 않고 모은 배당금을 <strong>[${targetName}]</strong>에 분산 재투자(혼합 복리 연 ${cagr}%)하는 <span class="text-emerald-400 font-bold">강력한 스노우볼 시나리오</span>를 선택하셨습니다.
