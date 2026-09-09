@@ -37,14 +37,12 @@ function parseCSV(str) {
         let cc = str[c], nc = str[c+1];
         arr[row] = arr[row] || [];
         arr[row][col] = arr[row][col] || '';
-
         if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
         if (cc == '"') { quote = !quote; continue; }
         if (cc == ',' && !quote) { ++col; continue; }
         if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
         if (cc == '\n' && !quote) { ++row; col = 0; continue; }
         if (cc == '\r' && !quote) { ++row; col = 0; continue; }
-
         arr[row][col] += cc;
     }
     return arr;
@@ -70,7 +68,6 @@ async function fetchBacktestMasterData() {
                 const taxBase = getNum(columns[5]);
 
                 if (name !== "") {
-                    // ✨ 1원 강제 방어막 해제: 가격이 없거나 오류면 0으로 정직하게 저장합니다.
                     simEtfDatabase[name] = { 
                         price: price > 0 ? price : 0,
                         minDiv: minDiv || 0,
@@ -95,11 +92,16 @@ function generateSlots() {
     if (!container) return;
     let html = '';
     let optionsHtml = `<option value="">선택 안 함 (비워둠)</option>`;
+    
+    // ✨ 내 배당 종목 리스트 생성 (DRIP 용도 포함)
+    let divOptions = `<optgroup label="🔄 내 배당 종목 (배당금으로 주식 수 불리기)">`;
     for (const [name, data] of Object.entries(simEtfDatabase)) {
-        // ✨ UI 개선: 가격이 0원이면 '⚠️ 시세 오류'라고 명확히 경고합니다.
         const priceLabel = data.price > 0 ? `₩${fmtNum(data.price)}` : `⚠️ 시세 오류`;
         optionsHtml += `<option value="${name}">${name} (${priceLabel})</option>`;
+        divOptions += `<option value="${name}">${name} (${priceLabel})</option>`;
     }
+    divOptions += `</optgroup>`;
+
     for (let i = 1; i <= SLOT_COUNT; i++) {
         html += `
             <div class="grid grid-cols-12 gap-3 items-center bg-slate-50 p-2 rounded-lg border border-slate-200 shadow-sm transition hover:bg-slate-100">
@@ -110,6 +112,32 @@ function generateSlots() {
         `;
     }
     container.innerHTML = html;
+
+    // ✨ 배당 재투자(DRIP) 드롭다운에 '시장 지수'와 '내 배당 종목'을 동적으로 주입
+    const indexOptions = `
+        <optgroup label="📈 벤치마크 지수 (성장 복리 극대화)">
+            <option value="spy">SPY (S&P 500)</option>
+            <option value="ndx">QQQ (나스닥 100)</option>
+            <option value="qld">QLD (나스닥 2배)</option>
+            <option value="tqqq">TQQQ (나스닥 3배)</option>
+            <option value="sso">SSO (S&P 2배)</option>
+            <option value="upro">UPRO (S&P 3배)</option>
+            <option value="kospi">코스피 (KOSPI)</option>
+            <option value="kosdaq">코스닥 (KOSDAQ)</option>
+        </optgroup>
+    `;
+    const dt1 = document.getElementById('dripTarget1');
+    const dt2 = document.getElementById('dripTarget2');
+    if (dt1) {
+        let curVal = dt1.value || 'spy';
+        dt1.innerHTML = indexOptions + divOptions;
+        dt1.value = curVal;
+    }
+    if (dt2) {
+        let curVal = dt2.value || '';
+        dt2.innerHTML = `<option value="">-- 분산 시 두 번째 종목 선택 --</option>` + indexOptions + divOptions;
+        dt2.value = curVal;
+    }
 }
 
 function syncFromRatio(index) {
@@ -177,11 +205,9 @@ function runPortfolioSimulator() {
         if (etfName && amount > 0 && simEtfDatabase[etfName]) {
             const etf = simEtfDatabase[etfName];
             const price = etf.price;
-            
             let shares = 0;
             let sharesHtml = '';
 
-            // ✨ 오류 방어막: 가격이 정상이면 사고, 0원이면 0주 처리
             if (price > 0) {
                 shares = Math.floor(amount / price);
                 sharesHtml = `${fmtNum(shares)}주`;
@@ -191,7 +217,6 @@ function runPortfolioSimulator() {
 
             const monthlyGrossDiv = shares * etf.avgDiv;
             const monthlyTaxBase = shares * etf.taxBase;
-
             sumMonthlyGrossDiv += monthlyGrossDiv;
             sumMonthlyTaxBase += monthlyTaxBase;
 
@@ -288,6 +313,7 @@ function runPortfolioSimulator() {
     update10YearChart(totalInvestedAmount, monthlyAdd, monthlyNetYield, genMonthlyNetDiv);
 }
 
+// ✨ 배당 무한 스노우볼 엔진 탑재 완료!
 function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, startingMonthlyDiv) {
     if (initialInvestment <= 0 && monthlyAdd <= 0) {
         document.getElementById('expertAdvicePanel').classList.add('hidden');
@@ -317,24 +343,37 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
     let totalRatio = r1 + r2;
     if(totalRatio === 0) { r1 = 100; totalRatio = 100; }
 
-    const cagr1 = cagrMap[t1] || 0;
-    const cagr2 = t2 !== '' ? (cagrMap[t2] || 0) : 0;
-    const targetCagr = (cagr1 * (r1 / totalRatio)) + (cagr2 * (r2 / totalRatio));
-
     const bmNameMap = {
         'spy': 'S&P 500(SPY)', 'ndx': '나스닥 100(QQQ)', 'qld': '나스닥 2배(QLD)',
         'tqqq': '나스닥 3배(TQQQ)', 'sso': 'S&P 2배(SSO)', 'upro': 'S&P 3배(UPRO)',
         'kospi': '코스피', 'kosdaq': '코스닥'
     };
-    
+
+    // ✨ 타겟 1의 특성 파악 (지수인지 배당주인지)
+    let isT1Div = !!simEtfDatabase[t1];
+    let rate1 = isT1Div ? Math.pow(1 + cagrMap.base / 100, 1 / 12) - 1 : Math.pow(1 + (cagrMap[t1] || 0) / 100, 1 / 12) - 1;
+    let yield1 = isT1Div && simEtfDatabase[t1].price > 0 ? (simEtfDatabase[t1].avgDiv - (simEtfDatabase[t1].taxBase * 0.154)) / simEtfDatabase[t1].price : 0;
+    let name1 = isT1Div ? t1 : (bmNameMap[t1] || t1);
+
+    // ✨ 타겟 2의 특성 파악 (지수인지 배당주인지)
+    let isT2Div = !!simEtfDatabase[t2];
+    let rate2 = isT2Div ? Math.pow(1 + cagrMap.base / 100, 1 / 12) - 1 : Math.pow(1 + (cagrMap[t2] || 0) / 100, 1 / 12) - 1;
+    let yield2 = isT2Div && simEtfDatabase[t2].price > 0 ? (simEtfDatabase[t2].avgDiv - (simEtfDatabase[t2].taxBase * 0.154)) / simEtfDatabase[t2].price : 0;
+    let name2 = isT2Div ? t2 : (bmNameMap[t2] || t2);
+
+    // 벤치마크는 성장률만 단순 혼합하여 계산
+    const cagr1 = isT1Div ? cagrMap.base : (cagrMap[t1] || 0);
+    const cagr2 = t2 !== '' ? (isT2Div ? cagrMap.base : (cagrMap[t2] || 0)) : 0;
+    const targetCagr = (cagr1 * (r1 / totalRatio)) + (cagr2 * (r2 / totalRatio));
+
     let bmLabel = '';
     let bmShortLabel = '';
     if (t2 !== '' && r2 > 0) {
-        bmLabel = `${bmNameMap[t1]} ${Math.round(r1/totalRatio*100)}% + ${bmNameMap[t2]} ${Math.round(r2/totalRatio*100)}% 분산`;
-        bmShortLabel = `혼합(${targetCagr.toFixed(1)}%)`;
+        bmLabel = `${name1} ${Math.round(r1/totalRatio*100)}% + ${name2} ${Math.round(r2/totalRatio*100)}% 분산`;
+        bmShortLabel = `혼합 DRIP`;
     } else {
-        bmLabel = `${bmNameMap[t1]} 100%`;
-        bmShortLabel = `${bmNameMap[t1]}`;
+        bmLabel = `${name1} 100%`;
+        bmShortLabel = `단일 DRIP`;
     }
 
     const labels = [];
@@ -348,7 +387,10 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
     let currentBmValue = initialInvestment;
     let portBaseValue = initialInvestment;
     let portAddValue = 0;
-    let reinvestBucket = 0; 
+    
+    let dripBucket1 = 0;
+    let dripBucket2 = 0;
+    let finalMonthDiv = startingMonthlyDiv; // 최종 월 배당금 저장용
 
     labels.push('0년차');
     dataBenchmark.push(Math.floor(currentBmValue));
@@ -363,14 +405,25 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
             portAddValue = portAddValue * (1 + baseMonthlyRate) + monthlyAdd;
             
             let currentPrincipal = portBaseValue + portAddValue;
-            let currentMonthDiv = currentPrincipal * monthlyNetYield;
+            let baseMonthDiv = currentPrincipal * monthlyNetYield;
             
+            // ✨ 배당 종목에 재투자했다면, 거기서 나오는 '추가 배당금'을 합산!
+            let extraDiv1 = dripBucket1 * yield1;
+            let extraDiv2 = dripBucket2 * yield2;
+            let totalMonthDiv = baseMonthDiv + extraDiv1 + extraDiv2;
+            
+            finalMonthDiv = totalMonthDiv; // 매월 갱신
+
             if (isDrip) {
-                reinvestBucket = reinvestBucket * (1 + bmMonthlyRate) + currentMonthDiv;
+                let divFor1 = totalMonthDiv * (r1 / totalRatio);
+                let divFor2 = totalMonthDiv * (r2 / totalRatio);
+
+                dripBucket1 = dripBucket1 * (1 + rate1) + divFor1;
+                dripBucket2 = dripBucket2 * (1 + rate2) + divFor2;
             }
         }
         dataPrincipalOnly.push(Math.floor(portBaseValue + portAddValue));
-        dataDripGains.push(Math.floor(reinvestBucket)); 
+        dataDripGains.push(Math.floor(dripBucket1 + dripBucket2)); 
         dataBenchmark.push(Math.floor(currentBmValue));
     }
 
@@ -398,7 +451,7 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
                 },
                 {
                     type: 'bar',
-                    label: isDrip ? `배당 분산 재투자 수익금 [${bmShortLabel} 복리 적용]` : '배당금 전액 소모 (수익 없음)',
+                    label: isDrip ? `배당 재투자 수익금 [${bmShortLabel}]` : '배당금 전액 소모 (수익 없음)',
                     data: dataDripGains,
                     backgroundColor: '#10b981', 
                     borderWidth: 0,
@@ -450,10 +503,26 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
         }
     });
 
-    renderDynamicExpertAdvice(initialInvestment, monthlyAdd, startingMonthlyDiv, isDrip, bmLabel, targetCagr.toFixed(1), dataPrincipalOnly[10], dataDripGains[10], dataBenchmark[10]);
+    // ✨ 주식 수 계산 로직
+    let extraSharesHtml = '';
+    if (isDrip) {
+        if (isT1Div && simEtfDatabase[t1].price > 0) {
+            let finalPrice1 = simEtfDatabase[t1].price * Math.pow(1 + cagrMap.base / 100, 10);
+            extraSharesHtml += `<li class="flex justify-between items-center pt-2 mt-2 border-t border-slate-700/50"><span class="pl-4 text-emerald-400">↳ 🔄 배당금으로 모은 [${name1}] 공짜 주식:</span> <strong class="text-emerald-300">${fmtNum(dripBucket1 / finalPrice1)} 주</strong></li>`;
+        }
+        if (isT2Div && simEtfDatabase[t2] && simEtfDatabase[t2].price > 0 && r2 > 0) {
+            let finalPrice2 = simEtfDatabase[t2].price * Math.pow(1 + cagrMap.base / 100, 10);
+            extraSharesHtml += `<li class="flex justify-between items-center pt-1"><span class="pl-4 text-emerald-400">↳ 🔄 배당금으로 모은 [${name2}] 공짜 주식:</span> <strong class="text-emerald-300">${fmtNum(dripBucket2 / finalPrice2)} 주</strong></li>`;
+        }
+        if (extraSharesHtml !== '') {
+            extraSharesHtml += `<li class="flex justify-between items-center pt-2 mt-2 border-t border-slate-700/50"><span class="pl-4 text-yellow-300 font-bold">↳ 💰 10년 뒤 쏟아지는 매월 최종 배당금:</span> <strong class="text-yellow-400 text-lg">${fmtNum(finalMonthDiv)} 원</strong></li>`;
+        }
+    }
+
+    renderDynamicExpertAdvice(initialInvestment, monthlyAdd, startingMonthlyDiv, isDrip, bmLabel, dataPrincipalOnly[10], dataDripGains[10], dataBenchmark[10], extraSharesHtml);
 }
 
-function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetName, cagr, finalPrincipal, finalGains, finalBm) {
+function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, bmLabel, finalPrincipal, finalGains, finalBm, extraSharesHtml) {
     const panel = document.getElementById('expertAdvicePanel');
     if (!panel) return;
 
@@ -484,13 +553,11 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
 
     if (isDrip) {
         const goodEvals = [
-            `동일한 금액을 단순히 지수에 몰빵했을 때(${fmtNum(finalBm)}원)보다 무려 <strong>${fmtNum(diffToBm)}원을 더 벌어들이는 마스터피스</strong>입니다. 변동성의 공포는 낮추고 수익률은 극대화했습니다.`,
-            `단순 거치식 투자를 완벽하게 압도합니다! 현금흐름으로 시장의 변동성을 잡아먹는 <strong>'배당 복리의 무서움'</strong>을 숫자로 증명하셨습니다.`,
-            `지수 몰빵 대비 <strong>${fmtNum(diffToBm)}원</strong>을 더 챙겨갑니다. 하락장이 와도 매월 나오는 배당금으로 레버리지를 저점 매수할 수 있는 가장 든든한 멘탈 방어 전략입니다.`
+            `단순 거치식 투자를 완벽하게 압도합니다! 현금흐름으로 시장의 변동성을 잡아먹는 <strong>'무한 스노우볼'</strong>의 무서움을 숫자로 증명하셨습니다.`,
+            `지수 몰빵 대비 <strong>${fmtNum(diffToBm)}원</strong>을 더 챙겨갑니다. 하락장이 와도 쏟아지는 배당금으로 레버리지를 저점 매수할 수 있는 가장 든든한 멘탈 방어 전략입니다.`
         ];
         const badEvals = [
             `수익률 자체는 지수 몰빵 대비 <strong>${fmtNum(Math.abs(diffToBm))}원</strong> 부족합니다. 하지만 하락장(-50%)을 맞았을 때, 마르지 않는 배당금이 쏟아지는 이 전략이 여러분의 멘탈과 수면의 질을 완벽하게 지켜줄 것입니다.`,
-            `최종 금액은 지수 몰빵(${fmtNum(finalBm)}원)이 더 높습니다. 그러나 10년 동안 끊임없이 현금이 들어오는 '파이프라인의 가치'를 고려한다면 리스크 대비 효율은 이 전략이 훨씬 뛰어납니다.`,
             `단순 지수 추종에 비해서는 <strong>${fmtNum(Math.abs(diffToBm))}원</strong>이 적습니다. 하지만 이 전략의 진정한 가치는 10년 내내 폭락장을 두려워하지 않고 오히려 배당금으로 줍줍할 수 있는 '심리적 우위'에 있습니다.`
         ];
 
@@ -498,13 +565,14 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
 
         adviceHtml += `
             <p class="text-sm leading-relaxed mb-4 text-slate-300">
-                10년간 생활비로 쓰지 않고 모은 배당금을 <strong>[${targetName}]</strong>에 분산 재투자(혼합 복리 연 ${cagr}%)하는 <span class="text-emerald-400 font-bold">강력한 스노우볼 시나리오</span>를 선택하셨습니다.
+                10년간 생활비로 쓰지 않고 모은 배당금을 <strong>[${bmLabel}]</strong>에 전액 재투자하는 <span class="text-emerald-400 font-bold">배당 복리 시나리오</span>를 선택하셨습니다.
             </p>
             <ul class="space-y-2 text-sm text-slate-200 bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4">
                 <li class="flex justify-between items-center border-b border-slate-700 pb-2"><span>📈 10년 뒤 내 포트폴리오 총 자산:</span> <strong class="text-lg text-emerald-400">${fmtNum(totalAsset)} 원</strong></li>
                 <li class="flex justify-between items-center pt-2"><span class="pl-4 text-slate-400">↳ 내 돈 순수 투입 원금 (초기+적립 누적):</span> <strong class="text-slate-300">${fmtNum(totalInvested)} 원</strong></li>
                 <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당 포트 본체의 10년치 시세차익:</span> <strong class="${baseCapitalGains >= 0 ? 'text-blue-400' : 'text-red-400'}">${baseCapitalGainsStr} 원</strong></li>
                 <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당 재투자(DRIP)로 불려낸 눈덩이 수익:</span> <strong class="text-emerald-500">+ ${fmtNum(finalGains)} 원</strong></li>
+                ${extraSharesHtml}
             </ul>
             <p class="text-sm ${diffToBm >= 0 ? 'text-emerald-300' : 'text-yellow-300'} font-bold">
                 <i class="fas ${diffToBm >= 0 ? 'fa-check-circle' : 'fa-shield-alt'} mr-1"></i> ${ranEval} 투입한 원금 대비 자산이 <strong>${growthMultiplier}배</strong>로 퀀텀 점프하는 이 짜릿한 결과를 기억하세요!
