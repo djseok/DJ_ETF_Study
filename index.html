@@ -31,7 +31,7 @@
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
             <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
             <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
-            <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-indigo-50 whitespace-nowrap text-indigo-700">🛡️ 건보/배당 백테스트</button>
+            <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-indigo-50 whitespace-nowrap text-indigo-700">📜 배당투자설계도</button>
         </div>
 
         <div id="viewQuant" class="space-y-6 block">
@@ -672,7 +672,7 @@
             </div>
         </div>
 
-        <!-- ✨ 신규 추가된 백테스트 화면 (건보료 및 배당 시뮬레이터) -->
+        <!-- 📜 배당투자설계도 (기존 배당/건보 백테스트) -->
         <div id="viewBacktestDiv" class="hidden space-y-6">
             
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
@@ -695,7 +695,6 @@
                         <div class="col-span-4 text-right">할당 금액 (원)</div>
                     </div>
                     <div id="simSlotsContainer" class="space-y-2">
-                        <!-- JS에서 동적으로 슬롯 생성됨 -->
                     </div>
                 </div>
                 <div class="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-bold text-sm">
@@ -714,19 +713,23 @@
                             <tr>
                                 <th class="px-5 py-3">종목명</th>
                                 <th class="px-5 py-3 text-right">매수 수량</th>
-                                <th class="px-5 py-3 text-right">월 평균 배당금</th>
-                                <th class="px-5 py-3 text-right text-red-500 bg-red-50/30">월 과세표준 발생액</th>
+                                <th class="px-5 py-3 text-right text-red-500 bg-red-50/30">월 발생 과세표준</th>
+                                <th class="px-5 py-3 text-right text-slate-500 bg-slate-50 border-l border-slate-200">월 최소 배당</th>
+                                <th class="px-5 py-3 text-right text-blue-600 bg-blue-50/30 font-extrabold">월 평균 배당</th>
+                                <th class="px-5 py-3 text-right text-emerald-600 bg-emerald-50/30">월 최대 배당</th>
                             </tr>
                         </thead>
                         <tbody id="simBreakdownTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
-                            <tr><td colspan="4" class="p-5 text-center text-slate-400 font-bold">자산을 배분하면 명세서가 나타납니다.</td></tr>
+                            <tr><td colspan="6" class="p-5 text-center text-slate-400 font-bold">자산을 배분하면 명세서가 나타납니다.</td></tr>
                         </tbody>
                         <tfoot class="bg-slate-50 font-black border-t-2 border-slate-200 text-slate-800">
                             <tr>
                                 <td class="px-5 py-3 text-center">합계</td>
                                 <td class="px-5 py-3 text-right">-</td>
-                                <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono">0원</td>
                                 <td id="simTotalTaxBase" class="px-5 py-3 text-right text-red-600 mono bg-red-50/50">0원</td>
+                                <td class="px-5 py-3 text-right">-</td>
+                                <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono font-black bg-blue-50/30">0원</td>
+                                <td class="px-5 py-3 text-right">-</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -787,6 +790,76 @@
                 </div>
             </div>
 
+            <!-- ✨ 10년 복리 시뮬레이터 (배당 vs 지수) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-8">
+                <div class="bg-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 vs 지수 복리 비교</h2>
+                </div>
+                
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-black text-slate-700 border-b border-slate-200 pb-2">📈 지수 연평균 성장률(CAGR) 세팅</h3>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-bold text-slate-500 w-24">나스닥 (NDX)</label>
+                                <div class="relative flex-1">
+                                    <input type="number" id="cagrNdx" value="15" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
+                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-bold text-slate-500 w-24">S&P 500</label>
+                                <div class="relative flex-1">
+                                    <input type="number" id="cagrSpy" value="10" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
+                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-bold text-slate-500 w-24">코스피 (KOSPI)</label>
+                                <div class="relative flex-1">
+                                    <input type="number" id="cagrKospi" value="3" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
+                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-black text-slate-700 border-b border-slate-200 pb-2">🔄 현재 배당 포트폴리오 활용 시나리오</h3>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-bold text-slate-500 w-32">배당 포트 원금 성장률</label>
+                                <div class="relative flex-1">
+                                    <input type="number" id="cagrBase" value="0" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right" title="커버드콜/고배당 특성상 주가 자체의 상승은 제한적입니다.">
+                                    <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
+                                </div>
+                            </div>
+                            <div class="mt-4 space-y-2">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="dripOption" value="spend" checked class="w-4 h-4 accent-indigo-600">
+                                    <span class="text-sm font-bold text-slate-700">배당금 전액 소모 (생활비 사용)</span>
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <label class="flex items-center gap-2 cursor-pointer shrink-0">
+                                        <input type="radio" name="dripOption" value="drip" class="w-4 h-4 accent-indigo-600">
+                                        <span class="text-sm font-bold text-slate-700">배당금 100% 재투자 대상:</span>
+                                    </label>
+                                    <select id="dripTarget" disabled class="flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50">
+                                        <option value="ndx">나스닥 100 (QQQ 등)</option>
+                                        <option value="spy">S&P 500 (SPY 등)</option>
+                                        <option value="qld">나스닥 2배 (QLD) - 변동성 차감</option>
+                                        <option value="tqqq">나스닥 3배 (TQQQ) - 변동성 차감</option>
+                                        <option value="kospi">코스피 (KODEX 200)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="relative w-full h-[400px]">
+                        <canvas id="div10YearChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
         </div>
 
     </div>
