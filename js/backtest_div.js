@@ -31,22 +31,18 @@ async function fetchBacktestMasterData() {
     if (isDivDataLoaded) return;
 
     try {
-        // ✨ 결정적 오류 수정: 이제 main.js에 선언된 동진님의 '진짜 마스터 시트(MASTER_CSV_URL)'를 완벽히 공유받아 사용합니다!
         const targetUrl = typeof MASTER_CSV_URL !== 'undefined' ? MASTER_CSV_URL : "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + new Date().getTime();
         
         const response = await fetch(targetUrl);
         const csvText = await response.text();
         
-        // ✨ 안전 파싱: main.js에 있는 콤마(,) 방어용 파서를 사용해 텍스트 깨짐 원천 차단
         const lines = typeof parseCsvToMatrix === 'function' ? parseCsvToMatrix(csvText) : csvText.split('\n').map(line => line.split(','));
         
         simEtfDatabase = {}; 
 
-        // 1번 줄(헤더)을 제외하고 데이터 파싱
         for (let i = 1; i < lines.length; i++) {
             const columns = lines[i];
-            // 마스터 시트 컬럼 구조: 종목명(0), 현재가(1), 최소배당(2), 평균배당(3), 최대배당(4), 과세표준(5)
-            if (columns.length >= 6) {
+            if (columns && columns.length >= 6) {
                 const name = (columns[0] || '').trim();
                 const price = getNum(columns[1]);
                 const minDiv = getNum(columns[2]);
@@ -54,9 +50,15 @@ async function fetchBacktestMasterData() {
                 const maxDiv = getNum(columns[4]);
                 const taxBase = getNum(columns[5]);
 
-                // 이름이 있고 가격이 0원 초과인 정상 행 데이터만 삽입
-                if (name !== "" && price > 0) {
-                    simEtfDatabase[name] = { price, minDiv, avgDiv, maxDiv, taxBase };
+                // 이름만 존재하면 무조건 등록 (에러 데이터 방어용 기본값 제공)
+                if (name !== "") {
+                    simEtfDatabase[name] = { 
+                        price: price > 0 ? price : 1, // 가격이 없으면 1로 처리하여 NaN 무한대 회피
+                        minDiv: minDiv || 0,
+                        avgDiv: avgDiv || 0,
+                        maxDiv: maxDiv || 0,
+                        taxBase: taxBase || 0
+                    };
                 }
             }
         }
@@ -257,7 +259,7 @@ function runPortfolioSimulator() {
         }
     }
 
-    // 6. ISA 계좌 비교 (실제 세법 100% 고증)
+    // 6. ISA 계좌 비교
     const isaAnnualGross = sumMonthlyGrossDiv * 12;
     const isaAnnualTaxable = sumMonthlyTaxBase * 12;
     const isaTax = isaAnnualTaxable > 2000000 ? (isaAnnualTaxable - 2000000) * 0.099 : 0;
@@ -271,7 +273,7 @@ function runPortfolioSimulator() {
     if(elIsaAnnualGross) elIsaAnnualGross.textContent = fmtNum(isaAnnualGross) + "원";
     if(elIsaTax) elIsaTax.textContent = "-" + fmtNum(isaTax) + "원";
 
-    // 7. 차트 렌더링 호출
+    // 7. 차트 렌더링
     const monthlyAddEl = document.getElementById('simMonthlyAdd');
     const monthlyAdd = monthlyAddEl ? getNum(monthlyAddEl.value) : 0;
     update10YearChart(totalInvestedAmount, monthlyAdd, genMonthlyNetDiv);
