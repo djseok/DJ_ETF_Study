@@ -815,37 +815,38 @@
                         <div class="space-y-3">
                             <h3 class="text-sm font-black text-slate-700 border-b border-slate-200 pb-2">📈 지수 연평균 성장률(CAGR) 세팅</h3>
                             <div class="grid grid-cols-2 gap-3">
+                                <!-- UI 버그 수정: pl-2 pr-6 속성을 추가하여 숫자가 % 기호를 침범하지 않게 함 -->
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">코스피</label>
-                                    <div class="relative w-20"><input type="number" id="cagrKospi" value="3" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrKospi" value="3" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">코스닥</label>
-                                    <div class="relative w-20"><input type="number" id="cagrKosdaq" value="4" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrKosdaq" value="4" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">QQQ (나스닥)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrNdx" value="15" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrNdx" value="15" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">QLD (나스닥2배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrQld" value="28" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrQld" value="28" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">TQQQ (나스닥3배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrTqqq" value="38" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrTqqq" value="38" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">SPY (S&P500)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrSpy" value="10" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrSpy" value="10" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">SSO (S&P 2배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrSso" value="18" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrSso" value="18" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                                 <div class="flex items-center justify-between gap-1">
                                     <label class="text-xs font-bold text-slate-500">UPRO (S&P 3배)</label>
-                                    <div class="relative w-20"><input type="number" id="cagrUpro" value="24" class="w-full bg-white border border-slate-300 text-xs font-bold rounded p-1.5 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
+                                    <div class="relative w-20"><input type="number" id="cagrUpro" value="24" class="w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-2 pr-6 text-right"><span class="absolute right-1.5 top-1.5 text-xs text-slate-400">%</span></div>
                                 </div>
                             </div>
                         </div>
@@ -855,7 +856,7 @@
                             <div class="flex items-center justify-between gap-2">
                                 <label class="text-xs font-bold text-slate-500 w-32">배당 포트 원금 성장률</label>
                                 <div class="relative flex-1">
-                                    <input type="number" id="cagrBase" value="0" class="w-full bg-white border border-slate-300 text-sm font-bold rounded p-2 text-right">
+                                    <input type="number" id="cagrBase" value="0" class="w-full bg-white border border-slate-300 text-sm font-bold rounded py-1.5 pl-2 pr-6 text-right">
                                     <span class="absolute right-2 top-2 text-xs text-slate-400">%</span>
                                 </div>
                             </div>
@@ -887,6 +888,12 @@
                     <div class="relative w-full h-[450px]">
                         <canvas id="div10YearChart"></canvas>
                     </div>
+
+                    <!-- ✨ 퀀트 애널리스트의 포트폴리오 진단 패널 추가 -->
+                    <div id="expertAdvicePanel" class="mt-6 bg-slate-800 text-slate-100 p-6 rounded-2xl shadow-md border border-slate-700 hidden">
+                        <!-- 내용이 JS에서 동적으로 생성되어 여기에 들어갑니다 -->
+                    </div>
+
                 </div>
             </div>
             
