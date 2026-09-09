@@ -29,7 +29,6 @@ function formatMonthlyAdd() {
     runPortfolioSimulator();
 }
 
-// ✨ [핵심 패치] 어떤 구글 시트 서식(콤마, 줄바꿈, 따옴표)이 들어와도 절대 깨지지 않는 강력한 자체 CSV 파서
 function parseCSV(str) {
     const arr = [];
     let quote = false;
@@ -39,14 +38,9 @@ function parseCSV(str) {
         arr[row] = arr[row] || [];
         arr[row][col] = arr[row][col] || '';
 
-        // 따옴표 처리 로직
         if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
         if (cc == '"') { quote = !quote; continue; }
-        
-        // 열(Column) 구분
         if (cc == ',' && !quote) { ++col; continue; }
-        
-        // 행(Row) 구분
         if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
         if (cc == '\n' && !quote) { ++row; col = 0; continue; }
         if (cc == '\r' && !quote) { ++row; col = 0; continue; }
@@ -64,16 +58,11 @@ async function fetchBacktestMasterData() {
         const response = await fetch(targetUrl);
         const csvText = await response.text();
         
-        // 이제 단순 split(',') 대신 강력한 자체 파서를 무조건 사용합니다.
         const lines = parseCSV(csvText);
-        
         simEtfDatabase = {}; 
 
-        // 헤더(0번행) 제외, 1번행부터 반복
         for (let i = 1; i < lines.length; i++) {
             const columns = lines[i];
-            
-            // 이름과 현재가 칸이 존재하는 행만 파싱
             if (columns && columns.length >= 2) {
                 const name = (columns[0] || '').trim();
                 const price = getNum(columns[1]);
@@ -82,10 +71,9 @@ async function fetchBacktestMasterData() {
                 const maxDiv = getNum(columns[4]);
                 const taxBase = getNum(columns[5]);
 
-                // 종목명만 존재하면 에러 없이 무조건 데이터베이스에 등록
                 if (name !== "") {
                     simEtfDatabase[name] = { 
-                        price: price > 0 ? price : 1, // 최후의 방어막 (0원 나누기 방지)
+                        price: price > 0 ? price : 1,
                         minDiv: minDiv || 0,
                         avgDiv: avgDiv || 0,
                         maxDiv: maxDiv || 0,
@@ -303,12 +291,34 @@ function runPortfolioSimulator() {
     if(elIsaAnnualGross) elIsaAnnualGross.textContent = fmtNum(isaAnnualGross) + "원";
     if(elIsaTax) elIsaTax.textContent = "-" + fmtNum(isaTax) + "원";
 
+    // ✨ [동적 배당률 버그 수정] 거치금(0)과 무관하게 포트폴리오의 '가상 실효 배당수익률(%)'을 산출합니다.
+    let yieldSimAmount = 10000000;
+    let yieldSumGross = 0;
+    let yieldSumTaxBase = 0;
+    for (let i = 1; i <= SLOT_COUNT; i++) {
+        const etfName = document.getElementById(`simSlotEtf${i}`)?.value;
+        const ratio = parseFloat(document.getElementById(`simSlotRatio${i}`)?.value) || 0;
+        if (etfName && ratio > 0 && simEtfDatabase[etfName]) {
+            const etf = simEtfDatabase[etfName];
+            const price = etf.price > 0 ? etf.price : 1;
+            const simAlloc = yieldSimAmount * (ratio / 100);
+            const shares = Math.floor(simAlloc / price);
+            yieldSumGross += shares * etf.avgDiv;
+            yieldSumTaxBase += shares * etf.taxBase;
+        }
+    }
+    const yieldGenTax = yieldSumTaxBase * 0.154;
+    const yieldNetDiv = yieldSumGross - yieldGenTax;
+    const monthlyNetYield = yieldNetDiv / yieldSimAmount; // 이 포트폴리오 세팅의 "실제 월 배당률" 완성!
+
     const monthlyAddEl = document.getElementById('simMonthlyAdd');
     const monthlyAdd = monthlyAddEl ? getNum(monthlyAddEl.value) : 0;
-    update10YearChart(totalInvestedAmount, monthlyAdd, genMonthlyNetDiv);
+    
+    // 산출된 % 수치를 10년 엔진으로 넘겨줍니다.
+    update10YearChart(totalInvestedAmount, monthlyAdd, monthlyNetYield);
 }
 
-function update10YearChart(initialInvestment, monthlyAdd, monthlyNetDiv) {
+function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield) {
     if (initialInvestment <= 0 && monthlyAdd <= 0) return;
 
     const cagrMap = {
@@ -352,12 +362,21 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetDiv) {
         labels.push(`${year}년차`);
         
         for (let m = 1; m <= 12; m++) {
+            // 1. 벤치마크 (거치+월적립에 대해 지수 복리 적용)
             currentBmValue = currentBmValue * (1 + bmMonthlyRate) + monthlyAdd;
+            
+            // 2. 배당 포트 원금 성장 (거치+월적립에 대해 Base 원금 성장률 적용)
             portBaseValue = portBaseValue * (1 + baseMonthlyRate);
             portAddValue = portAddValue * (1 + baseMonthlyRate) + monthlyAdd;
             
+            let currentPrincipal = portBaseValue + portAddValue;
+            
+            // ✨ [핵심 수정] 원금이 불어난 만큼, 이번 달 배당금도 동적으로 폭발하게 만듭니다!
+            let currentMonthDiv = currentPrincipal * monthlyNetYield;
+            
+            // 3. 재투자 통장 굴리기 (배당금을 타겟 지수로 계속 매수)
             if (isDrip) {
-                reinvestBucket = reinvestBucket * (1 + bmMonthlyRate) + monthlyNetDiv;
+                reinvestBucket = reinvestBucket * (1 + bmMonthlyRate) + currentMonthDiv;
             }
         }
 
@@ -501,3 +520,9 @@ function setupEventListeners() {
 
     if(dripTargetSelect) dripTargetSelect.addEventListener('change', runPortfolioSimulator);
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (!isDivDataLoaded) fetchBacktestMasterData();
+    }, 500);
+});
