@@ -2,6 +2,9 @@
 // 📜 배당투자설계도 & 10년 복리 시뮬레이터 (js/backtest_div.js)
 // =========================================================
 
+// ✨ 동진님이 지정한 '배당 전용 마스터 시트' URL로 강제 고정!
+const BACKTEST_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=795942259&single=true&output=csv";
+
 let simEtfDatabase = {};
 let isDivDataLoaded = false;
 const SLOT_COUNT = 5;
@@ -31,7 +34,7 @@ async function fetchBacktestMasterData() {
     if (isDivDataLoaded) return;
 
     try {
-        const targetUrl = typeof MASTER_CSV_URL !== 'undefined' ? MASTER_CSV_URL : "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + new Date().getTime();
+        const targetUrl = BACKTEST_DIV_CSV_URL + "&t=" + new Date().getTime();
         
         const response = await fetch(targetUrl);
         const csvText = await response.text();
@@ -50,10 +53,9 @@ async function fetchBacktestMasterData() {
                 const maxDiv = getNum(columns[4]);
                 const taxBase = getNum(columns[5]);
 
-                // 이름만 존재하면 무조건 등록 (에러 데이터 방어용 기본값 제공)
                 if (name !== "") {
                     simEtfDatabase[name] = { 
-                        price: price > 0 ? price : 1, // 가격이 없으면 1로 처리하여 NaN 무한대 회피
+                        price: price > 0 ? price : 1,
                         minDiv: minDiv || 0,
                         avgDiv: avgDiv || 0,
                         maxDiv: maxDiv || 0,
@@ -234,7 +236,6 @@ function runPortfolioSimulator() {
         </tr>
     `;
 
-    // 5. 일반계좌 비교
     const genAnnualTaxBase = sumMonthlyTaxBase * 12;
     const genMonthlyTax = sumMonthlyTaxBase * 0.154;
     const genMonthlyNetDiv = sumMonthlyGrossDiv - genMonthlyTax;
@@ -259,7 +260,6 @@ function runPortfolioSimulator() {
         }
     }
 
-    // 6. ISA 계좌 비교
     const isaAnnualGross = sumMonthlyGrossDiv * 12;
     const isaAnnualTaxable = sumMonthlyTaxBase * 12;
     const isaTax = isaAnnualTaxable > 2000000 ? (isaAnnualTaxable - 2000000) * 0.099 : 0;
@@ -273,15 +273,11 @@ function runPortfolioSimulator() {
     if(elIsaAnnualGross) elIsaAnnualGross.textContent = fmtNum(isaAnnualGross) + "원";
     if(elIsaTax) elIsaTax.textContent = "-" + fmtNum(isaTax) + "원";
 
-    // 7. 차트 렌더링
     const monthlyAddEl = document.getElementById('simMonthlyAdd');
     const monthlyAdd = monthlyAddEl ? getNum(monthlyAddEl.value) : 0;
     update10YearChart(totalInvestedAmount, monthlyAdd, genMonthlyNetDiv);
 }
 
-// =========================================================
-// 📈 10년 복리 시뮬레이터 차트 렌더링
-// =========================================================
 function update10YearChart(initialInvestment, monthlyAdd, monthlyNetDiv) {
     if (initialInvestment <= 0 && monthlyAdd <= 0) return;
 
