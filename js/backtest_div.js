@@ -94,7 +94,6 @@ function syncFromAmount(index) {
     const ratioInput = document.getElementById(`simSlotRatio${index}`);
     const amountInput = document.getElementById(`simSlotAmount${index}`);
     
-    // 금액 포맷팅 (콤마 추가)
     let rawVal = amountInput.value.replace(/,/g, '').replace(/[^0-9]/g, '');
     let amount = parseFloat(rawVal) || 0;
     amountInput.value = rawVal ? fmtNum(amount) : '';
@@ -108,7 +107,6 @@ function syncFromAmount(index) {
     runPortfolioSimulator();
 }
 
-// 총 자산 변경 시 모든 슬롯의 금액을 현재 비율에 맞춰 재조정
 function syncAllFromTotal() {
     const totalInput = document.getElementById('simTotalAsset');
     let rawVal = totalInput.value.replace(/,/g, '').replace(/[^0-9]/g, '');
@@ -131,8 +129,19 @@ function runPortfolioSimulator() {
     let sumMonthlyTaxBase = 0;
 
     let breakdownHtml = '';
+    
+    // 테이블 헤더 수정 (최소/평균/최대 시나리오 추가)
+    document.querySelector('#simBreakdownTableBody').previousElementSibling.innerHTML = `
+        <tr>
+            <th class="px-5 py-3">종목명</th>
+            <th class="px-5 py-3 text-right">매수 수량</th>
+            <th class="px-5 py-3 text-right text-red-500 bg-red-50/30">월 발생 과세표준</th>
+            <th class="px-5 py-3 text-right text-slate-500 bg-slate-50 border-l border-slate-200">월 최소 배당</th>
+            <th class="px-5 py-3 text-right text-blue-600 bg-blue-50/30 font-extrabold">월 평균 배당</th>
+            <th class="px-5 py-3 text-right text-emerald-600 bg-emerald-50/30">월 최대 배당</th>
+        </tr>
+    `;
 
-    // 각 슬롯별 데이터 취합 및 명세서 생성
     for (let i = 1; i <= SLOT_COUNT; i++) {
         const etfName = document.getElementById(`simSlotEtf${i}`).value;
         const amount = getNum(document.getElementById(`simSlotAmount${i}`).value);
@@ -147,6 +156,10 @@ function runPortfolioSimulator() {
             
             const monthlyGrossDiv = shares * etf.avgDiv;
             const monthlyTaxBase = shares * etf.taxBase;
+            
+            // 시나리오별 배당금 (세전) 계산
+            const minGrossDiv = shares * etf.minDiv;
+            const maxGrossDiv = shares * etf.maxDiv;
 
             sumMonthlyGrossDiv += monthlyGrossDiv;
             sumMonthlyTaxBase += monthlyTaxBase;
@@ -155,28 +168,38 @@ function runPortfolioSimulator() {
                 <tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-5 py-3 font-bold text-slate-800">${etfName}</td>
                     <td class="px-5 py-3 text-right font-mono">${fmtNum(shares)}주</td>
-                    <td class="px-5 py-3 text-right font-mono text-blue-600">${fmtNum(monthlyGrossDiv)}원</td>
                     <td class="px-5 py-3 text-right font-mono text-red-500 bg-red-50/20">${fmtNum(monthlyTaxBase)}원</td>
+                    <td class="px-5 py-3 text-right font-mono text-slate-500 border-l border-slate-100">${fmtNum(minGrossDiv)}원</td>
+                    <td class="px-5 py-3 text-right font-mono text-blue-600 bg-blue-50/20 font-black">${fmtNum(monthlyGrossDiv)}원</td>
+                    <td class="px-5 py-3 text-right font-mono text-emerald-600 bg-emerald-50/20">${fmtNum(maxGrossDiv)}원</td>
                 </tr>
             `;
         }
     }
 
-    // 할당 상태 업데이트
     const statusEl = document.getElementById('simAllocatedStatus');
     statusEl.textContent = `${totalRatio.toFixed(1)}% / ${fmtNum(totalInvestedAmount)}원`;
     statusEl.className = totalRatio > 100 ? "text-red-600 font-black mono text-base" : "text-indigo-600 font-black mono text-base";
 
-    // 명세서 표 업데이트
     const tbody = document.getElementById('simBreakdownTableBody');
     if (breakdownHtml === '') {
-        tbody.innerHTML = `<tr><td colspan="4" class="p-5 text-center text-slate-400 font-bold">자산을 배분하면 명세서가 나타납니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="p-5 text-center text-slate-400 font-bold">자산을 배분하면 명세서가 나타납니다.</td></tr>`;
     } else {
         tbody.innerHTML = breakdownHtml;
     }
 
     document.getElementById('simTotalGrossDiv').textContent = fmtNum(sumMonthlyGrossDiv) + "원";
     document.getElementById('simTotalTaxBase').textContent = fmtNum(sumMonthlyTaxBase) + "원";
+    
+    // Tfoot 합계 영역 레이아웃 조정
+    document.querySelector('#simTotalGrossDiv').parentElement.innerHTML = `
+        <td class="px-5 py-3 text-center">합계</td>
+        <td class="px-5 py-3 text-right">-</td>
+        <td id="simTotalTaxBase" class="px-5 py-3 text-right text-red-600 mono bg-red-50/50">${fmtNum(sumMonthlyTaxBase)}원</td>
+        <td class="px-5 py-3 text-right">-</td>
+        <td id="simTotalGrossDiv" class="px-5 py-3 text-right text-blue-600 mono font-black bg-blue-50/30">${fmtNum(sumMonthlyGrossDiv)}원</td>
+        <td class="px-5 py-3 text-right">-</td>
+    `;
 
     // --- 5. 일반계좌 비교 카드 연산 ---
     const genAnnualTaxBase = sumMonthlyTaxBase * 12;
