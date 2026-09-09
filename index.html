@@ -34,6 +34,9 @@
             <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-indigo-50 whitespace-nowrap text-indigo-700">📜 배당투자설계도</button>
         </div>
 
+        <!-- 기존 뷰 생략 (viewQuant ~ viewOneDollar) -->
+        <!-- 아래 📜 배당투자설계도 부분만 교체된 전체 코드입니다 -->
+
         <div id="viewQuant" class="space-y-6 block">
             <div id="macroPanel" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
@@ -804,7 +807,6 @@
                 </div>
             </div>
 
-            <!-- ✨ 10년 복리 시뮬레이터 (1:1 진검승부 + 분할 DRIP) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                 <div class="bg-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
                     <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 포트폴리오 🆚 벤치마크 지수 1:1 비교</h2>
@@ -870,15 +872,9 @@
                                     <div class="flex flex-col gap-2 w-full">
                                         <span class="text-sm font-bold text-slate-700">배당금 100% 분산 재투자 대상:</span>
                                         
+                                        <!-- ✨ 배당 종목 리스트가 JS를 통해 이 안으로 주입됩니다 -->
                                         <div class="flex items-center gap-1 w-full">
                                             <select id="dripTarget1" disabled class="drip-input flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:bg-slate-100">
-                                                <option value="spy">SPY (S&P 500)</option>
-                                                <option value="ndx">QQQ (나스닥 100)</option>
-                                                <option value="qld">QLD (나스닥 2배)</option>
-                                                <option value="tqqq">TQQQ (나스닥 3배)</option>
-                                                <option value="sso">SSO (S&P 2배)</option>
-                                                <option value="upro">UPRO (S&P 3배)</option>
-                                                <option value="kospi">코스피 (KOSPI)</option>
                                             </select>
                                             <div class="relative w-16">
                                                 <input type="number" id="dripRatio1" disabled value="100" class="drip-input w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-1 pr-4 text-center disabled:opacity-50 disabled:bg-slate-100">
@@ -887,14 +883,6 @@
                                         </div>
                                         <div class="flex items-center gap-1 w-full">
                                             <select id="dripTarget2" disabled class="drip-input flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:bg-slate-100">
-                                                <option value="">-- 분산 시 두 번째 종목 선택 --</option>
-                                                <option value="spy">SPY (S&P 500)</option>
-                                                <option value="ndx">QQQ (나스닥 100)</option>
-                                                <option value="qld">QLD (나스닥 2배)</option>
-                                                <option value="tqqq">TQQQ (나스닥 3배)</option>
-                                                <option value="sso">SSO (S&P 2배)</option>
-                                                <option value="upro">UPRO (S&P 3배)</option>
-                                                <option value="kospi">코스피 (KOSPI)</option>
                                             </select>
                                             <div class="relative w-16">
                                                 <input type="number" id="dripRatio2" disabled value="0" class="drip-input w-full bg-white border border-slate-300 text-xs font-bold rounded py-1.5 pl-1 pr-4 text-center disabled:opacity-50 disabled:bg-slate-100">
@@ -911,7 +899,6 @@
                         <canvas id="div10YearChart"></canvas>
                     </div>
 
-                    <!-- ✨ 퀀트 애널리스트 자동 브리핑 패널 -->
                     <div id="expertAdvicePanel" class="mt-6 bg-slate-800 text-slate-100 p-6 rounded-2xl shadow-md border border-slate-700 hidden transition-all">
                         <!-- 내용이 JS에서 동적으로 생성되어 여기에 들어갑니다 -->
                     </div>
