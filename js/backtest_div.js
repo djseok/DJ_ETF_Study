@@ -271,7 +271,6 @@ function runPortfolioSimulator() {
     update10YearChart(totalInvestedAmount, monthlyAdd, monthlyNetYield, genMonthlyNetDiv);
 }
 
-// ✨ [배당금 분산 재투자] 및 [동적 전문가 브리핑] 로직 통합
 function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, startingMonthlyDiv) {
     if (initialInvestment <= 0 && monthlyAdd <= 0) {
         document.getElementById('expertAdvicePanel').classList.add('hidden');
@@ -391,7 +390,7 @@ function update10YearChart(initialInvestment, monthlyAdd, monthlyNetYield, start
                 },
                 {
                     type: 'bar',
-                    label: '순수 투입 원금 (초기 거치 + 월 적립 누적)',
+                    label: '배당 포트 평가액 (원금 누적 + 본체 시세차익)',
                     data: dataPrincipalOnly,
                     backgroundColor: '#1e293b', 
                     borderWidth: 0,
@@ -446,6 +445,10 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
     const totalInvested = initial + (monthly * 120);
     const growthMultiplier = (totalAsset / totalInvested).toFixed(1);
     
+    // ✨ 핵심 수학 오류 수정: 10년 뒤 포트폴리오 원금 덩어리(finalPrincipal) 안에서, 내가 순수하게 넣은 돈(totalInvested)을 뺀 나머지가 순수 시세차익입니다.
+    const baseCapitalGains = finalPrincipal - totalInvested;
+    const baseCapitalGainsStr = baseCapitalGains >= 0 ? '+ ' + fmtNum(baseCapitalGains) : fmtNum(baseCapitalGains);
+    
     const greetings = [
         "포트폴리오의 뼈대가 아주 탄탄합니다.", 
         "훌륭한 자산 배분 감각을 보여주셨습니다.", 
@@ -477,14 +480,16 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
 
         let ranEval = diffToBm >= 0 ? goodEvals[Math.floor(Math.random() * goodEvals.length)] : badEvals[Math.floor(Math.random() * badEvals.length)];
 
+        // ✨ 시세차익 항목을 추가하여 덧셈이 완벽하게 떨어지는 명세서 렌더링
         adviceHtml += `
             <p class="text-sm leading-relaxed mb-4 text-slate-300">
                 10년간 생활비로 쓰지 않고 모은 배당금을 <strong>[${targetName}]</strong>에 분산 재투자(혼합 복리 연 ${cagr}%)하는 <span class="text-emerald-400 font-bold">강력한 스노우볼 시나리오</span>를 선택하셨습니다.
             </p>
             <ul class="space-y-2 text-sm text-slate-200 bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4">
                 <li class="flex justify-between items-center border-b border-slate-700 pb-2"><span>📈 10년 뒤 내 포트폴리오 총 자산:</span> <strong class="text-lg text-emerald-400">${fmtNum(totalAsset)} 원</strong></li>
-                <li class="flex justify-between items-center border-b border-slate-700 pb-2 pt-1"><span class="pl-4 text-slate-400">↳ 내가 10년간 투입한 순수 원금:</span> <strong class="text-slate-300">${fmtNum(totalInvested)} 원</strong></li>
-                <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당금 눈덩이로 벌어들인 순수익:</span> <strong class="text-emerald-500">+ ${fmtNum(finalGains)} 원</strong></li>
+                <li class="flex justify-between items-center pt-2"><span class="pl-4 text-slate-400">↳ 내 돈 순수 투입 원금 (초기+적립 누적):</span> <strong class="text-slate-300">${fmtNum(totalInvested)} 원</strong></li>
+                <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당 포트 본체의 10년치 시세차익:</span> <strong class="${baseCapitalGains >= 0 ? 'text-blue-400' : 'text-red-400'}">${baseCapitalGainsStr} 원</strong></li>
+                <li class="flex justify-between items-center pt-1"><span class="pl-4 text-slate-400">↳ 배당 재투자(DRIP)로 불려낸 눈덩이 수익:</span> <strong class="text-emerald-500">+ ${fmtNum(finalGains)} 원</strong></li>
             </ul>
             <p class="text-sm ${diffToBm >= 0 ? 'text-emerald-300' : 'text-yellow-300'} font-bold">
                 <i class="fas ${diffToBm >= 0 ? 'fa-check-circle' : 'fa-shield-alt'} mr-1"></i> ${ranEval} 투입한 원금 대비 자산이 <strong>${growthMultiplier}배</strong>로 퀀텀 점프하는 이 짜릿한 결과를 기억하세요!
@@ -495,9 +500,17 @@ function renderDynamicExpertAdvice(initial, monthly, startDiv, isDrip, targetNam
             <p class="text-sm leading-relaxed mb-4 text-slate-300">
                 현재 <strong>배당금을 생활비로 전액 소모하는 시나리오</strong>를 선택하셨습니다. 당장의 현금흐름으로 삶의 질은 극대화되지만, 복리 엔진이 꺼져있어 10년이 지나도 자산의 폭발적인 성장은 기대하기 어렵습니다.
             </p>
-            <div class="bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4 text-sm flex justify-between items-center">
-                <span class="text-slate-200">📉 10년 뒤 내 포트폴리오 원금 자산:</span> 
-                <strong class="text-lg text-slate-100">${fmtNum(finalPrincipal)} 원</strong>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-600 mb-4 text-sm flex flex-col gap-2">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                    <span class="text-slate-200 font-bold">📉 10년 뒤 배당 포트폴리오 평가액:</span> 
+                    <strong class="text-lg text-slate-100">${fmtNum(finalPrincipal)} 원</strong>
+                </div>
+                <div class="flex justify-between items-center text-slate-400 pl-4 pt-1">
+                    <span>↳ 내 돈 순수 투입 원금 (초기+적립 누적):</span> <span>${fmtNum(totalInvested)} 원</span>
+                </div>
+                <div class="flex justify-between items-center text-slate-400 pl-4">
+                    <span>↳ 배당 포트 본체의 10년치 시세차익:</span> <span class="${baseCapitalGains >= 0 ? 'text-blue-400' : 'text-red-400'}">${baseCapitalGainsStr} 원</span>
+                </div>
             </div>
             <p class="text-sm text-yellow-300 font-bold"><i class="fas fa-info-circle mr-1"></i> 자산을 더 크고 빠르게 불리고 싶으시다면, 위 옵션에서 '배당금 분산 재투자'를 켜서 마법이 일어나는 과정을 직접 눈으로 확인해 보세요!</p>
         `;
