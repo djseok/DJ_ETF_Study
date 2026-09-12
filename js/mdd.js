@@ -1,18 +1,13 @@
 // =========================================================
-// 📉 실시간 API 연동형 고급 MDD 계산기 (하이브리드 + 초고속 타임아웃 🚀)
-// FMP API(미국 개별주) + 야후 다중 프록시(ETF/한국주식) 자동 분기 및 킬스위치
+// 📉 실시간 API 연동형 고급 MDD 계산기 (하이브리드 + 전용 GAS 터널 🚀)
 // =========================================================
 
-let mddChartInstance = null; // Chart.js 인스턴스 초기화용
+let mddChartInstance = null;
 
-// ⏱️ 타임아웃 기능이 탑재된 fetch 래퍼 함수 (교통체증 방지 킬스위치)
 async function fetchWithTimeout(resource, options = {}, timeout = 3500) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
-    const response = await fetch(resource, {
-        ...options,
-        signal: controller.signal
-    });
+    const response = await fetch(resource, { ...options, signal: controller.signal });
     clearTimeout(id);
     return response;
 }
@@ -28,8 +23,7 @@ async function runAdvancedMDD() {
         return;
     }
 
-    // 로딩 UI 시작
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 최적의 데이터 터널을 찾는 중... ⏳`;
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다... ⏳`;
     statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
     resultContainer.classList.add('hidden'); 
 
@@ -42,15 +36,12 @@ async function runAdvancedMDD() {
         let queryTicker = tickerInput;
         if (/^\d{6}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
 
-        // ===============================================================
-        // 🚀 1. 미국 개별주 전용 다이렉트 통신 (FMP API 활용)
-        // ===============================================================
+        // 1. 미국 개별주 전용 다이렉트 통신 (FMP API)
         if (!isKorean) {
             try {
                 const FMP_API_KEY = "UJT2GZE4YWddOWp4SczYFpYufroPrlAy"; 
                 const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${tickerInput}?timeseries=1250&apikey=${FMP_API_KEY}`;
                 
-                // FMP API도 3.5초 타임아웃 적용
                 const fmpRes = await fetchWithTimeout(fmpUrl, {}, 3500);
                 if (fmpRes.ok) {
                     const fmpData = await fmpRes.json();
@@ -65,43 +56,24 @@ async function runAdvancedMDD() {
                     }
                 }
             } catch(e) {
-                console.warn("FMP API 호출 실패 또는 타임아웃. 야후 우회 터널로 자동 전환합니다.");
+                console.warn("FMP API 호출 실패. 전용 구글 터널로 전환합니다.");
             }
         }
 
-        // ===============================================================
-        // 🔄 2. ETF(QLD, QQQ 등)나 한국 주식용 야후 다중 프록시 터널
-        // ===============================================================
+        // 2. 동진님 전용 GAS 터널 (ETF, 한국 주식, FMP 실패 시)
         if (!fetchSuccess) {
-            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=5y&interval=1d`;
+            statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
             
-            const proxies = [
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-                `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
-                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
-            ];
+            // 발급받은 동진님 고유 웹 앱 URL
+            const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
 
-            let data = null;
-
-            // 프록시 서버 순회 (각 3.5초 타임아웃 킬스위치)
-            for (let proxy of proxies) {
-                try {
-                    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> 우회 터널 접속 중... (무응답 시 자동 전환 🔄)`;
-                    const response = await fetchWithTimeout(proxy, {}, 3500);
-                    if (response.ok) {
-                        data = await response.json();
-                        break;
-                    }
-                } catch (e) {
-                    console.warn(`[터널 지연] 서버 응답 없음. 즉시 다음 터널로 우회합니다: ${proxy}`);
-                    continue;
-                }
-            }
-
-            if (!data || !data.chart || !data.chart.result) {
-                throw new Error("현재 모든 무료 프록시 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.");
-            }
+            const response = await fetchWithTimeout(targetUrl, {}, 8000); // 구글 서버 응답 여유 시간
+            if (!response.ok) throw new Error("전용 서버 응답 실패");
+            
+            const data = await response.json();
+            if (data.error) throw new Error(`야후 파이낸스 에러: ${data.error}`);
+            if (!data.chart || !data.chart.result) throw new Error("종목을 찾을 수 없거나 데이터가 없습니다.");
 
             const timestamps = data.chart.result[0].timestamp;
             const quote = data.chart.result[0].indicators.quote[0];
@@ -115,22 +87,18 @@ async function runAdvancedMDD() {
                 }
             }
             fetchSuccess = true;
-            statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (야후 파이낸스 다중 우회 터널 가동 중 🛡️)`;
+            statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (전용 GAS 터널 가동 중 🛡️)`;
         }
 
         if (prices.length < 2) throw new Error("MDD를 계산하기 위한 데이터가 부족합니다.");
 
-        // ===============================================================
-        // 📊 3. 시계열 연산 및 차트 렌더링
-        // ===============================================================
+        // 3. 시계열 연산 및 차트 렌더링
         let currentPrice = prices[prices.length - 1];
         let currentDate = dates[dates.length - 1];
-        
         let athPrice = prices[0];
         let athDate = dates[0];
         let maxDrawdown = 0;
         let maxDrawdownDate = dates[0];
-        
         let drawdowns = [];
         let runningMax = prices[0];
 
@@ -185,7 +153,6 @@ async function runAdvancedMDD() {
         document.getElementById('stat-max-date').innerText = maxDrawdownDate;
         document.getElementById('stat-start-date').innerText = dates[0];
         document.getElementById('stat-total-days').innerText = `${prices.length.toLocaleString()}일`;
-
         document.getElementById('price-drop-10').innerText = `$${(athPrice * 0.90).toFixed(2)}`;
         document.getElementById('price-drop-20').innerText = `$${(athPrice * 0.80).toFixed(2)}`;
         document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
@@ -204,7 +171,6 @@ async function runAdvancedMDD() {
     }
 }
 
-// 📊 [구간별 회복률] 동적 연산 및 테이블 생성 함수
 function calculateRecoveryMatrix(prices, drawdowns) {
     const totalDays = prices.length;
     const levels = [-5, -10, -15, -20, -25, -30, -35, -40, -45, -50];
@@ -222,7 +188,6 @@ function calculateRecoveryMatrix(prices, drawdowns) {
                 for(let k = 0; k <= i; k++) {
                     if(prices[k] > localMax) localMax = prices[k];
                 }
-
                 for (let j = i + 1; j < totalDays; j++) {
                     if (prices[j] >= localMax) {
                         isRecovered = true;
@@ -260,7 +225,6 @@ function calculateRecoveryMatrix(prices, drawdowns) {
     document.getElementById('recovery-table-body').innerHTML = html;
 }
 
-// 🎨 차트 생성 소스
 function renderUnderwaterChart(dates, drawdowns, ticker) {
     const ctx = document.getElementById('mddChartCanvas').getContext('2d');
     if (mddChartInstance) mddChartInstance.destroy();
@@ -286,11 +250,7 @@ function renderUnderwaterChart(dates, drawdowns, ticker) {
             interaction: { mode: 'index', intersect: false },
             scales: {
                 x: { grid: { display: false }, ticks: { maxTicksLimit: 6, font: { weight: 'bold' } } },
-                y: { 
-                    beginAtZero: true, 
-                    max: 0, 
-                    ticks: { callback: value => value + '%', font: { weight: 'bold' } } 
-                }
+                y: { beginAtZero: true, max: 0, ticks: { callback: value => value + '%', font: { weight: 'bold' } } }
             },
             plugins: {
                 tooltip: { callbacks: { label: context => `하락률: ${context.parsed.y.toFixed(2)}%` } },
@@ -300,7 +260,6 @@ function renderUnderwaterChart(dates, drawdowns, ticker) {
     });
 }
 
-// 엔터 키 연동
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('mdd-ticker-input');
     if(input) input.addEventListener('keypress', e => { if (e.key === 'Enter') runAdvancedMDD(); });
