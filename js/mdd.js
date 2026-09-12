@@ -1,5 +1,6 @@
 // =========================================================
-// 📉 실시간 API 연동형 고급 MDD 및 구간 회복률 계산 엔진 (야후 파이낸스 + 다중 프록시 터널)
+// 📉 실시간 API 연동형 고급 MDD 계산기 (하이브리드 스마트 라우팅)
+// FMP API(미국 개별주) + 야후 파이낸스 다중 프록시(ETF 및 한국주식) 자동 분기
 // =========================================================
 
 let mddChartInstance = null; // Chart.js 인스턴스 초기화용
@@ -10,77 +11,107 @@ async function runAdvancedMDD() {
     const resultContainer = document.getElementById('mdd-result-container');
 
     if (!tickerInput) {
-        statusMsg.innerHTML = "⚠️ 종목 티커를 입력해주세요. (예: QQQ, SPY)";
+        statusMsg.innerHTML = "⚠️ 종목 티커를 입력해주세요. (예: NVDA, QQQ, 005930)";
         statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
         return;
     }
 
     // 로딩 UI 시작
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 최적의 무료 데이터 터널을 찾는 중... ⏳`;
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다. 최적의 데이터 터널을 찾는 중... ⏳`;
     statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
     resultContainer.classList.add('hidden'); 
 
     try {
-        // 한국 주식 코드 입력 시 야후 파이낸스 규격(.KS)으로 자동 변환
+        let dates = [];
+        let prices = [];
+        let fetchSuccess = false;
+        
+        // 한국 주식 여부 판별
+        let isKorean = /^\d{6}$/.test(tickerInput) || tickerInput.endsWith('.KS');
         let queryTicker = tickerInput;
         if (/^\d{6}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
 
-        // 1. 야후 파이낸스 5년치(1d 간격) 데이터 호출 URL
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=5y&interval=1d`;
-        
-        // 2. RSI 모듈과 동일한 무적의 다중 프록시 (Fallback) 배열
-        const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-            `https://thingproxy.freeboard.io/fetch/${targetUrl}`
-        ];
-
-        let data = null;
-
-        // 프록시 서버가 막히면 다음 서버로 자동 재시도
-        for (let proxy of proxies) {
+        // ===============================================================
+        // 🚀 1. 미국 개별주 전용 다이렉트 통신 (FMP API 활용)
+        // ===============================================================
+        if (!isKorean) {
             try {
-                const response = await fetch(proxy);
-                if (response.ok) {
-                    data = await response.json();
-                    break;
+                const FMP_API_KEY = "UJT2GZE4YWddOWp4SczYFpYufroPrlAy"; 
+                const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${tickerInput}?timeseries=1250&apikey=${FMP_API_KEY}`;
+                
+                const fmpRes = await fetch(fmpUrl);
+                if (fmpRes.ok) {
+                    const fmpData = await fmpRes.json();
+                    if (fmpData.historical && fmpData.historical.length > 0) {
+                        const historical = fmpData.historical.reverse(); // 과거 순으로 정렬
+                        for (let item of historical) {
+                            dates.push(item.date);
+                            prices.push(item.close);
+                        }
+                        fetchSuccess = true;
+                        statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (FMP API 다이렉트 가동 중 ⚡)`;
+                    }
                 }
-            } catch (e) {
-                console.warn(`[프록시 터널 막힘] 다음 서버로 자동 우회합니다: ${proxy}`);
-                continue;
+            } catch(e) {
+                console.warn("FMP API 호출 실패 또는 ETF 차단됨. 야후 우회 터널로 자동 전환합니다.");
             }
         }
 
-        if (!data) throw new Error("서버 응답 실패: 현재 사용 가능한 모든 무료 데이터 터널이 혼잡합니다.");
-        if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("종목을 찾을 수 없거나 데이터가 없습니다.");
+        // ===============================================================
+        // 🔄 2. FMP에서 막히는 ETF(QQQ)나 한국 주식용 야후 다중 프록시 터널
+        // ===============================================================
+        if (!fetchSuccess) {
+            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=5y&interval=1d`;
+            
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+                `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+            ];
 
-        const timestamps = data.chart.result[0].timestamp;
-        const quote = data.chart.result[0].indicators.quote[0];
-        
-        // 야후 파이낸스는 종가를 순서대로 배열로 제공
-        const rawPrices = quote.close; 
+            let data = null;
 
-        let dates = [];
-        let prices = [];
-        
-        // 데이터 정제 (null 제거 및 날짜 포맷팅)
-        for(let i = 0; i < rawPrices.length; i++) {
-            if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
-                const d = new Date(timestamps[i] * 1000);
-                dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
-                prices.push(rawPrices[i]);
+            for (let proxy of proxies) {
+                try {
+                    const response = await fetch(proxy);
+                    if (response.ok) {
+                        data = await response.json();
+                        break;
+                    }
+                } catch (e) {
+                    continue;
+                }
             }
+
+            if (!data || !data.chart || !data.chart.result) {
+                throw new Error("모든 무료 프록시 서버가 혼잡합니다. 잠시 후 다시 시도해주세요.");
+            }
+
+            const timestamps = data.chart.result[0].timestamp;
+            const quote = data.chart.result[0].indicators.quote[0];
+            const rawPrices = quote.close; 
+            
+            for(let i = 0; i < rawPrices.length; i++) {
+                if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
+                    const d = new Date(timestamps[i] * 1000);
+                    dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+                    prices.push(rawPrices[i]);
+                }
+            }
+            fetchSuccess = true;
+            statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (야후 파이낸스 다중 우회 터널 가동 중 🛡️)`;
         }
 
         if (prices.length < 2) throw new Error("MDD를 계산하기 위한 데이터가 부족합니다.");
 
-        // 3. 기본 시계열 연산 (ATH, MDD 추출)
+        // ===============================================================
+        // 📊 3. 시계열 연산 및 차트 렌더링 (기존 로직과 100% 동일)
+        // ===============================================================
         let currentPrice = prices[prices.length - 1];
         let currentDate = dates[dates.length - 1];
         
         let athPrice = prices[0];
         let athDate = dates[0];
-        
         let maxDrawdown = 0;
         let maxDrawdownDate = dates[0];
         
@@ -88,9 +119,7 @@ async function runAdvancedMDD() {
         let runningMax = prices[0];
 
         for (let i = 0; i < prices.length; i++) {
-            if (prices[i] > runningMax) {
-                runningMax = prices[i];
-            }
+            if (prices[i] > runningMax) runningMax = prices[i];
             if (prices[i] > athPrice) {
                 athPrice = prices[i];
                 athDate = dates[i];
@@ -107,7 +136,6 @@ async function runAdvancedMDD() {
 
         let currentDrawdown = ((currentPrice - athPrice) / athPrice) * 100;
 
-        // 4. UI 텍스트 꽂아넣기
         document.getElementById('mdd-current-price').innerText = `$${currentPrice.toFixed(2)}`;
         document.getElementById('mdd-current-date').innerText = currentDate;
         document.getElementById('mdd-ath-price').innerText = `$${athPrice.toFixed(2)}`;
@@ -119,7 +147,6 @@ async function runAdvancedMDD() {
 
         ddDisplay.innerText = `${currentDrawdown.toFixed(2)}%`;
 
-        // 상태 조건부 컬러링
         if(currentDrawdown >= -5) {
             badgeDisplay.innerText = "🙂 소폭 조정 (안정권)";
             cardDisplay.className = "bg-green-50 p-5 rounded-2xl shadow-sm border border-green-200 flex flex-col justify-center items-center";
@@ -148,13 +175,9 @@ async function runAdvancedMDD() {
         document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
         document.getElementById('price-drop-40').innerText = `$${(athPrice * 0.60).toFixed(2)}`;
 
-        // 5. 🔥 핵심: 구간별 회복률 고급 알고리즘 가동
         calculateRecoveryMatrix(prices, drawdowns);
-
-        // 6. 차트 렌더링
         renderUnderwaterChart(dates, drawdowns, tickerInput);
 
-        statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (다중 프록시 터널 가동 중)`;
         statusMsg.className = "text-xs text-green-600 mt-2 font-bold";
         resultContainer.classList.remove('hidden');
 
@@ -218,7 +241,6 @@ function calculateRecoveryMatrix(prices, drawdowns) {
             </tr>
         `;
     });
-
     document.getElementById('recovery-table-body').innerHTML = html;
 }
 
