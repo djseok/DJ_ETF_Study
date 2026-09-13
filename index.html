@@ -23,6 +23,7 @@
             </span>
         </h1>
 
+        <!-- 상단 메뉴 탭 -->
         <div class="flex flex-col md:flex-row flex-wrap gap-2 mb-6">
             <button id="btnTabQuant" onclick="switchTab('quant')" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap">📊 예측 엔진</button>
             <button id="btnTabPort" onclick="switchTab('port')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-orange-50 whitespace-nowrap">🏆 클럽 현황</button>
@@ -30,12 +31,14 @@
             <button id="btnTabDiv" onclick="switchTab('div')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-emerald-50 whitespace-nowrap text-emerald-700">💰 배당&총알</button>
             <button id="btnTabMdd" onclick="switchTab('mdd')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-red-50 whitespace-nowrap text-red-700">📉 MDD 계산기</button>
             <button id="btnTabRsi" onclick="switchTab('rsi')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-purple-50 whitespace-nowrap text-purple-700">📈 RSI 계산기</button>
-            <!-- ✨ 이평선 분석 탭 추가 -->
             <button id="btnTabMa" onclick="switchTab('ma')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-teal-50 whitespace-nowrap text-teal-700">🌊 이평선 분석</button>
+            <!-- ✨ 신규: 개별주식분석 탭 추가 -->
+            <button id="btnTabSingle" onclick="switchTab('single')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-fuchsia-50 whitespace-nowrap text-fuchsia-700">🔬 개별주식분석</button>
             <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-700">🚀 $1 프로젝트</button>
             <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-indigo-50 whitespace-nowrap text-indigo-700">📜 배당투자설계도</button>
         </div>
 
+        <!-- 1. 예측 엔진 -->
         <div id="viewQuant" class="space-y-6 block">
             <div id="macroPanel" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
@@ -141,6 +144,7 @@
             </div>
         </div>
 
+        <!-- 2. 클럽 현황 -->
         <div id="viewPort" class="hidden space-y-6">
             <div class="bg-gradient-to-r from-orange-100 to-amber-50 p-6 rounded-2xl shadow-sm border border-orange-200 relative overflow-hidden">
                 <div class="corgi-bg"></div>
@@ -153,6 +157,7 @@
             <div id="personalCardsContainer" class="space-y-6"></div>
         </div>
 
+        <!-- 3. 구매 계산기 -->
         <div id="viewCalc" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-calculator text-orange-500 mr-2"></i> 스마트 매수 시뮬레이터</h2>
@@ -300,6 +305,7 @@
             </div>
         </div>
 
+        <!-- 4. 배당&총알 -->
         <div id="viewDiv" class="hidden space-y-6">
             <div class="bg-blue-800 text-white p-8 rounded-2xl shadow-md text-center relative overflow-hidden">
                 <i class="fas fa-piggy-bank absolute -left-4 -bottom-4 text-8xl opacity-10"></i>
@@ -347,6 +353,7 @@
             </div>
         </div>
 
+        <!-- 5. MDD 계산기 -->
         <div id="viewMdd" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-2 flex items-center">
@@ -504,6 +511,7 @@
             </div>
         </div>
         
+        <!-- 6. RSI 계산기 -->
         <div id="viewRsi" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
                 <h2 class="text-2xl font-bold mb-2 flex items-center">📈 RSI 계산기</h2>
@@ -554,6 +562,110 @@
             </div>
         </div>
 
+        <!-- 7. 이평선 분석 -->
+        <div id="viewMa" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="text-xl font-black text-slate-800 mb-2">
+                    <i class="fas fa-layer-group text-teal-500 mr-2"></i>실시간 이평선(MA) 시뮬레이터
+                </h3>
+                <p class="text-sm text-slate-500 font-bold mb-5">
+                    종목 티커를 입력하고 원하는 이동평균선(5일, 20일, 60일, 120일, 200일)을 체크하여 시장의 추세를 분석하세요.
+                </p>
+                
+                <div class="flex flex-col md:flex-row gap-3 mb-5">
+                    <input type="text" id="ma-ticker-input" placeholder="종목 티커 입력 (예: NVDA, SPY, 005930)" class="flex-1 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-teal-500 focus:border-teal-500 font-mono">
+                    <button onclick="runMACalculation()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md whitespace-nowrap">
+                        <i class="fas fa-search mr-2"></i>차트 분석
+                    </button>
+                </div>
+
+                <div class="bg-teal-50/50 p-4 rounded-xl border border-teal-100 mb-4 flex flex-wrap gap-4 items-center">
+                    <span class="text-sm font-black text-teal-800"><i class="fas fa-filter mr-1"></i> 표시할 이평선:</span>
+                    
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="5" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
+                        <span class="text-sm font-bold text-slate-700">5일선</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="20" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
+                        <span class="text-sm font-bold text-slate-700">20일선 (단기)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="60" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
+                        <span class="text-sm font-bold text-slate-700">60일선 (수급)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="120" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()">
+                        <span class="text-sm font-bold text-slate-700">120일선 (경기)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="200" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()">
+                        <span class="text-sm font-bold text-slate-700">200일선 (대세)</span>
+                    </label>
+                </div>
+
+                <div id="ma-status-msg" class="text-xs font-semibold text-slate-400 mb-4"></div>
+
+                <div id="ma-result-container" class="hidden relative h-96 w-full bg-slate-50 rounded-xl border border-slate-100 p-4">
+                    <canvas id="maChartCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- ✨ 8. 신규: 🔬 개별종목 퀀트 분석 패널 추가 -->
+        <!-- ========================================================= -->
+        <div id="viewSingle" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-2xl font-black text-slate-800 mb-2 flex items-center">
+                    <i class="fas fa-microscope text-indigo-500 mr-2"></i> 개별종목 퀀트 분석 (Trend & Pullback)
+                </h2>
+                <p class="text-slate-500 mb-6 text-sm">
+                    단순 낙폭 과대가 아닌, <strong>'상승 추세가 유지되는 건강한 조정'</strong>을 찾아냅니다. 장기 추세, 모멘텀 회복, MDD를 종합하여 최적의 진입 포지션을 산출합니다.
+                </p>
+
+                <div class="bg-slate-50 p-5 rounded-xl border border-slate-100">
+                    <label class="block text-sm font-bold text-slate-700 mb-2">🔍 분석할 종목 티커 (예: QQQ, SPY, NVDA, 005930.KS)</label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="quant-ticker-input" placeholder="티커 입력..." class="flex-1 bg-white border border-slate-300 text-slate-900 font-bold rounded-xl p-3 focus:ring-indigo-500 focus:border-indigo-500 font-mono uppercase shadow-inner">
+                        <button onclick="runQuantAnalysis()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 px-8 rounded-xl transition-all shadow-md flex items-center justify-center">
+                            <i class="fas fa-brain mr-2"></i> 퀀트 분석 실행
+                        </button>
+                    </div>
+                    <div id="quant-status-msg" class="text-xs font-semibold text-slate-400 mt-3 flex items-center"></div>
+                </div>
+            </div>
+
+            <!-- Explainable Quant 결과 패널 (초기엔 숨김) -->
+            <div id="quant-result-container" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div id="quant-action-banner" class="p-4 rounded-xl mb-6 text-center">
+                    <h1 id="quant-action-title" class="text-3xl font-black mb-1"></h1>
+                    <p id="quant-score-text" class="text-lg font-bold opacity-90"></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h3 class="text-xs font-bold text-slate-400 mb-1">📉 조정 깊이 (MDD)</h3>
+                        <div id="quant-val-mdd" class="text-xl font-black text-slate-800"></div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h3 class="text-xs font-bold text-slate-400 mb-1">📊 모멘텀 (RSI 14)</h3>
+                        <div id="quant-val-rsi" class="text-xl font-black text-slate-800"></div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h3 class="text-xs font-bold text-slate-400 mb-1">📈 단기 추세 (20MA)</h3>
+                        <div id="quant-val-ma" class="text-xl font-black text-slate-800"></div>
+                    </div>
+                </div>
+
+                <div class="bg-indigo-50 border border-indigo-100 p-5 rounded-xl">
+                    <h3 class="font-bold text-indigo-900 mb-3"><i class="fas fa-robot mr-2"></i>AI 퀀트 엔진의 판단 근거</h3>
+                    <ul id="quant-reasons-list" class="space-y-2 text-sm text-indigo-800 font-medium"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. $1 프로젝트 -->
         <div id="viewOneDollar" class="hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-4 flex items-center">
@@ -674,7 +786,7 @@
             </div>
         </div>
 
-        <!-- 📜 배당투자설계도 -->
+        <!-- 10. 배당투자설계도 -->
         <div id="viewBacktestDiv" class="hidden space-y-6">
             
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
@@ -806,7 +918,6 @@
                 </div>
             </div>
 
-            <!-- ✨ 10년 복리 시뮬레이터 (1:1 진검승부 + 분할 DRIP) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                 <div class="bg-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
                     <h2 class="text-lg font-black text-white flex items-center"><i class="fas fa-chart-line text-emerald-400 mr-2"></i>10년 장기 투자 시나리오: 배당 포트폴리오 🆚 벤치마크 지수 1:1 비교</h2>
@@ -872,7 +983,6 @@
                                     <div class="flex flex-col gap-2 w-full">
                                         <span class="text-sm font-bold text-slate-700">배당금 100% 분산 재투자 대상:</span>
                                         
-                                        <!-- ✨ 분산 재투자 UI 추가 -->
                                         <div class="flex items-center gap-1 w-full">
                                             <select id="dripTarget1" disabled class="drip-input flex-1 bg-white border border-slate-300 text-xs font-bold rounded p-1.5 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:bg-slate-100">
                                                 <option value="spy">SPY (S&P 500)</option>
@@ -914,7 +1024,6 @@
                         <canvas id="div10YearChart"></canvas>
                     </div>
 
-                    <!-- ✨ 퀀트 애널리스트 자동 브리핑 패널 -->
                     <div id="expertAdvicePanel" class="mt-6 bg-slate-800 text-slate-100 p-6 rounded-2xl shadow-md border border-slate-700 hidden transition-all">
                         <!-- 내용이 JS에서 동적으로 생성되어 여기에 들어갑니다 -->
                     </div>
@@ -922,61 +1031,6 @@
                 </div>
             </div>
             
-        </div>
-        
-        <!-- ========================================================= -->
-        <!-- ✨ 📈 실시간 이동평균선(MA) 분석 패널 추가 -->
-        <!-- ========================================================= -->
-        <div id="viewMa" class="hidden space-y-6">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 class="text-xl font-black text-slate-800 mb-2">
-                    <i class="fas fa-layer-group text-teal-500 mr-2"></i>실시간 이평선(MA) 시뮬레이터
-                </h3>
-                <p class="text-sm text-slate-500 font-bold mb-5">
-                    종목 티커를 입력하고 원하는 이동평균선(5일, 20일, 60일, 120일, 200일)을 체크하여 시장의 추세를 분석하세요.
-                </p>
-                
-                <!-- 검색창 및 버튼 -->
-                <div class="flex flex-col md:flex-row gap-3 mb-5">
-                    <input type="text" id="ma-ticker-input" placeholder="종목 티커 입력 (예: NVDA, SPY, 005930)" class="flex-1 bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-teal-500 focus:border-teal-500 font-mono">
-                    <button onclick="runMACalculation()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md whitespace-nowrap">
-                        <i class="fas fa-search mr-2"></i>차트 분석
-                    </button>
-                </div>
-
-                <!-- 🎛️ 이평선 체크박스 필터링 영역 -->
-                <div class="bg-teal-50/50 p-4 rounded-xl border border-teal-100 mb-4 flex flex-wrap gap-4 items-center">
-                    <span class="text-sm font-black text-teal-800"><i class="fas fa-filter mr-1"></i> 표시할 이평선:</span>
-                    
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" value="5" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
-                        <span class="text-sm font-bold text-slate-700">5일선</span>
-                    </label>
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" value="20" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
-                        <span class="text-sm font-bold text-slate-700">20일선 (단기)</span>
-                    </label>
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" value="60" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()" checked>
-                        <span class="text-sm font-bold text-slate-700">60일선 (수급)</span>
-                    </label>
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" value="120" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()">
-                        <span class="text-sm font-bold text-slate-700">120일선 (경기)</span>
-                    </label>
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" value="200" class="ma-checkbox w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500" onchange="updateMAChart()">
-                        <span class="text-sm font-bold text-slate-700">200일선 (대세)</span>
-                    </label>
-                </div>
-
-                <div id="ma-status-msg" class="text-xs font-semibold text-slate-400 mb-4"></div>
-
-                <!-- 차트 렌더링 캔버스 -->
-                <div id="ma-result-container" class="hidden relative h-96 w-full bg-slate-50 rounded-xl border border-slate-100 p-4">
-                    <canvas id="maChartCanvas"></canvas>
-                </div>
-            </div>
         </div>
         <!-- 뷰 영역 끝 -->
     </div>
@@ -992,7 +1046,8 @@
     <script src="js/rsi.js"></script>
     <script src="js/one_dollar_project.js"></script>
     <script src="js/backtest_div.js"></script>
-    <!-- ✨ 이평선 스크립트 연결 -->
     <script src="js/ma.js"></script>
+    <!-- ✨ 신규: 개별종목 분석 통합 엔진 연결 -->
+    <script src="js/single_stock_analysis.js"></script>
 </body>
 </html>
