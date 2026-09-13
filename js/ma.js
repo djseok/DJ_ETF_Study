@@ -55,27 +55,23 @@ async function runMACalculation() {
             } catch(e) { console.warn("FMP 막힘, 야후로 우회"); }
         }
 
-        // 2. 야후 파이낸스 다중 프록시 터널 (한국주식 & ETF 백업)
+        // 2. 야후 파이낸스 다중 프록시 터널 (한국주식 & ETF 백업) -> 🔥 GAS 전용 터널로 교체 완료
         if (!fetchSuccess) {
-            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?range=2y&interval=1d`;
-            const proxies = [
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-                `https://thingproxy.freeboard.io/fetch/${targetUrl}`
-            ];
+            // 💡 동진님이 과거에 배포하셨던 완벽한 GAS 프록시 URL 적용
+            const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
 
-            let data = null;
-            for (let proxy of proxies) {
-                try {
-                    const response = await fetch(proxy);
-                    if (response.ok) { data = await response.json(); break; }
-                } catch (e) { continue; }
-            }
-
-            if (!data || !data.chart || !data.chart.result) throw new Error("서버 혼잡. 잠시 후 다시 시도해주세요.");
+            const response = await fetch(targetUrl);
+            if (!response.ok) throw new Error("서버 응답 실패");
+            
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("서버 혼잡. 잠시 후 다시 시도해주세요.");
 
             const timestamps = data.chart.result[0].timestamp;
-            const rawPrices = data.chart.result[0].indicators.quote[0].close; 
+            const quote = data.chart.result[0].indicators.quote[0];
+            const rawPrices = quote.close; 
             
             for(let i = 0; i < rawPrices.length; i++) {
                 if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
