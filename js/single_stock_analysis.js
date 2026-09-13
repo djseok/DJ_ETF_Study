@@ -9,20 +9,24 @@ async function runQuantAnalysis() {
 
     if (!tickerInput) return;
 
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-indigo-500 mr-1"></i> <b>${tickerInput}</b> 5년치 백데이터 기반 추세 및 조정 심도를 연산 중입니다...`;
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-indigo-500 mr-1"></i> <b>${tickerInput}</b> 백데이터 기반 추세 및 조정 심도를 연산 중입니다...`;
     resultContainer.classList.add('hidden');
 
     try {
-        // 야후 파이낸스 데이터 호출 (CORS 우회) - 200일선 계산을 위해 최소 2년(range=2y)치 호출
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerInput}?range=2y&interval=1d`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`; //[cite: 29]
-        
-        const response = await fetch(proxyUrl);
+        // 🔥 무료 프록시 접속 차단(CORS) 해결: 동진님 전용 무적 GAS 터널로 교체 완료
+        const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+        let queryTicker = /^\d{6}$/.test(tickerInput) ? tickerInput + ".KS" : tickerInput;
+        const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
+
+        const response = await fetch(targetUrl);
         if (!response.ok) throw new Error("데이터 호출 실패");
         
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("서버 혼잡. 잠시 후 다시 시도해주세요.");
+
         const quote = data.chart.result[0].indicators.quote[0];
-        const rawPrices = quote.close; // 종가 기준 계산 (노이즈 제거)[cite: 1]
+        const rawPrices = quote.close; // 종가 기준 계산 (노이즈 제거)
         
         let prices = rawPrices.filter(p => p !== null && p !== undefined);
         if (prices.length < 200) throw new Error("200일선 연산을 위한 과거 데이터가 부족합니다.");
@@ -58,7 +62,7 @@ function calculateAllIndicators(prices) {
     const ma60Rising = ma60[ma60.length - 1] > ma60[ma60.length - 5];
     const ma120Rising = ma120[ma120.length - 1] > ma120[ma120.length - 5];
 
-    // MDD 계산 (전체 기간 최고점 대비)[cite: 28]
+    // MDD 계산 (전체 기간 최고점 대비)
     let runningMax = prices[0];
     let maxDrawdown = 0;
     for (let p of prices) {
@@ -68,7 +72,7 @@ function calculateAllIndicators(prices) {
     }
     const currentMDD = ((currentPrice - runningMax) / runningMax) * 100;
 
-    // RSI 계산 (정통 와일더 방식)[cite: 19]
+    // RSI 계산 (정통 와일더 방식)
     const rsiArray = calcRSIArray(prices, 14);
     const currentRSI = rsiArray[rsiArray.length - 1];
     const prevRSI = rsiArray[rsiArray.length - 3]; // 2일 전 RSI와 비교하여 방향성 확인
