@@ -13,18 +13,32 @@ async function fetchWithTimeout(resource, options = {}, timeout = 3500) {
 }
 
 async function runAdvancedMDD() {
-    const tickerInput = document.getElementById('mdd-ticker-input').value.trim().toUpperCase();
-    const statusMsg = document.getElementById('mdd-status-msg');
+    const tickerInputElem = document.getElementById('mdd-ticker-input');
+    if (!tickerInputElem) return;
+    
+    const tickerInput = tickerInputElem.value.trim().toUpperCase();
+    let statusMsg = document.getElementById('mdd-status-msg');
+    
+    // 💡 [버그 수정] HTML에 상태 메시지 창이 누락되었을 경우 자바스크립트가 즉석에서 생성 (Null Safe)
+    if (!statusMsg) {
+        statusMsg = document.createElement('div');
+        statusMsg.id = 'mdd-status-msg';
+        statusMsg.className = "text-xs font-semibold text-slate-400 mt-3 flex items-center";
+        // 검색창 바로 아래에 안전하게 붙여넣기
+        tickerInputElem.parentElement.parentElement.appendChild(statusMsg);
+    }
+
     const resultContainer = document.getElementById('mdd-result-container');
+    if (!resultContainer) return;
 
     if (!tickerInput) {
         statusMsg.innerHTML = "⚠️ 종목 티커를 입력해주세요. (예: NVDA, QLD, 005930)";
-        statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
+        statusMsg.className = "text-xs text-red-500 mt-3 font-bold";
         return;
     }
 
-    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다... ⏳`;
-    statusMsg.className = "text-xs text-blue-600 mt-2 font-bold";
+    statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> <b>${tickerInput}</b> 데이터를 분석 중입니다... ⏳`;
+    statusMsg.className = "text-xs text-red-600 mt-3 font-bold";
     resultContainer.classList.add('hidden'); 
 
     try {
@@ -62,7 +76,7 @@ async function runAdvancedMDD() {
 
         // 2. 동진님 전용 GAS 터널 (ETF, 한국 주식, FMP 실패 시)
         if (!fetchSuccess) {
-            statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-blue-500"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
+            statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
             
             // 발급받은 동진님 고유 웹 앱 URL
             const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
@@ -161,13 +175,13 @@ async function runAdvancedMDD() {
         calculateRecoveryMatrix(prices, drawdowns);
         renderUnderwaterChart(dates, drawdowns, tickerInput);
 
-        statusMsg.className = "text-xs text-green-600 mt-2 font-bold";
+        statusMsg.className = "text-xs text-green-600 mt-3 font-bold";
         resultContainer.classList.remove('hidden');
 
     } catch (error) {
         console.error(error);
         statusMsg.innerHTML = `❌ ${error.message}`;
-        statusMsg.className = "text-xs text-red-500 mt-2 font-bold";
+        statusMsg.className = "text-xs text-red-500 mt-3 font-bold";
     }
 }
 
