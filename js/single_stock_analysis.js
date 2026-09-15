@@ -1,7 +1,7 @@
 // =========================================================
 // 🧠 EQDS V2.2.5 MASTER FINAL
 // Explainable Quantitative Decision System
-// STRICT ENFORCEMENT: Deterministic Accounting, No Look-ahead, Strict Invariants
+// STRICT ENFORCEMENT: Deterministic Accounting, Safe UI Rendering
 // =========================================================
 
 let quantChartInstance = null;
@@ -63,7 +63,7 @@ async function runQuantAnalysis() {
         const spyInd = rawSpy ? buildIndicators(rawSpy) : null;
         const qqqInd = rawQqq ? buildIndicators(rawQqq) : null;
 
-        // 3. Unit Testing (Strict Engine Verification)
+        // 3. Unit Testing
         const unitTests = runExtremeUnitTests(cfg);
 
         // 4. Live Evaluation
@@ -76,14 +76,14 @@ async function runQuantAnalysis() {
 
         lastEvaluationResult = { ticker: queryTicker, ind, spyInd, qqqInd, ev: liveEval, cfg };
 
-        // 5. Backtest (Explicit Exit 병렬 검증 & OOS 독립 분리)
+        // 5. Backtest
         const splitIdx = Math.floor(ind.prices.length * 0.7);
         const btIs = runBacktestSegment(252, splitIdx, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, true);
         const btOosA = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, false);
         const btOosB = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "B"}, false);
         const btOosC = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "C"}, false);
 
-        // 6. Sensitivity (UI/Engine 일치 보장)
+        // 6. Sensitivity
         const sens = {
             exp50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.5, exitType: "A"}, false),
             exp60: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.6, exitType: "A"}, false),
@@ -206,6 +206,7 @@ function calcRealizedVol(logRets, win) {
     }
     return res;
 }
+
 function calcRSI(p, win) {
     let rsi=new Array(p.length).fill(null), g=0, l=0;
     for(let i=1;i<=win;i++) { let d=p[i]-p[i-1]; if(d>0) g+=d; else if(d<0) l-=d; }
@@ -219,6 +220,7 @@ function calcRSI(p, win) {
     }
     return rsi;
 }
+
 function calcATR(h,l,c,win) {
     let atr=new Array(h.length).fill(null), tr=[h[0]-l[0]];
     for(let i=1;i<h.length;i++) tr.push(Math.max(h[i]-l[i], Math.abs(h[i]-c[i-1]), Math.abs(l[i]-c[i-1])));
@@ -226,6 +228,7 @@ function calcATR(h,l,c,win) {
     for(let i=win;i<h.length;i++) atr[i]=(atr[i-1]*(win-1)+tr[i])/win;
     return atr;
 }
+
 function calcCurrentDD(p, win) {
     let res = [];
     for(let i=0; i<p.length; i++) {
@@ -236,6 +239,7 @@ function calcCurrentDD(p, win) {
     }
     return res;
 }
+
 function calcMultiMDD(p, dates, win) {
     let res = [];
     for(let i=0; i<p.length; i++) {
@@ -506,13 +510,10 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     
     if(isLive && act.includes("매수") && whyNotAggressive.length === 0) whyNotAggressive.push("매수를 제약하는 뚜렷한 Hard Gate 미발동.");
 
-    let log = [];
-    if(isLive) log.push(`CALC: Adj ${adjScore} -> Cand ${(candW*100).toFixed(0)}% -> GateCap ${(gateCap*100).toFixed(0)}% -> Target ${(targetW*100).toFixed(0)}%`);
-
     return { 
         availScore, baseScore, adjScore, riskPenalty: penalty, candW, entryCap, gateCap, finalTargetWeight: targetW, actualWeight: actW, tradeDeltaWeight: tradeDelta,
         act, sty, tr: trSc, mo: moSc, rs: rsSc, ri: riSc, mk: mkSc,
-        whyPositive, whyNegative, whyNotAggressive, log, vm, isExplicitExit, stage: vm.stage
+        whyPositive, whyNegative, whyNotAggressive, vm, isExplicitExit, stage: vm.stage
     };
 }
 
@@ -694,7 +695,10 @@ function calculateConfidence(dv, btOos, sens) {
     if(btOos.cagr > 0) conf += 20; 
     if(btOos.sharpe !== "N/A" && btOos.sharpe > 1.0) conf += 20; else if(btOos.sharpe !== "N/A" && btOos.sharpe > 0.5) conf += 10;
     
-    let exps = [btOos.cagr, sens.exp50.cagr, sens.exp80.cagr].filter(Number.isFinite);
+    let exps = [btOos.cagr];
+    if(sens?.exp50?.cagr != null) exps.push(sens.exp50.cagr);
+    if(sens?.exp80?.cagr != null) exps.push(sens.exp80.cagr);
+    exps = exps.filter(Number.isFinite);
     if (exps.length > 0 && Math.max(...exps) - Math.min(...exps) < 0.05) conf += 20;
 
     if (btOos.cagr > 0 && btOos.bhCagr > 0) conf += 15; 
@@ -889,6 +893,14 @@ function calcSimulator() {
 // ---------------------------------------------------------
 // [UI RENDER LAYER]
 // ---------------------------------------------------------
+
+// Helper function to safely extract formatted CAGR/MDD/Sharpe/etc without UI crash.
+const safeCagr = (obj) => (obj && typeof obj.cagr === 'number') ? (obj.cagr * 100).toFixed(1) + '%' : 'N/A';
+const safeMdd = (obj) => (obj && typeof obj.mdd === 'number') ? obj.mdd.toFixed(1) + '%' : 'N/A';
+const safeSharpe = (obj) => (obj && obj.sharpe !== "N/A" && typeof obj.sharpe === 'number') ? obj.sharpe.toFixed(2) : 'N/A';
+const safeSortino = (obj) => (obj && obj.sortino !== "N/A" && typeof obj.sortino === 'number') ? obj.sortino.toFixed(2) : 'N/A';
+const safeTrd = (obj) => (obj && typeof obj.trd === 'number') ? obj.trd + '회' : 'N/A';
+
 function renderEQDS_UI(ctx) {
     const { ticker, ev, dv, btIs, btOosA, btOosB, btOosC, conf, sensitivity, tests } = ctx;
     const vm = ev.vm;
@@ -1020,21 +1032,20 @@ function renderEQDS_UI(ctx) {
                                 <th class="py-1 text-left">지표</th><th>Exit A (기본)</th><th>Exit B (미사용)</th><th>Exit C (완화)</th>
                             </tr></thead>
                             <tbody>
-                                <tr><td class="py-1 text-left text-slate-400">Net CAGR</td><td class="text-emerald-400">${(btOosA.cagr*100).toFixed(1)}%</td><td>${(btOosB.cagr*100).toFixed(1)}%</td><td>${(btOosC.cagr*100).toFixed(1)}%</td></tr>
-                                <tr><td class="py-1 text-left text-slate-400">Net MDD</td><td>${btOosA.mdd.toFixed(1)}%</td><td>${btOosB.mdd.toFixed(1)}%</td><td>${btOosC.mdd.toFixed(1)}%</td></tr>
-                                <tr><td class="py-1 text-left text-slate-400">Sharpe</td><td>${btOosA.sharpe !== "N/A" ? btOosA.sharpe.toFixed(2) : "N/A"}</td><td>${btOosB.sharpe !== "N/A" ? btOosB.sharpe.toFixed(2) : "N/A"}</td><td>${btOosC.sharpe !== "N/A" ? btOosC.sharpe.toFixed(2) : "N/A"}</td></tr>
-                                <tr><td class="py-1 text-left text-slate-400">Sortino</td><td>${btOosA.sortino !== "N/A" ? btOosA.sortino.toFixed(2) : "N/A"}</td><td>${btOosB.sortino !== "N/A" ? btOosB.sortino.toFixed(2) : "N/A"}</td><td>${btOosC.sortino !== "N/A" ? btOosC.sortino.toFixed(2) : "N/A"}</td></tr>
-                                <tr><td class="py-1 text-left text-slate-400">Trades</td><td>${btOosA.trd}회</td><td>${btOosB.trd}회</td><td>${btOosC.trd}회</td></tr>
+                                <tr><td class="py-1 text-left text-slate-400">Net CAGR</td><td class="text-emerald-400">${safeCagr(btOosA)}</td><td>${safeCagr(btOosB)}</td><td>${safeCagr(btOosC)}</td></tr>
+                                <tr><td class="py-1 text-left text-slate-400">Net MDD</td><td>${safeMdd(btOosA)}</td><td>${safeMdd(btOosB)}</td><td>${safeMdd(btOosC)}</td></tr>
+                                <tr><td class="py-1 text-left text-slate-400">Sharpe</td><td>${safeSharpe(btOosA)}</td><td>${safeSharpe(btOosB)}</td><td>${safeSharpe(btOosC)}</td></tr>
+                                <tr><td class="py-1 text-left text-slate-400">Sortino</td><td>${safeSortino(btOosA)}</td><td>${safeSortino(btOosB)}</td><td>${safeSortino(btOosC)}</td></tr>
+                                <tr><td class="py-1 text-left text-slate-400">Trades</td><td>${safeTrd(btOosA)}</td><td>${safeTrd(btOosB)}</td><td>${safeTrd(btOosC)}</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
                 <div class="mt-3 pt-2 border-t border-slate-600 text-[9px] text-slate-400 flex flex-col gap-1">
                     <div class="font-bold text-slate-300">[파라미터 민감도 독립 검증 (OOS Net CAGR)]</div>
-                    <div class="flex justify-between"><span>Max Exposure (50/60/80%):</span><span>${(sensitivity.exp50.cagr*100).toFixed(1)}% | ${(sensitivity.exp60.cagr*100).toFixed(1)}% | <b>${(btOosA.cagr*100).toFixed(1)}%(Core 70)</b> | ${(sensitivity.exp80.cagr*100).toFixed(1)}%</span></div>
-                    <div class="flex justify-between"><span>Mid MA (50/70):</span><span>${(sensitivity.pm50.cagr*100).toFixed(1)}% | <b>${(btOosA.cagr*100).toFixed(1)}%(Core 60)</b> | ${(sensitivity.pm70.cagr*100).toFixed(1)}%</span></div>
-                    <div class="flex justify-between"><span>Long MA (180/220):</span><span>${(sensitivity.pl180.cagr*100).toFixed(1)}% | <b>${(btOosA.cagr*100).toFixed(1)}%(Core 200)</b> | ${(sensitivity.pl220.cagr*100).toFixed(1)}%</span></div>
-                    <div class="flex justify-between"><span>Exec Threshold (0.5/2%):</span><span>${(sensitivity.thr05.cagr*100).toFixed(1)}% | <b>${(btOosA.cagr*100).toFixed(1)}%(Core 1)</b> | ${(sensitivity.thr20.cagr*100).toFixed(1)}%</span></div>
+                    <div class="flex justify-between"><span>Max Exposure (50/60/80%):</span><span>${safeCagr(sensitivity.exp50)} | ${safeCagr(sensitivity.exp60)} | <b>${safeCagr(btOosA)}(Core 70)</b> | ${safeCagr(sensitivity.exp80)}</span></div>
+                    <div class="flex justify-between"><span>Mid MA (50/70):</span><span>${safeCagr(sensitivity.pm50)} | <b>${safeCagr(btOosA)}(Core 60)</b> | ${safeCagr(sensitivity.pm70)}</span></div>
+                    <div class="flex justify-between"><span>Long MA (180/220):</span><span>${safeCagr(sensitivity.pl180)} | <b>${safeCagr(btOosA)}(Core 200)</b> | ${safeCagr(sensitivity.pl220)}</span></div>
                 </div>
                 ` : '<div class="text-xs text-slate-400">데이터 부족</div>'}
             </div>
