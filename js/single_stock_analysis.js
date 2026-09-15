@@ -1,7 +1,7 @@
 // =========================================================
 // 🧠 EQDS V2.2.5 MASTER FINAL
 // Explainable Quantitative Decision System
-// STRICT ENFORCEMENT: Deterministic Accounting, No Look-ahead, Strict Invariants
+// STRICT ENFORCEMENT: Deterministic Accounting, Null-Safe UI, Read-Only Simulator
 // =========================================================
 
 let quantChartInstance = null;
@@ -47,7 +47,6 @@ async function runQuantAnalysis() {
 
         if (tgtData.error || !tgtData.chart || !tgtData.chart.result) throw new Error("유효하지 않은 티커 또는 데이터 부족");
 
-        // 1. Data Layer
         const rawTarget = extractOHLCV(tgtData);
         const rawSpy = spyData.error ? null : extractOHLCV(spyData);
         const rawQqq = qqqData.error ? null : extractOHLCV(qqqData);
@@ -58,15 +57,12 @@ async function runQuantAnalysis() {
 
         if (dataVal.score < 40) throw new Error(`데이터 품질 결함 (Score: ${dataVal.score}). 시스템 강제 중단.`);
 
-        // 2. Indicators
         const ind = buildIndicators(rawTarget);
         const spyInd = rawSpy ? buildIndicators(rawSpy) : null;
         const qqqInd = rawQqq ? buildIndicators(rawQqq) : null;
 
-        // 3. Unit Testing
         const unitTests = runExtremeUnitTests(cfg);
 
-        // 4. Live Evaluation
         const liveIdx = ind.prices.length - 1;
         const liveContext = { actualWeight: 0.0, mode: "live" }; 
         const liveEval = evaluateSignalAtDate(liveIdx, ind, spyInd, qqqInd, cfg, liveContext);
@@ -75,14 +71,12 @@ async function runQuantAnalysis() {
 
         lastEvaluationResult = { ticker: queryTicker, ind, spyInd, qqqInd, ev: liveEval, cfg };
 
-        // 5. Backtest
         const splitIdx = Math.floor(ind.prices.length * 0.7);
         const btIs = runBacktestSegment(252, splitIdx, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, true);
         const btOosA = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, false);
         const btOosB = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "B"}, false);
         const btOosC = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "C"}, false);
 
-        // 6. Sensitivity
         const sens = {
             exp50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.5, exitType: "A"}, false),
             exp60: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.6, exitType: "A"}, false),
@@ -93,17 +87,14 @@ async function runQuantAnalysis() {
             pl220: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 220, exitType: "A"}, false)
         };
 
-        // 7. Confidence Engine
         const conf = calculateConfidence(dataVal, btOosA, sens);
 
-        // 8. Render UI
         currentQuantData = ind;
         renderEQDS_UI({ 
             ticker: queryTicker, ev: liveEval, dv: dataVal, 
             btIs, btOosA, btOosB, btOosC, conf, sensitivity: sens, tests: unitTests 
         });
         
-        // 9. Simulator Init
         initPurchaseSimulator();
 
         if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i> EQDS V2.2.5 분석 완료 (배당 미포함 가격수익률 기준)`;
@@ -387,7 +378,7 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
 function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     const vm = buildViewModel(i, ind, spy, qqq, cfg);
     const isLive = context.mode === "live";
-    let whyPositive = [], whyNegative = [], whyNotAggressive = [];
+    let whyPositive = [], whyNegative = [], whyNotAggressive = [], log = [];
 
     let trSc = { a: 0, m: 25 }, moSc = { a: 0, m: 15 }, rsSc = { a: 0, m: 15 }, riSc = { a: 0, m: 15 }, mkSc = { a: 0, m: 15 };
 
@@ -467,7 +458,7 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
         if(isLive) whyNotAggressive.push("미국 양대 지수 하락장으로 신규 진입 비중 50% 삭감.");
     }
     if (vm.rsi.cur > 70) {
-        entryCap = 0; 
+        entryCap = Math.min(entryCap, actW); 
         if(isLive) whyNotAggressive.push("RSI 70 과열권 진입. 신규 추격 매수 원천 차단.");
     }
 
@@ -485,12 +476,12 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     if (cfg.exitType === "A") {
         if (vm.price < vm.ma[200] && vm.sl[200] < 0 && vm.price < vm.ma[60] && vm.curDD20 <= -20) {
             targetW = 0.0; isExplicitExit = true;
-            exitReason = "장기추세 붕괴 + 중기 붕괴 + 단기 급락(-20% 이하)";
+            exitReason = "장기/중기 붕괴 + 단기 급락(CurrentDD20 <= -20%)";
         }
     } else if (cfg.exitType === "C") { 
         if (vm.price < vm.ma[200] && vm.sl[200] < 0 && vm.curDD20 <= -25) {
             targetW = 0.0; isExplicitExit = true;
-            exitReason = "장기추세 붕괴 + 극한 단기 급락(-25% 이하)";
+            exitReason = "장기추세 붕괴 + 극한 단기 급락(CurrentDD20 <= -25%)";
         }
     }
 
@@ -509,7 +500,6 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     
     if(isLive && act.includes("매수") && whyNotAggressive.length === 0) whyNotAggressive.push("매수를 제약하는 뚜렷한 Hard Gate 미발동.");
 
-    let log = [];
     if(isLive) log.push(`CALC: Adj ${adjScore} -> Cand ${(candW*100).toFixed(0)}% -> GateCap ${(gateCap*100).toFixed(0)}% -> Target ${(targetW*100).toFixed(0)}%`);
 
     return { 
@@ -773,7 +763,7 @@ function runExtremeUnitTests(cfg) {
 }
 
 // ---------------------------------------------------------
-// [PURCHASE SIMULATOR] (Read-Only)
+// [PURCHASE SIMULATOR] Read-Only + Average Cost + AI Comment
 // ---------------------------------------------------------
 function initPurchaseSimulator() {
     calcSimulator();
@@ -786,10 +776,12 @@ function calcSimulator() {
     
     let cashInput = document.getElementById('sim-cash');
     let sharesInput = document.getElementById('sim-shares');
-    if (!cashInput || !sharesInput) return; // UI 요소가 없으면 종료
+    let avgCostInput = document.getElementById('sim-avgcost');
+    if (!cashInput || !sharesInput || !avgCostInput) return; 
 
     let cash = parseFloat(cashInput.value || 0);
     let shares = parseFloat(sharesInput.value || 0);
+    let avgCost = parseFloat(avgCostInput.value || vm.price);
     let isCcy = ticker.endsWith(".KS") || ticker.endsWith(".KQ") ? "₩" : "$";
     
     let totalEq = cash + (shares * vm.price);
@@ -814,7 +806,7 @@ function calcSimulator() {
         let isConfirm = confirms >= 2;
         let act = isConfirm ? "🟢 부분 매수" : (confirms === 1 ? "🟡 관찰 요망" : "🔴 매수 보류");
         
-        let addShares = 0, addAmt = 0, cost = 0, postWt = actW * 100;
+        let addShares = 0, addAmt = 0, cost = 0, postWt = actW * 100, postAvgCost = avgCost;
         if (isConfirm) {
             let desiredWt = Math.min(actW + 0.10, cfg.maxExposure); 
             let dlt = desiredWt - actW;
@@ -826,10 +818,11 @@ function calcSimulator() {
                     cost = addAmt * cfg.costRate;
                     let postEq = (cash - addAmt - cost) + (shares + addShares) * pTrigger;
                     postWt = (addShares + shares) * pTrigger / postEq * 100;
+                    postAvgCost = ((shares * avgCost) + (addShares * pTrigger)) / (shares + addShares);
                 }
             }
         }
-        return `<tr class="border-b border-slate-100"><td class="py-1">${(pct*100).toFixed(0)}%</td><td>${pTrigger.toFixed(2)}</td><td>${confirms}/4</td><td>${act}</td><td class="text-right">${addShares}</td><td class="text-right">${postWt.toFixed(1)}%</td></tr>`;
+        return `<tr class="border-b border-slate-100"><td class="py-1">${(pct*100).toFixed(0)}%</td><td>${pTrigger.toFixed(2)}</td><td>${confirms}/4</td><td>${act}</td><td class="text-right">${addShares}</td><td class="text-right">${isCcy}${postAvgCost.toFixed(2)}</td><td class="text-right">${postWt.toFixed(1)}%</td></tr>`;
     }).join('');
 
     let upPrices = [+0.05, +0.10];
@@ -837,58 +830,110 @@ function calcSimulator() {
         let pTrigger = vm.price * (1 + pct);
         let isConfirm = (pTrigger > vm.ma[20] && vm.sl[20] > 0 && vm.rsi.cur > 50 && vm.rs.spy.d20 > 0);
         let act = isConfirm ? "🟢 부분 매수" : "🔴 매수 보류";
-        return `<tr class="border-b border-slate-100"><td class="py-1">${(pct*100).toFixed(0)}%</td><td>${pTrigger.toFixed(2)}</td><td>${isConfirm?'충족':'미달'}</td><td>${act}</td></tr>`;
+        let addShares = 0, postAvgCost = avgCost;
+        if(isConfirm) {
+            let desiredWt = Math.min(actW + 0.05, cfg.maxExposure); 
+            let dlt = desiredWt - actW;
+            if (dlt > 0) {
+                let maxB = Math.min(totalEq * dlt, cash / (1 + cfg.costRate));
+                addShares = Math.floor(maxB / pTrigger);
+                if(addShares > 0) {
+                    postAvgCost = ((shares * avgCost) + (addShares * pTrigger)) / (shares + addShares);
+                }
+            }
+        }
+        return `<tr class="border-b border-slate-100"><td class="py-1">${(pct*100).toFixed(0)}%</td><td>${pTrigger.toFixed(2)}</td><td>${isConfirm?'충족':'미달'}</td><td>${act}</td><td class="text-right">${addShares}</td><td class="text-right">${isCcy}${postAvgCost.toFixed(2)}</td></tr>`;
     }).join('');
 
     let tpHTML = `
-        <tr><td class="py-1">+15% 수익 도달</td><td>부분 익절 (25%)</td></tr>
-        <tr><td class="py-1">200일선(장기) 저항대 도달</td><td>부분 익절 (30%)</td></tr>
-        <tr><td class="py-1">RSI 과열 (>70) 진입</td><td>부분 익절 (30%)</td></tr>
-        <tr><td class="py-1">단기 추세 훼손 (20일선 이탈)</td><td>잔량 청산 검토</td></tr>
+        <tr><td class="py-1">+15% 수익 도달 시</td><td>부분 익절 (25%)</td></tr>
+        <tr><td class="py-1">장기(200MA) 저항대 도달 시</td><td>부분 익절 (30%)</td></tr>
+        <tr><td class="py-1">RSI 70 초과 과열권 진입 시</td><td>부분 익절 (30%)</td></tr>
+        <tr><td class="py-1">단기 추세선(20MA) 하향 이탈 시</td><td>잔량 청산 검토</td></tr>
     `;
 
-    // 결과 렌더링 컨테이너만 업데이트 (입력 필드는 유지)
+    // AI 코멘트 로직
+    let retPct = avgCost > 0 ? ((vm.price / avgCost) - 1) * 100 : 0;
+    let posStatus = shares > 0 ? `사용자 평단가(${isCcy}${avgCost.toFixed(2)}) 대비 <b><span class="${retPct > 0 ? 'text-green-400' : 'text-red-400'}">${retPct > 0 ? '+' : ''}${retPct.toFixed(2)}%</span></b> ${retPct >= 0 ? '수익' : '손실'} 구간입니다.` : `현재 보유 수량이 없는 신규 진입 대기 상태입니다.`;
+    
+    let whyNotHtml = (ev.whyNotAggressive && ev.whyNotAggressive.length > 0)
+        ? ev.whyNotAggressive.map(r => `• ${r}`).join('<br>')
+        : `• 현재 시스템에서 매수를 강하게 제한하는 하드 게이트(Hard Gate) 발동 조건은 없습니다.`;
+        
+    let aiComment = `
+        <div class="mt-4 bg-slate-800 text-slate-200 p-4 rounded-lg text-[10px] font-mono leading-relaxed shadow-inner border border-slate-600">
+            <h5 class="font-bold text-emerald-400 mb-2 border-b border-slate-600 pb-1">🤖 시스템 정량 의사결정 가이드 (System Trading Roadmap)</h5>
+            
+            <div class="mb-2">
+                <b class="text-white bg-slate-700 px-1 rounded">[1. 현재 포지션 진단]</b><br>
+                • 현재가 ${isCcy}${vm.price.toFixed(2)} 기준, ${posStatus}<br>
+                • 시스템 목표 비중(Target)은 ${(ev.finalTargetWeight*100).toFixed(0)}%, 현재 보유 비중(Actual)은 ${(actW*100).toFixed(1)}%로 
+                  ${delta > 0 ? `<span class="text-indigo-300 font-bold">신규/추가 매수 여력(${(delta*100).toFixed(1)}%p)이 있습니다.</span>` : (delta < 0 ? `<span class="text-yellow-300">목표 비중 초과 상태이나, 명시적 청산 룰 발동 전까지는 강제 매도하지 않고 관망(HOLD)합니다.</span>` : `목표 비중과 일치하여 관망합니다.`)}
+            </div>
+
+            <div class="mb-2">
+                <b class="text-white bg-slate-700 px-1 rounded">[2. 왜 지금 적극적으로 사지 않는가? (Why Not Aggressive)]</b><br>
+                ${whyNotHtml}
+            </div>
+            
+            <div class="mb-2">
+                <b class="text-white bg-slate-700 px-1 rounded">[3. 추가 매수 로드맵 (Add/Entry Plan)]</b><br>
+                • 하락 트리거 도달 시 무작정 물타기를 하지 않으며, 표에 제시된 4개의 정량 조건(RSI 30 탈출, 20MA 지지 등) 중 최소 2개 이상이 확인될 때만 "🟢 부분 매수"가 허용됩니다.<br>
+                • 매수 체결 시 어떠한 경우에도 계좌 총 비중이 전략상 최대 한도(${cfg.maxExposure*100}%)를 초과하지 않도록 주식 수가 캡핑(Capping)됩니다.
+            </div>
+
+            <div>
+                <b class="text-white bg-slate-700 px-1 rounded">[4. 위험관리 및 명시적 청산 (Risk & Exit Plan)]</b><br>
+                • ${cfg.exitType === 'A' ? '주가 < 200MA 역배열 상태에서 단기 낙폭(Current DD)이 -20%를 초과' : '지정된 명시적 위험관리 룰 충족'}할 경우, 현재 평가손익과 무관하게 시스템 강제 청산(Target 0%)을 집행합니다.<br>
+                • 목표 수익 달성 전이라도 하단 '이익실현 시나리오'의 조건(RSI 과열 등) 도달 시 기계적인 비중 축소를 권고합니다.
+            </div>
+        </div>
+    `;
+
+    // 렌더링 컨테이너만 업데이트 (상단 입력 폼은 유지)
     let html = `
         <div class="grid grid-cols-2 gap-4 text-[10px] mono">
             <div class="bg-slate-50 p-2 rounded">
-                <b class="text-slate-700">포트폴리오 상태</b><br>
+                <b class="text-slate-700">포트폴리오 회계 상태</b><br>
                 보유 현금: ${isCcy}${cash.toFixed(2)}<br>
                 총 평가자산: ${isCcy}${totalEq.toFixed(2)}<br>
-                현재 비중: ${(actW*100).toFixed(1)}%<br>
-                필요 매매 비중: ${(delta*100).toFixed(1)}%p
+                현재 비중(Actual): ${(actW*100).toFixed(1)}%<br>
+                필요 매매비중(Delta): ${(delta*100).toFixed(1)}%p
             </div>
             <div class="bg-indigo-50 p-2 rounded border border-indigo-100">
                 <b class="text-indigo-800">실제 체결 (정수 연산)</b><br>
                 시스템 목표 비중: ${(ev.finalTargetWeight*100).toFixed(1)}%<br>
                 주문 수량: ${floorShares}주 (${isCcy}${execAmt.toFixed(2)})<br>
                 예상 수수료: ${isCcy}${(execAmt * cfg.costRate).toFixed(2)}<br>
-                <b>체결 후 예상 비중: ${(execWt*100).toFixed(1)}%</b> (최대 허용 ${cfg.maxExposure*100}%)
+                <b>체결 후 비중: ${(execWt*100).toFixed(1)}%</b> (Limit ${cfg.maxExposure*100}%)
             </div>
         </div>
         
-        <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div>
                 <b class="text-slate-700">📉 하락 추가진입 시나리오 (가격 + 2/4 정량확인)</b>
                 <table class="w-full text-center text-[10px] mt-1 border-t border-slate-200">
-                    <thead><tr class="border-b text-slate-500"><th>트리거</th><th>가격</th><th>확인조건</th><th>행동</th><th>주수</th><th>체결후비중</th></tr></thead>
+                    <thead><tr class="border-b text-slate-500"><th>트리거</th><th>가격</th><th>확인조건</th><th>행동</th><th>주수</th><th>예상평단가</th><th>체결후비중</th></tr></thead>
                     <tbody>${downScenarios}</tbody>
                 </table>
             </div>
             <div>
                 <b class="text-slate-700">📈 상승 추세추종 시나리오 (가격 + 추세확인)</b>
                 <table class="w-full text-center text-[10px] mt-1 border-t border-slate-200">
-                    <thead><tr class="border-b text-slate-500"><th>트리거</th><th>가격</th><th>조건충족</th><th>행동</th></tr></thead>
+                    <thead><tr class="border-b text-slate-500"><th>트리거</th><th>가격</th><th>조건충족</th><th>행동</th><th>주수</th><th>예상평단가</th></tr></thead>
                     <tbody>${upScenarios}</tbody>
                 </table>
             </div>
         </div>
         
         <div class="mt-4">
-            <b class="text-slate-700">🎯 이익실현 시나리오 (단순 수익률 매도 지양)</b>
+            <b class="text-slate-700">🎯 부분 이익실현 시나리오 (단순 매도 지양)</b>
             <table class="w-full text-center text-[10px] mt-1 border-t border-slate-200">
                 <tbody>${tpHTML}</tbody>
             </table>
         </div>
+
+        ${aiComment}
     `;
     let simResultsCont = document.getElementById('simulator-results-container');
     if(simResultsCont) simResultsCont.innerHTML = html;
@@ -897,7 +942,6 @@ function calcSimulator() {
 // ---------------------------------------------------------
 // [UI RENDER LAYER] Null Safe & Deterministic Display
 // ---------------------------------------------------------
-
 const safeCagr = (obj) => (obj && typeof obj.cagr === 'number') ? (obj.cagr * 100).toFixed(1) + '%' : 'N/A';
 const safeMdd = (obj) => (obj && typeof obj.mdd === 'number') ? obj.mdd.toFixed(1) + '%' : 'N/A';
 const safeSharpe = (obj) => (obj && obj.sharpe !== "N/A" && typeof obj.sharpe === 'number') ? obj.sharpe.toFixed(2) : 'N/A';
@@ -938,7 +982,7 @@ function renderEQDS_UI(ctx) {
                 <h2 class="text-4xl font-black mb-3">${actionText}</h2>
                 <div class="flex flex-wrap justify-center gap-2">
                     <div class="bg-black/20 px-3 py-1 rounded-full text-xs font-bold">기본점수: ${ev.baseScore} ➔ 조정점수: ${ev.adjScore}</div>
-                    <div class="bg-black/20 px-3 py-1 rounded-full text-xs font-bold">판단 신뢰도: ${conf.val}/100</div>
+                    <div class="bg-black/20 px-3 py-1 rounded-full text-xs font-bold">검증 신뢰도: ${conf.val}/100</div>
                     <div class="bg-white/90 text-slate-900 px-3 py-1 rounded-full text-xs font-black">시스템 목표 비중: ${(ev.finalTargetWeight*100).toFixed(0)}%</div>
                 </div>
                 <div class="text-[10px] mt-2 font-mono flex justify-center gap-2">
@@ -1031,6 +1075,10 @@ function renderEQDS_UI(ctx) {
                     <div class="flex-1">
                         <label class="text-[10px] font-bold text-slate-500">현재 보유 수량 (주)</label>
                         <input type="number" id="sim-shares" value="0" class="w-full border rounded p-1.5 text-xs bg-slate-50" oninput="calcSimulator()">
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-[10px] font-bold text-slate-500">평균매수가 (${isCcy})</label>
+                        <input type="number" id="sim-avgcost" value="${vm.price.toFixed(2)}" class="w-full border rounded p-1.5 text-xs bg-slate-50" step="0.01" oninput="calcSimulator()">
                     </div>
                 </div>
                 <div id="simulator-results-container"></div>
