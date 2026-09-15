@@ -1,12 +1,12 @@
 // =========================================================
 // 🧠 EQDS V2.2.5 MASTER FINAL
 // Explainable Quantitative Decision System
-// STRICT ENFORCEMENT: Deterministic Accounting, Safe UI Rendering
+// STRICT ENFORCEMENT: Deterministic Accounting, Null-Safe UI
 // =========================================================
 
 let quantChartInstance = null;
 let currentQuantData = null;
-let lastEvaluationResult = null; // Read-Only Cache for Simulator
+let lastEvaluationResult = null; 
 
 async function runQuantAnalysis() {
     const tickerInput = document.getElementById('quant-ticker-input');
@@ -47,7 +47,6 @@ async function runQuantAnalysis() {
 
         if (tgtData.error || !tgtData.chart || !tgtData.chart.result) throw new Error("유효하지 않은 티커 또는 데이터 부족");
 
-        // 1. Data Layer
         const rawTarget = extractOHLCV(tgtData);
         const rawSpy = spyData.error ? null : extractOHLCV(spyData);
         const rawQqq = qqqData.error ? null : extractOHLCV(qqqData);
@@ -58,32 +57,26 @@ async function runQuantAnalysis() {
 
         if (dataVal.score < 40) throw new Error(`데이터 품질 결함 (Score: ${dataVal.score}). 시스템 강제 중단.`);
 
-        // 2. Indicators
         const ind = buildIndicators(rawTarget);
         const spyInd = rawSpy ? buildIndicators(rawSpy) : null;
         const qqqInd = rawQqq ? buildIndicators(rawQqq) : null;
 
-        // 3. Unit Testing
         const unitTests = runExtremeUnitTests(cfg);
 
-        // 4. Live Evaluation
         const liveIdx = ind.prices.length - 1;
         const liveContext = { actualWeight: 0.0, mode: "live" }; 
         const liveEval = evaluateSignalAtDate(liveIdx, ind, spyInd, qqqInd, cfg, liveContext);
         
-        // Runtime Schema Assertion
         assertRuntimeSchema(liveEval);
 
         lastEvaluationResult = { ticker: queryTicker, ind, spyInd, qqqInd, ev: liveEval, cfg };
 
-        // 5. Backtest
         const splitIdx = Math.floor(ind.prices.length * 0.7);
         const btIs = runBacktestSegment(252, splitIdx, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, true);
         const btOosA = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, false);
         const btOosB = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "B"}, false);
         const btOosC = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "C"}, false);
 
-        // 6. Sensitivity
         const sens = {
             exp50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.5, exitType: "A"}, false),
             exp60: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.6, exitType: "A"}, false),
@@ -94,17 +87,14 @@ async function runQuantAnalysis() {
             pl220: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 220, exitType: "A"}, false)
         };
 
-        // 7. Confidence Engine
         const conf = calculateConfidence(dataVal, btOosA, sens);
 
-        // 8. Render UI
         currentQuantData = ind;
         renderEQDS_UI({ 
             ticker: queryTicker, ev: liveEval, dv: dataVal, 
             btIs, btOosA, btOosB, btOosC, conf, sensitivity: sens, tests: unitTests 
         });
         
-        // 9. Simulator Init
         initPurchaseSimulator();
 
         if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i> EQDS V2.2.5 분석 완료 (배당 미포함 가격수익률 기준)`;
@@ -117,7 +107,7 @@ async function runQuantAnalysis() {
 }
 
 function assertRuntimeSchema(ev) {
-    const reqEv = ['vm', 'baseScore', 'adjScore', 'candW', 'entryCap', 'gateCap', 'actualWeight', 'finalTargetWeight', 'tradeDeltaWeight', 'isExplicitExit', 'stage', 'whyPositive', 'whyNegative', 'whyNotAggressive'];
+    const reqEv = ['vm', 'baseScore', 'adjScore', 'candW', 'entryCap', 'gateCap', 'actualWeight', 'finalTargetWeight', 'tradeDeltaWeight', 'isExplicitExit', 'stage'];
     for (let r of reqEv) if (ev[r] === undefined) throw new Error(`Schema Error: ev.${r} is undefined`);
     const reqMa = [5, 10, 15, 20, 60, 120, 200];
     for (let m of reqMa) {
@@ -388,11 +378,13 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
 function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     const vm = buildViewModel(i, ind, spy, qqq, cfg);
     const isLive = context.mode === "live";
-    let whyPositive = [], whyNegative = [], whyNotAggressive = [];
+    
+    // [버그 수정] 배열을 명확하게 초기화하여 return 시 누락 방지
+    let whyPositive = [], whyNegative = [], whyNotAggressive = [], log = [];
 
     let trSc = { a: 0, m: 25 }, moSc = { a: 0, m: 15 }, rsSc = { a: 0, m: 15 }, riSc = { a: 0, m: 15 }, mkSc = { a: 0, m: 15 };
 
-    if(vm.price > vm.ma[200]) { trSc.a += 3; if(isLive) whyPositive.push("장기 추세선(200MA) 상단 유지"); } else whyNegative.push("200MA 하회 (장기 역배열)");
+    if(vm.price > vm.ma[200]) { trSc.a += 3; if(isLive) whyPositive.push("장기 추세선(200MA) 상단 유지"); } else { if(isLive) whyNegative.push("200MA 하회 (장기 역배열)"); }
     if(vm.ma[120] > vm.ma[200]) trSc.a += 3; if(vm.sl[120] > 0) trSc.a += 2; if(vm.sl[200] > 0) trSc.a += 2;
     if(vm.price > vm.ma[60]) trSc.a += 2; if(vm.ma[20] > vm.ma[60]) trSc.a += 3; if(vm.sl[60] > 0) trSc.a += 2; if(vm.sl[20] > 0) trSc.a += 3;
     if(vm.price > vm.ma[5]) trSc.a += 1; if(vm.ma[5] > vm.ma[10]) trSc.a += 1; if(vm.ma[10] > vm.ma[15]) trSc.a += 1; if(vm.ma[15] > vm.ma[20]) trSc.a += 1; if(vm.sl[5] > 0) trSc.a += 1;
@@ -468,7 +460,7 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
         if(isLive) whyNotAggressive.push("미국 양대 지수 하락장으로 신규 진입 비중 50% 삭감.");
     }
     if (vm.rsi.cur > 70) {
-        entryCap = 0; 
+        entryCap = Math.min(entryCap, actW); 
         if(isLive) whyNotAggressive.push("RSI 70 과열권 진입. 신규 추격 매수 원천 차단.");
     }
 
@@ -510,10 +502,13 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     
     if(isLive && act.includes("매수") && whyNotAggressive.length === 0) whyNotAggressive.push("매수를 제약하는 뚜렷한 Hard Gate 미발동.");
 
+    if(isLive) log.push(`CALC: Adj ${adjScore} -> Cand ${(candW*100).toFixed(0)}% -> GateCap ${(gateCap*100).toFixed(0)}% -> Target ${(targetW*100).toFixed(0)}%`);
+
+    // [버그 수정 반영] 배열 변수들 완벽 반환
     return { 
         availScore, baseScore, adjScore, riskPenalty: penalty, candW, entryCap, gateCap, finalTargetWeight: targetW, actualWeight: actW, tradeDeltaWeight: tradeDelta,
         act, sty, tr: trSc, mo: moSc, rs: rsSc, ri: riSc, mk: mkSc,
-        whyPositive, whyNegative, whyNotAggressive, vm, isExplicitExit, stage: vm.stage
+        whyPositive, whyNegative, whyNotAggressive, log, vm, isExplicitExit, stage: vm.stage
     };
 }
 
@@ -891,10 +886,9 @@ function calcSimulator() {
 }
 
 // ---------------------------------------------------------
-// [UI RENDER LAYER]
+// [UI RENDER LAYER] Null Safe & Deterministic Display
 // ---------------------------------------------------------
 
-// Helper function to safely extract formatted CAGR/MDD/Sharpe/etc without UI crash.
 const safeCagr = (obj) => (obj && typeof obj.cagr === 'number') ? (obj.cagr * 100).toFixed(1) + '%' : 'N/A';
 const safeMdd = (obj) => (obj && typeof obj.mdd === 'number') ? obj.mdd.toFixed(1) + '%' : 'N/A';
 const safeSharpe = (obj) => (obj && obj.sharpe !== "N/A" && typeof obj.sharpe === 'number') ? obj.sharpe.toFixed(2) : 'N/A';
@@ -919,7 +913,7 @@ function renderEQDS_UI(ctx) {
     else if (ev.finalTargetWeight >= 0.5) actionClass = "bg-green-600";
     else if (ev.finalTargetWeight > 0) actionClass = "bg-emerald-500";
     
-    let actionText = "관망";
+    let actionText = "관망 / 보류";
     if (ev.isExplicitExit) actionText = "명시적 위험관리 청산";
     else if (ev.finalTargetWeight >= 0.5) actionText = "적극 매수 후보";
     else if (ev.finalTargetWeight > 0) actionText = "분할 매수";
@@ -1006,15 +1000,15 @@ function renderEQDS_UI(ctx) {
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div class="border border-green-200 bg-green-50/30 rounded-xl p-4">
                     <h4 class="text-xs font-black text-green-700 mb-2 border-b pb-1">📈 긍정 요인</h4>
-                    <ul class="text-[10px] text-slate-700 space-y-1">${ev.whyPositive.length?ev.whyPositive.map(c=>`<li>+ ${c}</li>`).join(''):'<li>특이사항 없음</li>'}</ul>
+                    <ul class="text-[10px] text-slate-700 space-y-1">${(ev.whyPositive && ev.whyPositive.length)?ev.whyPositive.map(c=>`<li>+ ${c}</li>`).join(''):'<li>특이사항 없음</li>'}</ul>
                 </div>
                 <div class="border border-red-200 bg-red-50/30 rounded-xl p-4">
                     <h4 class="text-xs font-black text-red-700 mb-2 border-b pb-1">📉 부정 요인</h4>
-                    <ul class="text-[10px] text-slate-700 space-y-1">${ev.whyNegative.length?ev.whyNegative.map(c=>`<li>- ${c}</li>`).join(''):'<li>특이사항 없음</li>'}</ul>
+                    <ul class="text-[10px] text-slate-700 space-y-1">${(ev.whyNegative && ev.whyNegative.length)?ev.whyNegative.map(c=>`<li>- ${c}</li>`).join(''):'<li>특이사항 없음</li>'}</ul>
                 </div>
                 <div class="border border-slate-300 bg-slate-100 rounded-xl p-4 shadow-inner">
                     <h4 class="text-xs font-black text-slate-800 mb-2 border-b pb-1">🛑 아직 적극 매수하지 않는 이유</h4>
-                    <ul class="text-[10px] text-slate-700 space-y-1 font-bold">${ev.whyNotAggressive.length?ev.whyNotAggressive.map(c=>`<li>• ${c}</li>`).join(''):'<li>특이 제약 없음</li>'}</ul>
+                    <ul class="text-[10px] text-slate-700 space-y-1 font-bold">${(ev.whyNotAggressive && ev.whyNotAggressive.length)?ev.whyNotAggressive.map(c=>`<li>• ${c}</li>`).join(''):'<li>특이 제약 없음</li>'}</ul>
                 </div>
             </div>
             
@@ -1023,7 +1017,7 @@ function renderEQDS_UI(ctx) {
             <!-- Backtest Engine -->
             <div class="bg-slate-800 text-white rounded-xl p-5 mt-4">
                 <h4 class="text-xs font-black text-emerald-400 mb-3 border-b border-slate-600 pb-2">백테스트 (T+1 Open 실행 / 15bp 거래비용 반영 Net Return)</h4>
-                ${btIs && btOosA ? `
+                ${(btIs && btOosA) ? `
                 <div class="grid grid-cols-1 gap-4 text-[10px] mono">
                     <div>
                         <div class="text-indigo-300 font-bold mb-1 bg-indigo-900 px-2 py-1 rounded inline-block">[Explicit Exit 병렬 검증 - OOS 독립구간]</div>
@@ -1043,26 +1037,26 @@ function renderEQDS_UI(ctx) {
                 </div>
                 <div class="mt-3 pt-2 border-t border-slate-600 text-[9px] text-slate-400 flex flex-col gap-1">
                     <div class="font-bold text-slate-300">[파라미터 민감도 독립 검증 (OOS Net CAGR)]</div>
-                    <div class="flex justify-between"><span>Max Exposure (50/60/80%):</span><span>${safeCagr(sensitivity.exp50)} | ${safeCagr(sensitivity.exp60)} | <b>${safeCagr(btOosA)}(Core 70)</b> | ${safeCagr(sensitivity.exp80)}</span></div>
-                    <div class="flex justify-between"><span>Mid MA (50/70):</span><span>${safeCagr(sensitivity.pm50)} | <b>${safeCagr(btOosA)}(Core 60)</b> | ${safeCagr(sensitivity.pm70)}</span></div>
-                    <div class="flex justify-between"><span>Long MA (180/220):</span><span>${safeCagr(sensitivity.pl180)} | <b>${safeCagr(btOosA)}(Core 200)</b> | ${safeCagr(sensitivity.pl220)}</span></div>
+                    <div class="flex justify-between"><span>Max Exposure (50/60/80%):</span><span>${safeCagr(sensitivity?.exp50)} | ${safeCagr(sensitivity?.exp60)} | <b>${safeCagr(btOosA)}(Core 70)</b> | ${safeCagr(sensitivity?.exp80)}</span></div>
+                    <div class="flex justify-between"><span>Mid MA (50/70):</span><span>${safeCagr(sensitivity?.pm50)} | <b>${safeCagr(btOosA)}(Core 60)</b> | ${safeCagr(sensitivity?.pm70)}</span></div>
+                    <div class="flex justify-between"><span>Long MA (180/220):</span><span>${safeCagr(sensitivity?.pl180)} | <b>${safeCagr(btOosA)}(Core 200)</b> | ${safeCagr(sensitivity?.pl220)}</span></div>
                 </div>
                 ` : '<div class="text-xs text-slate-400">데이터 부족</div>'}
             </div>
 
             <!-- Logs & Tests -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
                     <h4 class="text-xs font-black text-indigo-900 mb-2 border-b border-indigo-200 pb-1">추론 근거 (FACT-CALC-INTERP)</h4>
-                    <ul class="text-[9px] text-indigo-800 space-y-1 font-mono">${ev.log.length>0?ev.log.map(r=>`<li>• ${r}</li>`).join(''):'<li>특이 연산 로그 없음</li>'}</ul>
+                    <ul class="text-[9px] text-indigo-800 space-y-1 font-mono">${(ev.log && ev.log.length>0)?ev.log.map(r=>`<li>• ${r}</li>`).join(''):'<li>특이 연산 로그 없음</li>'}</ul>
                 </div>
                 <div class="bg-slate-100 border border-slate-200 p-4 rounded-xl">
                     <h4 class="text-xs font-black text-slate-800 mb-2 border-b border-slate-300 pb-1">Unit Tests (Engine Invariant Check)</h4>
-                    <ul class="text-[9px] text-slate-600 space-y-1 font-mono">${tests.map(r=>`<li>[${r.pass?'PASS':'FAIL'}] ${r.name}</li>`).join('')}</ul>
+                    <ul class="text-[9px] text-slate-600 space-y-1 font-mono">${(tests && tests.length)?tests.map(r=>`<li>[${r.pass?'PASS':'FAIL'}] ${r.name}</li>`).join(''):'<li>테스트 로그 없음</li>'}</ul>
                 </div>
             </div>
             
-            <div class="text-[9px] text-slate-400 p-2 text-center">
+            <div class="text-[9px] text-slate-400 p-2 text-center mt-2">
                 * EQDS V2.2.5는 라이브와 백테스트에서 단 1개의 의사결정 함수(evaluateSignalAtDate)만을 공유하며, 펀더멘털 데이터 N/A 항목은 기술 점수에 강제 재분배되지 않습니다.
             </div>
         </div>
