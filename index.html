@@ -29,6 +29,8 @@
     <style>
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
+        /* 선택된 탭 스타일 효과를 위한 클래스 */
+        .tab-active { @apply bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-500; }
     </style>
 </head>
 <body class="text-slate-800 antialiased p-4 md:p-8 bg-slate-50">
@@ -43,7 +45,7 @@
         </h1>
 
         <!-- ========================================================= -->
-        <!-- 🗂️ 상단 메뉴 네비게이션 (구조 변경) -->
+        <!-- 🗂️ 상단 메뉴 네비게이션 -->
         <!-- ========================================================= -->
         
         <!-- 🌟 메인 대시보드 버튼 -->
@@ -62,13 +64,13 @@
                     <i class="fas fa-chart-pie mr-1"></i> ETF 투자실
                 </div>
                 <div class="space-y-1.5 flex flex-col">
-                    <button id="btnTabQuant" onclick="switchTab('quant')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-bold transition-all border border-transparent hover:border-blue-100">
+                    <button id="btnTabQuant" onclick="switchTab('quant')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-chart-bar text-blue-500 w-5"></i> 예측 엔진
                     </button>
-                    <button id="btnTabCalc" onclick="switchTab('calc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-700 rounded-xl font-bold transition-all border border-transparent hover:border-orange-100">
+                    <button id="btnTabCalc" onclick="switchTab('calc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-calculator text-orange-500 w-5"></i> 구매 계산기
                     </button>
-                    <button id="btnTabDiv" onclick="switchTab('div')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl font-bold transition-all border border-transparent hover:border-emerald-100">
+                    <button id="btnTabDiv" onclick="switchTab('div')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-coins text-emerald-500 w-5"></i> 배당&총알
                     </button>
                 </div>
@@ -80,16 +82,16 @@
                     <i class="fas fa-search-dollar mr-1"></i> 종목분석실
                 </div>
                 <div class="grid grid-cols-2 gap-1.5 md:flex md:flex-col">
-                    <button id="btnTabSingle" onclick="switchTab('single')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-fuchsia-50 text-slate-700 hover:text-fuchsia-700 rounded-xl font-bold transition-all border border-transparent hover:border-fuchsia-100 text-sm">
+                    <button id="btnTabSingle" onclick="switchTab('single')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-fuchsia-50 text-slate-700 hover:text-fuchsia-700 rounded-xl font-bold transition-all border border-transparent text-sm">
                         <i class="fas fa-microscope text-fuchsia-500 w-5"></i> 개별주식분석
                     </button>
-                    <button id="btnTabMdd" onclick="switchTab('mdd')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-red-50 text-slate-700 hover:text-red-700 rounded-xl font-bold transition-all border border-transparent hover:border-red-100 text-sm">
+                    <button id="btnTabMdd" onclick="switchTab('mdd')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-red-50 text-slate-700 hover:text-red-700 rounded-xl font-bold transition-all border border-transparent text-sm">
                         <i class="fas fa-chart-line text-red-500 w-5"></i> MDD 계산기
                     </button>
-                    <button id="btnTabRsi" onclick="switchTab('rsi')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-xl font-bold transition-all border border-transparent hover:border-purple-100 text-sm">
+                    <button id="btnTabRsi" onclick="switchTab('rsi')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-xl font-bold transition-all border border-transparent text-sm">
                         <i class="fas fa-wave-square text-purple-500 w-5"></i> RSI 계산기
                     </button>
-                    <button id="btnTabMa" onclick="switchTab('ma')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-700 rounded-xl font-bold transition-all border border-transparent hover:border-teal-100 text-sm">
+                    <button id="btnTabMa" onclick="switchTab('ma')" class="w-full text-left px-3 py-2.5 md:py-3 md:px-4 bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-700 rounded-xl font-bold transition-all border border-transparent text-sm">
                         <i class="fas fa-water text-teal-500 w-5"></i> 이평선 분석
                     </button>
                 </div>
@@ -101,10 +103,10 @@
                     <i class="fas fa-flask mr-1"></i> 투자실험실
                 </div>
                 <div class="space-y-1.5 flex flex-col">
-                    <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-xl font-bold transition-all border border-transparent hover:border-indigo-100">
+                    <button id="btnTabBacktestDiv" onclick="switchTab('backtestDiv')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-scroll text-indigo-500 w-5"></i> 배당투자설계도
                     </button>
-                    <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-yellow-50 text-slate-700 hover:text-yellow-700 rounded-xl font-bold transition-all border border-transparent hover:border-yellow-100">
+                    <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-yellow-50 text-slate-700 hover:text-yellow-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-rocket text-yellow-500 w-5"></i> $1 프로젝트
                     </button>
                 </div>
@@ -112,11 +114,11 @@
         </div>
 
         <!-- ========================================================= -->
-        <!-- 화면 뷰 영역 -->
+        <!-- 화면 뷰 영역 (중복 제거됨) -->
         <!-- ========================================================= -->
 
-        <!-- 1. 클럽 현황 (기본 화면으로 변경: hidden 제거, block 추가) -->
-        <div id="viewPort" class="block space-y-6">
+        <!-- 1. 클럽 현황 (기본 화면) -->
+        <div id="viewPort" class="view-section block space-y-6">
             <div class="bg-gradient-to-r from-orange-100 to-amber-50 p-6 rounded-2xl shadow-sm border border-orange-200 relative overflow-hidden">
                 <div class="corgi-bg"></div>
                 <h2 class="text-xl font-extrabold text-orange-900 mb-4 flex items-center relative z-10"><i class="fas fa-crown text-yellow-500 mr-2"></i> 명예의 전당 (수익률 랭킹)</h2>
@@ -128,8 +130,8 @@
             <div id="personalCardsContainer" class="space-y-6"></div>
         </div>
 
-        <!-- 2. 예측 엔진 (기본 화면에서 해제: block 제거, hidden 추가) -->
-        <div id="viewQuant" class="hidden space-y-6">
+        <!-- 2. 예측 엔진 -->
+        <div id="viewQuant" class="view-section hidden space-y-6">
             <div id="macroPanel" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <span class="text-slate-500 font-bold text-xs mb-1"><i class="fas fa-chart-line text-blue-500 mr-1"></i> 나스닥 (본장)</span>
@@ -235,7 +237,7 @@
         </div>
 
         <!-- 3. 구매 계산기 -->
-        <div id="viewCalc" class="hidden space-y-6">
+        <div id="viewCalc" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-calculator text-orange-500 mr-2"></i> 스마트 매수 시뮬레이터</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -383,7 +385,7 @@
         </div>
 
         <!-- 4. 배당&총알 -->
-        <div id="viewDiv" class="hidden space-y-6">
+        <div id="viewDiv" class="view-section hidden space-y-6">
             <div class="bg-blue-800 text-white p-8 rounded-2xl shadow-md text-center relative overflow-hidden">
                 <i class="fas fa-piggy-bank absolute -left-4 -bottom-4 text-8xl opacity-10"></i>
                 <div class="text-sm font-bold text-blue-200 mb-2"><i class="fas fa-check-circle mr-1"></i>통장에 입금된 누적 실수령액 합계</div>
@@ -431,7 +433,7 @@
         </div>
 
         <!-- 5. MDD 계산기 -->
-        <div id="viewMdd" class="hidden space-y-6">
+        <div id="viewMdd" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-2 flex items-center">
                     <i class="fas fa-chart-line text-red-500 mr-2"></i> MDD (최대 낙폭) 계산기
@@ -586,7 +588,7 @@
         </div>
         
         <!-- 6. RSI 계산기 -->
-        <div id="viewRsi" class="hidden space-y-6">
+        <div id="viewRsi" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
                 <h2 class="text-2xl font-bold mb-2 flex items-center">📈 RSI 계산기</h2>
                 <p class="text-sm text-gray-500 mb-6">티커만 입력하면 최근 시세로 자동 계산 — 지금 많이 올랐는지 많이 빠졌는지 한눈에</p>
@@ -637,7 +639,7 @@
         </div>
 
         <!-- 7. 이평선 분석 -->
-        <div id="viewMa" class="hidden space-y-6">
+        <div id="viewMa" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h3 class="text-xl font-black text-slate-800 mb-2">
                     <i class="fas fa-layer-group text-teal-500 mr-2"></i>실시간 이평선(MA) 시뮬레이터
@@ -687,7 +689,7 @@
         </div>
 
         <!-- 8. 개별주식분석 (EQDS V2.2.5) -->
-        <div id="viewSingle" class="hidden space-y-6">
+        <div id="viewSingle" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-2 flex items-center">
                     <i class="fas fa-microscope text-fuchsia-500 mr-2"></i> 개별종목 퀀트 분석 (Trend & Pullback)
@@ -713,7 +715,7 @@
         </div>
 
         <!-- 9. $1 프로젝트 -->
-        <div id="viewOneDollar" class="hidden space-y-6">
+        <div id="viewOneDollar" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <h2 class="text-2xl font-black text-slate-800 mb-4 flex items-center">
                     <i class="fas fa-rocket text-yellow-500 mr-2"></i> $1 복리 프로젝트
@@ -834,7 +836,7 @@
         </div>
 
         <!-- 10. 배당투자설계도 -->
-        <div id="viewBacktestDiv" class="hidden space-y-6">
+        <div id="viewBacktestDiv" class="view-section hidden space-y-6">
             
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
                 <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
