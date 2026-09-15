@@ -1,12 +1,12 @@
 // =========================================================
 // 🧠 EQDS V2.2.5 MASTER FINAL
 // Explainable Quantitative Decision System
-// STRICT ENFORCEMENT: Canonical Pipeline, Deterministic Flow, Null-Safe UI
+// STRICT ENFORCEMENT: Deterministic Accounting, Null-Safe UI, Read-Only Simulator
 // =========================================================
 
 let quantChartInstance = null;
 let currentQuantData = null;
-let lastEvaluationResult = null; // System Engine Result (Read-Only)
+let lastEvaluationResult = null; // Read-Only Cache for Simulator
 
 async function runQuantAnalysis() {
     const tickerInput = document.getElementById('quant-ticker-input');
@@ -15,22 +15,19 @@ async function runQuantAnalysis() {
 
     const statusMsg = document.getElementById('quant-status-msg');
     const resultContainer = document.getElementById('quant-result-container');
-    if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-indigo-500 mr-1"></i> <b>${tickerStr}</b> 정량 데이터 파이프라인 가동 (As-Of 매핑 중)...`;
+    if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-indigo-500 mr-1"></i> <b>${tickerStr}</b> 정량 데이터 수집 및 엔진 무결성 검증 중...`;
     if(resultContainer) resultContainer.classList.add('hidden');
 
     try {
-        // [Routing Integrity]
         if (/^\d{6}$/.test(tickerStr)) {
             throw new Error("한국 종목은 티커 뒤에 거래소 식별자(.KS 코스피, .KQ 코스닥)를 명시해주세요. (예: 005930.KS)");
         }
         let queryTicker = tickerStr;
         const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
 
-        // [CFG Unification]
         const cfg = {
             maxExposure: 0.70,        
             explorationMax: 0.15,     
-            marketGateRatio: 0.50,
             execThreshold: 0.01,      
             costRate: 0.0015,         
             midMA: 60, longMA: 200,
@@ -50,7 +47,6 @@ async function runQuantAnalysis() {
 
         if (tgtData.error || !tgtData.chart || !tgtData.chart.result) throw new Error("유효하지 않은 티커 또는 데이터 부족");
 
-        // 1. Data Layer
         const rawTarget = extractOHLCV(tgtData);
         const rawSpy = spyData.error ? null : extractOHLCV(spyData);
         const rawQqq = qqqData.error ? null : extractOHLCV(qqqData);
@@ -61,58 +57,47 @@ async function runQuantAnalysis() {
 
         if (dataVal.score < 40) throw new Error(`데이터 품질 결함 (Score: ${dataVal.score}). 시스템 강제 중단.`);
 
-        // 2. Indicators
         const ind = buildIndicators(rawTarget);
         const spyInd = rawSpy ? buildIndicators(rawSpy) : null;
         const qqqInd = rawQqq ? buildIndicators(rawQqq) : null;
 
-        // 3. Unit Testing (Strict Engine Verification)
         const unitTests = runExtremeUnitTests(cfg);
 
-        // 4. Live Evaluation
         const liveIdx = ind.prices.length - 1;
         const liveContext = { actualWeight: 0.0, mode: "live" }; 
         const liveEval = evaluateSignalAtDate(liveIdx, ind, spyInd, qqqInd, cfg, liveContext);
         
-        // Runtime Schema Assertion
         assertRuntimeSchema(liveEval);
 
         lastEvaluationResult = { ticker: queryTicker, ind, spyInd, qqqInd, ev: liveEval, cfg };
 
-        // 5. Backtest (Explicit Exit 병렬 검증 & OOS 독립 분리)
         const splitIdx = Math.floor(ind.prices.length * 0.7);
         const btIs = runBacktestSegment(252, splitIdx, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, true);
         const btOosA = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "A"}, false);
         const btOosB = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "B"}, false);
         const btOosC = runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, exitType: "C"}, false);
 
-        // 6. Sensitivity (UI Schema Match)
         const sens = {
-            exp50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.5}, false),
-            exp60: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.6}, false),
-            exp80: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.8}, false),
-            pm50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, midMA: 50}, false),
-            pm70: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, midMA: 70}, false),
-            pl180: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 180}, false),
-            pl220: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 220}, false),
-            thr005: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, execThreshold: 0.005}, false),
-            thr020: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, execThreshold: 0.02}, false)
+            exp50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.5, exitType: "A"}, false),
+            exp60: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.6, exitType: "A"}, false),
+            exp80: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, maxExposure: 0.8, exitType: "A"}, false),
+            pm50: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, midMA: 50, exitType: "A"}, false),
+            pm70: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, midMA: 70, exitType: "A"}, false),
+            pl180: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 180, exitType: "A"}, false),
+            pl220: runBacktestSegment(splitIdx, ind.prices.length - 1, ind, spyInd, qqqInd, {...cfg, longMA: 220, exitType: "A"}, false)
         };
 
-        // 7. Confidence Engine
         const conf = calculateConfidence(dataVal, btOosA, sens);
 
-        // 8. Render UI
         currentQuantData = ind;
         renderEQDS_UI({ 
             ticker: queryTicker, ev: liveEval, dv: dataVal, 
             btIs, btOosA, btOosB, btOosC, conf, sensitivity: sens, tests: unitTests 
         });
         
-        // 9. Simulator Init (Read-Only)
         initPurchaseSimulator();
 
-        if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i> EQDS V2.2.5 분석 완료 (Price Return 기준)`;
+        if(statusMsg) statusMsg.innerHTML = `<i class="fas fa-check-circle text-green-500 mr-1"></i> EQDS V2.2.5 분석 완료 (배당 미포함 가격수익률 기준)`;
         if(resultContainer) resultContainer.classList.remove('hidden');
 
     } catch (error) {
@@ -121,9 +106,6 @@ async function runQuantAnalysis() {
     }
 }
 
-// ---------------------------------------------------------
-// [RUNTIME SCHEMA ASSERTION]
-// ---------------------------------------------------------
 function assertRuntimeSchema(ev) {
     const reqEv = ['vm', 'baseScore', 'adjScore', 'candW', 'entryCap', 'gateCap', 'actualWeight', 'finalTargetWeight', 'tradeDeltaWeight', 'isExplicitExit', 'stage', 'whyPositive', 'whyNegative', 'whyNotAggressive'];
     for (let r of reqEv) if (ev[r] === undefined) throw new Error(`Schema Error: ev.${r} is undefined`);
@@ -137,9 +119,6 @@ function assertRuntimeSchema(ev) {
     if (!ev.vm.mdd || !ev.vm.rs || !ev.vm.market) throw new Error(`Schema Error: Nested objects missing in VM`);
 }
 
-// ---------------------------------------------------------
-// [DATA LAYER]
-// ---------------------------------------------------------
 function extractOHLCV(data) {
     if (!data) return null;
     const t = data.chart.result[0].timestamp;
@@ -176,9 +155,6 @@ function validateDataQuality(ohlcv) {
     return { score: Math.max(0, score), comp: Math.min(100, (ohlcv.close.length/1260)*100), errors: errors.length ? errors : ["데이터 정상"] };
 }
 
-// ---------------------------------------------------------
-// [INDICATOR LAYER]
-// ---------------------------------------------------------
 function buildIndicators(ohlcv) {
     if(!ohlcv || ohlcv.close.length < 50) return null;
     const p = ohlcv.close;
@@ -209,8 +185,6 @@ function buildIndicators(ohlcv) {
 }
 
 function calcMA(arr, win) { let r=[]; for(let i=0;i<arr.length;i++){ if(i<win-1) r.push(null); else { let s=0; for(let j=0;j<win;j++) s+=arr[i-j]; r.push(s/win); } } return r; }
-
-// Realized Volatility: Annualized Standard Deviation of Log Returns
 function calcRealizedVol(logRets, win) {
     let res = [];
     for(let i=0; i<logRets.length; i++) {
@@ -223,7 +197,6 @@ function calcRealizedVol(logRets, win) {
     return res;
 }
 
-// RSI with Strict Mathematical Edge Case Handling
 function calcRSI(p, win) {
     let rsi=new Array(p.length).fill(null), g=0, l=0;
     for(let i=1;i<=win;i++) { let d=p[i]-p[i-1]; if(d>0) g+=d; else if(d<0) l-=d; }
@@ -257,7 +230,6 @@ function calcCurrentDD(p, win) {
     return res;
 }
 
-// True Multi-MDD (Peak -> Trough -> Recovery)
 function calcMultiMDD(p, dates, win) {
     let res = [];
     for(let i=0; i<p.length; i++) {
@@ -281,9 +253,7 @@ function calcMultiMDD(p, dates, win) {
             recoveryRatio = Math.min(100, Math.max(0, ratio)); 
             if (p[i] >= gPeak) {
                 recovered = true;
-                for(let k=gTroughD; k<=i; k++) { 
-                    if(p[k] >= gPeak) { recovDate = dates[k]; recovDuration = k - gPeakD; break; } 
-                }
+                for(let k=gTroughD; k<=i; k++) { if(p[k] >= gPeak) { recovDate = dates[k]; recovDuration = k - gTroughD; break; } }
             }
         } else if (maxDD === 0) {
             recoveryRatio = "N/A"; recovered = true;
@@ -298,7 +268,6 @@ function calcMultiMDD(p, dates, win) {
     return res;
 }
 
-// Strictly map target date to benchmark As-Of date (No future look-ahead)
 function getAsOfIndex(targetTime, bmDates) {
     if(!bmDates) return -1;
     let low = 0, high = bmDates.length - 1, best = -1;
@@ -312,14 +281,13 @@ function getAsOfIndex(targetTime, bmDates) {
 }
 
 // ---------------------------------------------------------
-// [VIEW MODEL BUILDER] (Single Snapshot)
+// [VIEW MODEL BUILDER]
 // ---------------------------------------------------------
 function buildViewModel(i, ind, spy, qqq, cfg) {
     const P = ind.prices[i];
     const prevP = ind.prices[i-1] || P;
     const tgtTime = new Date(ind.dates[i]).getTime();
     
-    // 7 Core MAs
     const ma = {
         5: ind.ma[5][i], 10: ind.ma[10][i], 15: ind.ma[15][i], 20: ind.ma[20][i],
         60: ind.ma[cfg.midMA][i], 120: ind.ma[120][i], 200: ind.ma[cfg.longMA][i]
@@ -332,7 +300,6 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
         200: slope(ma[200], ind.ma[cfg.longMA][Math.max(0, i-5)])
     };
 
-    // Stage 0~9 (Mutually Exclusive Boolean Addition)
     let C1 = (ma[200] && P > ma[200]) ? 1 : 0;
     let C2 = (sl[200] && sl[200] > 0) ? 1 : 0;
     let C3 = (ma[120] && ma[200] && ma[120] > ma[200]) ? 1 : 0;
@@ -352,7 +319,6 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
     else if (stage >= 1) stName = `Stage ${stage} (극약세)`;
     else stName = "Stage 0 (붕괴)";
 
-    // RSI Full Tracking
     const curR = ind.rsi[i]; const prvR = ind.rsi[i-1] || curR;
     const rsi = { 
         cur: curR, prev: prvR, d5: curR - ind.rsi[Math.max(0, i-5)],
@@ -364,7 +330,6 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
         overboughtExit: prvR >= 70 && curR < 70 && curR < prvR
     };
 
-    // Relative Strength (Preserve N/A)
     const calcRS = (days, bmInd) => {
         if(i < days || !bmInd) return "N/A";
         let idxT = getAsOfIndex(tgtTime, bmInd.dates);
@@ -374,7 +339,6 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
         return ((P / ind.prices[i-days]) - 1 - ((bmInd.prices[idxT] / bmInd.prices[idxP]) - 1)) * 100;
     };
 
-    // Market As-Of
     const calcMk = (bmInd) => {
         if(!bmInd) return { ok: false, desc: "N/A", p: null, m200: null, rsi: "N/A", mdd: "N/A", sl: null };
         let idx = getAsOfIndex(tgtTime, bmInd.dates);
@@ -409,14 +373,13 @@ function buildViewModel(i, ind, spy, qqq, cfg) {
 }
 
 // ---------------------------------------------------------
-// [DECISION ENGINE] Single Source of Truth
+// [DECISION ENGINE] Evaluate Signal
 // ---------------------------------------------------------
 function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     const vm = buildViewModel(i, ind, spy, qqq, cfg);
     const isLive = context.mode === "live";
     let whyPositive = [], whyNegative = [], whyNotAggressive = [], log = [];
 
-    // Base Score Components (MDD is strictly independent)
     let trSc = { a: 0, m: 25 }, moSc = { a: 0, m: 15 }, rsSc = { a: 0, m: 15 }, riSc = { a: 0, m: 15 }, mkSc = { a: 0, m: 15 };
 
     if(vm.price > vm.ma[200]) { trSc.a += 3; if(isLive) whyPositive.push("장기 추세선(200MA) 상단 유지"); } else { if(isLive) whyNegative.push("200MA 하회 (장기 역배열)"); }
@@ -437,7 +400,6 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     if(vm.atrRank !== "N/A") { if(vm.atrRank < 0.25) riSc.a += 4; else if(vm.atrRank < 0.5) riSc.a += 3; else if(vm.atrRank < 0.75) riSc.a += 1; }
     if(vm.realizedVol20 !== null) { if(vm.realizedVol20 < 0.2) riSc.a += 4; else if(vm.realizedVol20 < 0.4) riSc.a += 2; }
     
-    // MA20 Extension Risk
     let ext20 = vm.ma[20] ? (vm.price / vm.ma[20]) - 1 : 1;
     if(ext20 >= -0.05 && ext20 <= 0.05) { riSc.a += 4; } 
     else if(ext20 > 0.05 && ext20 <= 0.10) { riSc.a += 2; if(isLive) whyNegative.push(`단기 MA20 상방 이격(+${(ext20*100).toFixed(1)}%): 추격매수 위험`); }
@@ -454,7 +416,6 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     let availScore = trSc.m + moSc.m + rsSc.m + riSc.m + mkSc.m; 
     let baseScore = trSc.a + moSc.a + rsSc.a + riSc.a + mkSc.a;
 
-    // Risk Penalty - No MDD Leakage
     let overlap = 0;
     if(vm.price < vm.ma[20]) overlap++;
     if(vm.rsi.cur < 35) overlap++;
@@ -465,7 +426,6 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     if(overlap === 3) penalty = 7; else if(overlap >= 4) penalty = 12; 
     let adjScore = Math.max(0, baseScore - penalty);
 
-    // Candidate Weight Mapping
     let candW = 0.0;
     let ratio = availScore > 0 ? (adjScore / availScore) : 0;
     if(ratio >= 0.94) candW = cfg.maxExposure * 1.0; 
@@ -477,7 +437,6 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     let entryCap = candW;
     const actW = context.actualWeight;
 
-    // Entry Gates (Composited using Min, Never Forces Sell)
     if (vm.price < vm.ma[200] && vm.sl[200] < 0) {
         let confirms = 0;
         if (vm.rsi.oversoldExit) confirms++;
@@ -503,11 +462,8 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     }
 
     let gateCap = Math.min(candW, entryCap);
-    
-    // Core Invariant: Target = max(Actual, GateCap) -> Score drop != Sell
     let targetW = Math.max(actW, gateCap); 
 
-    // Explicit Exit Rule
     let isExplicitExit = false;
     let exitReason = null;
     
@@ -522,12 +478,10 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
             exitReason = "장기추세 붕괴 + 극한 단기 급락(-25% 이하)";
         }
     }
-    // Type B is Explicit Exit False naturally
 
     let tradeDelta = targetW - actW;
     let act = "", sty = "";
 
-    // Action derived solely from Delta and Exit Flag
     if (isExplicitExit) {
         act = "🔴 위험관리 청산"; sty = "bg-red-600 text-white";
         if(isLive) whyNegative.push(`[위험관리 청산] ${exitReason} ➔ Target 0 강제 할당`);
@@ -550,7 +504,7 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
 }
 
 // ---------------------------------------------------------
-// [BACKTEST ACCOUNTING ENGINE] Integer Execution
+// [BACKTEST ACCOUNTING ENGINE]
 // ---------------------------------------------------------
 function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
     if(endIdx - startIdx < 50) return null;
@@ -560,7 +514,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
     let bhCash = 1.0, bhShares = 0;
     let activeCycle = null;
 
-    // Loop bounds up to endIdx - 1 to protect OpenT1
     for (let i = startIdx; i < endIdx - 1; i++) { 
         let eqAtClose = st.cash + (st.shares * ind.prices[i]);
         let actWAtClose = eqAtClose === 0 ? 0 : (st.shares * ind.prices[i]) / eqAtClose;
@@ -569,7 +522,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         let ev = evaluateSignalAtDate(i, ind, spy, qqq, cfg, ctx);
         let targetW = ev.finalTargetWeight;
 
-        // T+1 Open Execution
         let openT1 = ind.open[i+1];
         let closeT1 = ind.prices[i+1];
 
@@ -585,7 +537,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         let actualExecAmt = 0;
         let cost = 0;
 
-        // Trade Execution Logic
         if (Math.abs(deltaWt) > cfg.execThreshold) {
             if (deltaWt > 0) { 
                 let maxAllowedWt = cfg.maxExposure - actWAtOpen;
@@ -594,7 +545,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
                 let maxBuyable = Math.min(desiredBuyAmt, st.cash / (1 + cfg.costRate));
                 let floorShares = Math.floor(maxBuyable / openT1);
 
-                // Max Exposure Invariant Check
                 while (floorShares > 0) {
                     let testExecAmt = floorShares * openT1;
                     let testCost = testExecAmt * cfg.costRate;
@@ -622,7 +572,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
                     actualExecAmt = floorShares * openT1;
                     cost = actualExecAmt * cfg.costRate;
                     st.cash += (actualExecAmt - cost);
-                    // Partial sell doesn't alter avgCost, only creates realized PnL in the cycle
                     st.shares -= floorShares;
                     executedShares = -floorShares;
                     isTrade = true;
@@ -631,7 +580,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
             }
         }
 
-        // Ledger & PnL Accounting
         if (isTrade) {
             st.cumCost += cost;
             res.cumCost += cost;
@@ -647,7 +595,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
                 grossAmount: actualExecAmt, cost, netCF, weightBefore: actWAtOpen, targetWeight: targetW, weightAfter: actWAfter
             });
 
-            // Position Cycle tracking
             if (actWAtOpen === 0 && executedShares > 0) {
                 activeCycle = { entryDate: ind.dates[i+1], initialCapital: eqAtOpen, totalBuyCash: 0, totalSellCash: 0, totalCosts: 0, rebCount: 0 };
             }
@@ -678,10 +625,7 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         res.rets.push((netEquity / st.prevEq) - 1);
         st.prevEq = netEquity;
 
-        // IS Boundary MTM without OOS leakage
-        if (isIsSegment && i === endIdx - 2 && activeCycle) {
-            activeCycle = null; 
-        }
+        if (isIsSegment && i === endIdx - 2 && activeCycle) activeCycle = null; 
     }
 
     const calcMetrics = (r) => {
@@ -698,7 +642,6 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         for(let ret of r.rets) { sum+=ret; sumSq+=ret*ret; if(ret<0) dSumSq+=ret*ret; }
         let mean = sum/r.days; let std = Math.sqrt((sumSq/r.days) - (mean*mean)); let dStd = Math.sqrt(dSumSq/r.days);
         
-        // Proper Annualized Sharpe & Sortino
         let sharpe = std === 0 ? "N/A" : (mean / std) * Math.sqrt(252);
         let sortino = dStd === 0 ? "N/A" : (mean / dStd) * Math.sqrt(252);
         let calmar = maxDD === 0 ? "N/A" : cagr / Math.abs(maxDD);
@@ -731,7 +674,7 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
 }
 
 // ---------------------------------------------------------
-// [CONFIDENCE ENGINE] (Max 85, Deterministic Caps)
+// [CONFIDENCE ENGINE]
 // ---------------------------------------------------------
 function calculateConfidence(dv, btOos, sens) {
     if(!btOos) return { val: 0, t: "검증 불가" };
@@ -763,7 +706,7 @@ function calculateConfidence(dv, btOos, sens) {
 }
 
 // ---------------------------------------------------------
-// [UNIT TEST LAYER] Engine Invariants 
+// [UNIT TEST LAYER]
 // ---------------------------------------------------------
 function runExtremeUnitTests(cfg) {
     let results = [];
@@ -783,42 +726,41 @@ function runExtremeUnitTests(cfg) {
     let baseInd = makeMock(100, 50);
     let i = 299;
 
-    // CASE F: RSI Edge Case
     let fiRsi = JSON.parse(JSON.stringify(baseInd));
     for(let k=i-15; k<=i; k++) fiRsi.prices[k] = 100;
     let testRSI = calcRSI(fiRsi.prices, 14)[i];
     tLog("RSI Edge Case (Flat=50)", testRSI === 50);
 
-    // CASE D: MDD Score Independence
     let fiMDD5 = JSON.parse(JSON.stringify(baseInd)); fiMDD5.currentDD20[i] = -0.05;
     let fiMDD80 = JSON.parse(JSON.stringify(baseInd)); fiMDD80.currentDD20[i] = -0.80;
-    fiMDD80.prices[i] = 100; fiMDD80.ma[200][i] = 90; fiMDD80.ma[200][Math.max(0, i-5)] = 80; // Prevent Explicit Exit
+    fiMDD80.prices[i] = 100; fiMDD80.ma[200][i] = 90; fiMDD80.ma[200][Math.max(0, i-5)] = 80; 
     let evM5 = evaluateSignalAtDate(i, fiMDD5, null, null, cfg, { actualWeight: 0, mode: "test" });
     let evM80 = evaluateSignalAtDate(i, fiMDD80, null, null, cfg, { actualWeight: 0, mode: "test" });
     tLog("MDD Score Independence (Base/Pen/Cand Same)", 
         evM5.baseScore === evM80.baseScore && evM5.riskPenalty === evM80.riskPenalty && evM5.candW === evM80.candW);
 
-    // CASE A: Explicit Exit Force Zero
     let fiA = JSON.parse(JSON.stringify(baseInd));
     fiA.prices[i] = 50; fiA.ma[200][i] = 100; fiA.ma[200][Math.max(0, i-5)] = 110; 
     fiA.ma[60][i] = 80; fiA.currentDD20[i] = -0.22; 
     let eA = evaluateSignalAtDate(i, fiA, null, null, cfg, { actualWeight: 0.3, mode: "test" });
-    tLog("Explicit Exit Rule (Target 0)", eA.finalTargetWeight === 0 && eA.isExplicitExit === true);
+    tLog("Explicit Exit A (Target 0)", eA.finalTargetWeight === 0 && eA.isExplicitExit === true);
 
-    // CASE C: Candidate 0 Invariant (Actual 30% -> Target 30%)
     let fiE = JSON.parse(JSON.stringify(baseInd));
     fiE.prices[i] = 10; fiE.ma[200][i] = 100; fiE.ma[200][Math.max(0, i-5)] = 90; 
     let eE = evaluateSignalAtDate(i, fiE, null, null, cfg, { actualWeight: 0.3, mode: "test" });
-    tLog("Candidate0 Invariant (Target >= Actual)", eE.candW === 0 && eE.finalTargetWeight === 0.3);
+    tLog("Candidate0 Invariant (Actual Hold)", eE.candW === 0 && eE.finalTargetWeight === 0.3);
 
-    // CASE Stage 0~9 Exclusion
+    let fiF = JSON.parse(JSON.stringify(baseInd)); fiF.rsi[i] = 85; 
+    let eG = evaluateSignalAtDate(i, fiF, null, null, cfg, { actualWeight: 0.3, mode: "test" });
+    tLog("RSI>70 (Target <= Actual)", eG.finalTargetWeight <= 0.3);
+
     tLog("Stage 0~9 Exclusive Range", evM5.stage >= 0 && evM5.stage <= 9);
 
     return results;
 }
 
 // ---------------------------------------------------------
-// [PURCHASE SIMULATOR] Read-Only + Separate Confirm
+// [PURCHASE SIMULATOR] Read-Only + FOMO Calculator
 // ---------------------------------------------------------
 function initPurchaseSimulator() {
     calcSimulator();
@@ -859,7 +801,7 @@ function calcSimulator() {
         if (vm.sl[20] > 0) confirms++;
         
         let isConfirm = confirms >= 2;
-        let act = isConfirm ? "🟢 매수" : (confirms === 1 ? "🟡 관찰" : "🔴 보류");
+        let act = isConfirm ? "🟢 부분 매수" : (confirms === 1 ? "🟡 관찰 요망" : "🔴 매수 보류");
         
         let addShares = 0, addAmt = 0, cost = 0, postWt = actW * 100, postAvgCost = avgCost;
         if (isConfirm) {
@@ -884,7 +826,7 @@ function calcSimulator() {
     let upScenarios = upPrices.map(pct => {
         let pTrigger = vm.price * (1 + pct);
         let isConfirm = (pTrigger > vm.ma[20] && vm.sl[20] > 0 && vm.rsi.cur > 50 && vm.rs.spy.d20 > 0);
-        let act = isConfirm ? "🟢 매수" : "🔴 보류";
+        let act = isConfirm ? "🟢 부분 매수" : "🔴 매수 보류";
         let addShares = 0, postAvgCost = avgCost;
         if(isConfirm) {
             let desiredWt = Math.min(actW + 0.05, cfg.maxExposure); 
@@ -907,7 +849,6 @@ function calcSimulator() {
         <tr><td class="py-1">단기 추세 훼손 (20MA 이탈) 시</td><td>잔량 청산 검토</td></tr>
     `;
 
-    // 렌더링 컨테이너만 업데이트
     let html = `
         <div class="grid grid-cols-2 gap-4 text-[10px] mono">
             <div class="bg-slate-50 p-2 rounded">
@@ -952,10 +893,125 @@ function calcSimulator() {
     `;
     let simResultsCont = document.getElementById('simulator-results-container');
     if(simResultsCont) simResultsCont.innerHTML = html;
+
+    // Call FOMO Calculator on init
+    calcFomo();
 }
 
 // ---------------------------------------------------------
-// [UI RENDER LAYER] Null Safe Display
+// [FOMO CALCULATOR] Interactive What-If Mini Engine
+// ---------------------------------------------------------
+window.calcFomo = function() {
+    if(!lastEvaluationResult) return;
+    const { ev, cfg, ticker } = lastEvaluationResult;
+    const vm = ev.vm;
+
+    let cashInput = document.getElementById('sim-cash');
+    let sharesInput = document.getElementById('sim-shares');
+    let avgCostInput = document.getElementById('sim-avgcost');
+    let fomoPriceInput = document.getElementById('fomo-price');
+    let fomoSharesInput = document.getElementById('fomo-shares');
+
+    if (!cashInput || !fomoPriceInput) return;
+
+    let cash = parseFloat(cashInput.value || 0);
+    let currentShares = parseFloat(sharesInput.value || 0);
+    let currentAvgCost = parseFloat(avgCostInput.value || vm.price);
+    let fomoPrice = parseFloat(fomoPriceInput.value || vm.price);
+    let fomoShares = parseFloat(fomoSharesInput.value || 0);
+    let isCcy = ticker.endsWith(".KS") || ticker.endsWith(".KQ") ? "₩" : "$";
+
+    let fomoHtml = '';
+    
+    if (fomoShares <= 0) {
+        fomoHtml = `<div class="text-xs text-rose-400 font-bold p-3 text-center bg-white rounded-lg border border-rose-100 opacity-70">원하시는 추가 매수 수량을 입력해 보세요.</div>`;
+    } else {
+        let fomoCost = fomoShares * fomoPrice * (1 + cfg.costRate); 
+        let newCash = cash - fomoCost;
+        let newShares = currentShares + fomoShares;
+        
+        let newAvgCost = currentShares > 0 || fomoShares > 0 
+            ? ((currentShares * currentAvgCost) + (fomoShares * fomoPrice)) / newShares 
+            : 0;
+            
+        let newTotalEq = newCash + (newShares * fomoPrice);
+        let newWt = newTotalEq > 0 ? (newShares * fomoPrice) / newTotalEq : 0;
+
+        let warnings = [];
+        let isAllowed = true;
+        let statusBadge = '';
+
+        // FOMO Fact-check Logic
+        if (newWt > cfg.maxExposure) {
+            warnings.push(`<li><b>❌ [치명적 위험] 비중 초과:</b> 체결 후 비중이 ${(newWt*100).toFixed(1)}%로 포트폴리오 안전 한도(${cfg.maxExposure*100}%)를 초과합니다. <b>계좌 붕괴 위험</b>이 있습니다.</li>`);
+            isAllowed = false;
+        }
+        if (newCash < 0) {
+            warnings.push(`<li><b>❌ [치명적 위험] 잔고 부족:</b> 보유 현금(${isCcy}${cash.toFixed(2)})을 초과한 무리한 빚투/오버슈팅입니다.</li>`);
+            isAllowed = false;
+        }
+        if (vm.rsi.cur >= 70) {
+            warnings.push(`<li><b>🚨 [경고] 과열권 뇌동매매:</b> 현재 RSI(${vm.rsi.cur.toFixed(1)})가 70을 초과했습니다. 단기 고점(꼭지)에 물릴 확률이 매우 높습니다. 조정을 기다리십시오.</li>`);
+            isAllowed = false;
+        }
+        if (fomoPrice < vm.ma[200] && vm.sl[200] < 0) {
+            warnings.push(`<li><b>🚨 [경고] 떨어지는 칼날:</b> 장기 역배열(200MA 하락) 중입니다. 바닥이 어딘지 확인되지 않은 매우 위험한 물타기입니다.</li>`);
+            isAllowed = false;
+        } else if (fomoPrice < vm.ma[20]) {
+            warnings.push(`<li><b>⚠️ [주의] 단기 약세 구간:</b> 단기 지지선(20MA: ${vm.ma[20].toFixed(2)}) 아래에 있습니다. 반등을 확인하고 사는 것이 안전합니다.</li>`);
+            if(isAllowed) isAllowed = false; 
+        }
+
+        if (warnings.length > 0) {
+            statusBadge = isAllowed === false && warnings.some(w => w.includes('❌') || w.includes('🚨')) 
+                ? `<span class="bg-rose-600 text-white px-2.5 py-1 rounded text-[10px] shadow-sm">🔴 시스템 강력 만류 (매수 금지)</span>` 
+                : `<span class="bg-orange-500 text-white px-2.5 py-1 rounded text-[10px] shadow-sm">🟠 시스템 경고 (리스크 주의)</span>`;
+        } else {
+            statusBadge = `<span class="bg-emerald-500 text-white px-2.5 py-1 rounded text-[10px] shadow-sm">🟢 매수 허용 (FM 통과)</span>`;
+            warnings.push(`<li><b>✅ [시스템 통과]:</b> 비중 한도 내이며, 과열/역배열 페널티가 없습니다. 입력하신 가격대에서 기계적 분할 매수로 적합합니다.</li>`);
+        }
+
+        fomoHtml = `
+            <div class="bg-white rounded-xl p-4 border border-rose-100 shadow-sm mt-2">
+                <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
+                    <span class="font-black text-slate-800 text-sm">시뮬레이션 체결 결과</span>
+                    ${statusBadge}
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 text-center mb-4">
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <div class="text-[10px] font-bold text-slate-500">필요 현금(비용)</div>
+                        <div class="font-mono font-black text-rose-600 text-sm">${isCcy}${fomoCost.toFixed(2)}</div>
+                    </div>
+                    <div class="bg-indigo-50 p-2 rounded-lg border border-indigo-100 shadow-inner">
+                        <div class="text-[10px] font-bold text-indigo-500">나의 새 평단가</div>
+                        <div class="font-mono font-black text-indigo-700 text-sm">${isCcy}${newAvgCost.toFixed(2)}</div>
+                        <div class="text-[9px] font-bold ${newAvgCost < currentAvgCost ? 'text-blue-600' : 'text-red-500'} mt-0.5">
+                            ${newAvgCost < currentAvgCost ? '▼ ' + (currentAvgCost - newAvgCost).toFixed(2) + ' 하락' : '▲ ' + (newAvgCost - currentAvgCost).toFixed(2) + ' 상승'}
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <div class="text-[10px] font-bold text-slate-500">체결 후 비중</div>
+                        <div class="font-mono font-black text-sm ${newWt > cfg.maxExposure ? 'text-red-600' : 'text-slate-800'}">${(newWt*100).toFixed(1)}%</div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 text-slate-200 p-3 rounded-lg text-[10px] font-medium leading-relaxed border border-slate-700">
+                    <span class="text-rose-400 font-black tracking-wide">💬 퀀트 AI 코멘트:</span>
+                    <ul class="mt-2 space-y-1.5">
+                        ${warnings.join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+    
+    let fomoCont = document.getElementById('fomo-results-container');
+    if(fomoCont) fomoCont.innerHTML = fomoHtml;
+};
+
+// ---------------------------------------------------------
+// [UI RENDER LAYER] Null Safe Display & Add FOMO UI
 // ---------------------------------------------------------
 const safeCagr = (obj) => (obj && typeof obj.cagr === 'number') ? (obj.cagr * 100).toFixed(1) + '%' : 'N/A';
 const safeMdd = (obj) => (obj && typeof obj.mdd === 'number') ? obj.mdd.toFixed(1) + '%' : 'N/A';
@@ -1040,7 +1096,7 @@ function renderEQDS_UI(ctx) {
                         <div class="flex justify-between font-bold"><span>ALL:</span><span>Cur ${(vm.mdd.all.currentDD*100).toFixed(1)}% | Max ${(vm.mdd.all.maxDD).toFixed(1)}%</span></div>
                     </div>
                     <div class="text-[10px] text-slate-600 mt-2 font-bold bg-slate-50 p-2 rounded">
-                        * MDD는 매수 점수에 반영되지 않으며, 위험 확인용입니다.<br>
+                        * MDD는 매수 점수에 직접 반영되지 않으며, 위험 확인용입니다.<br>
                         Max DD 발생일: ${vm.mdd.all.maxPeakDate}<br>
                         Max DD 회복률: <span class="text-blue-600">${vm.mdd.all.recoveryRatio === "N/A" ? "N/A" : vm.mdd.all.recoveryRatio.toFixed(1)+'%'}</span>
                     </div>
@@ -1076,22 +1132,42 @@ function renderEQDS_UI(ctx) {
             </div>
             
             <div class="bg-white p-4 rounded-xl border border-slate-200 mt-4 shadow-sm" id="simulator-main-container">
-                <h4 class="font-black text-sm mb-3 border-b pb-2">💰 구매 시뮬레이터 (System READ-ONLY)</h4>
-                <div class="flex gap-4 mb-4">
-                    <div class="flex-1">
-                        <label class="text-[10px] font-bold text-slate-500">보유 현금 (${isCcy})</label>
-                        <input type="number" id="sim-cash" value="10000" class="w-full border rounded p-1.5 text-xs bg-slate-50" oninput="calcSimulator()">
+                <h4 class="font-black text-sm mb-3 border-b pb-2 flex items-center"><i class="fas fa-chess-knight text-slate-600 mr-2"></i> 구매 시뮬레이터 (System READ-ONLY)</h4>
+                
+                <div class="flex flex-wrap gap-4 mb-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">보유 현금 (${isCcy})</label>
+                        <input type="number" id="sim-cash" value="10000" class="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white font-mono focus:ring-indigo-500 shadow-sm" oninput="calcSimulator()">
                     </div>
-                    <div class="flex-1">
-                        <label class="text-[10px] font-bold text-slate-500">현재 보유 수량 (주)</label>
-                        <input type="number" id="sim-shares" value="0" class="w-full border rounded p-1.5 text-xs bg-slate-50" oninput="calcSimulator()">
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">현재 보유 수량 (주)</label>
+                        <input type="number" id="sim-shares" value="0" class="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white font-mono focus:ring-indigo-500 shadow-sm" oninput="calcSimulator()">
                     </div>
-                    <div class="flex-1">
-                        <label class="text-[10px] font-bold text-slate-500">평균매수가 (${isCcy})</label>
-                        <input type="number" id="sim-avgcost" value="${vm.price.toFixed(2)}" class="w-full border rounded p-1.5 text-xs bg-slate-50" step="0.01" oninput="calcSimulator()">
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">나의 평균매수가 (${isCcy})</label>
+                        <input type="number" id="sim-avgcost" value="${vm.price.toFixed(2)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white font-mono focus:ring-indigo-500 shadow-sm" step="0.01" oninput="calcSimulator()">
                     </div>
                 </div>
+                
                 <div id="simulator-results-container"></div>
+
+                <!-- 🔥 FOMO 추가 투자 미니 계산기 -->
+                <div class="mt-6 bg-rose-50/50 border border-rose-200 p-5 rounded-xl shadow-sm">
+                    <h4 class="font-black text-rose-800 mb-2 flex items-center"><i class="fas fa-fire-alt mr-2 text-rose-500"></i>🔥 뇌동매매(FOMO) 방지 & 자유 역산기</h4>
+                    <p class="text-xs font-bold text-rose-600/80 mb-4">"FM 규칙이고 뭐고, 당장 여기서 N주를 더 사면 내 평단가는 어떻게 될까?" ➔ 시스템이 냉정하게 팩트 폭행을 해드립니다.</p>
+                    
+                    <div class="flex gap-4 mb-4">
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-rose-500 mb-1">희망 매수가 (${isCcy})</label>
+                            <input type="number" id="fomo-price" value="${vm.price.toFixed(2)}" class="w-full border border-rose-300 rounded-lg p-2 text-xs bg-white font-mono focus:ring-rose-500 shadow-sm" step="0.01" oninput="calcFomo()">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-rose-500 mb-1">희망 추가 수량 (주)</label>
+                            <input type="number" id="fomo-shares" placeholder="수량 입력 (예: 10)" class="w-full border border-rose-300 rounded-lg p-2 text-xs bg-white font-mono focus:ring-rose-500 shadow-sm" oninput="calcFomo()">
+                        </div>
+                    </div>
+                    <div id="fomo-results-container"></div>
+                </div>
             </div>
 
             <!-- Backtest Engine -->
@@ -1125,9 +1201,15 @@ function renderEQDS_UI(ctx) {
             </div>
 
             <!-- Logs & Tests -->
-            <div class="bg-slate-100 border border-slate-200 p-4 rounded-xl mt-4">
-                <h4 class="text-xs font-black text-slate-800 mb-2 border-b border-slate-300 pb-1">Unit Tests (불변식 엔진 검증)</h4>
-                <ul class="text-[9px] text-slate-600 space-y-1 font-mono">${(tests && tests.length)?tests.map(r=>`<li>[${r.pass?'PASS':'FAIL'}] ${r.name}</li>`).join(''):'<li>테스트 로그 없음</li>'}</ul>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+                    <h4 class="text-xs font-black text-indigo-900 mb-2 border-b border-indigo-200 pb-1">계산 근거 로그</h4>
+                    <ul class="text-[9px] text-indigo-800 space-y-1 font-mono">${(ev.log && ev.log.length>0)?ev.log.map(r=>`<li>• ${r}</li>`).join(''):'<li>특이 연산 로그 없음</li>'}</ul>
+                </div>
+                <div class="bg-slate-100 border border-slate-200 p-4 rounded-xl">
+                    <h4 class="text-xs font-black text-slate-800 mb-2 border-b border-slate-300 pb-1">Unit Tests (불변식 엔진 검증)</h4>
+                    <ul class="text-[9px] text-slate-600 space-y-1 font-mono">${(tests && tests.length)?tests.map(r=>`<li>[${r.pass?'PASS':'FAIL'}] ${r.name}</li>`).join(''):'<li>테스트 로그 없음</li>'}</ul>
+                </div>
             </div>
             
             <div class="text-[9px] text-slate-400 p-2 text-center mt-2">
