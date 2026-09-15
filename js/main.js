@@ -21,40 +21,39 @@ var globalActualDividendLogs = [];
 var globalDividendRulesMatrix = {}; 
 
 function switchTab(tabName) {
-    // 배열에 새로 추가한 탭 'BacktestDiv' 포함
-    var tabs = ['Quant', 'Port', 'Calc', 'Div', 'Mdd', 'Rsi', 'OneDollar', 'BacktestDiv'];
-    
-    for (var i = 0; i < tabs.length; i++) {
-        var t = tabs[i];
-        var view = document.getElementById('view' + t);
-        var btn = document.getElementById('btnTab' + t);
-        if(view) {
-            view.classList.add('hidden');
-            view.classList.remove('block');
-        }
-        if(btn) {
-            btn.className = "flex-1 py-3 bg-white text-slate-600 rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-slate-50 whitespace-nowrap";
-        }
-    }
-    
+    // 1. 모든 뷰어 섹션을 찾아서 숨김 처리
+    const allViews = document.querySelectorAll('.view-section');
+    allViews.forEach(view => {
+        view.classList.add('hidden');
+        view.classList.remove('block');
+    });
+
+    // 2. 모든 버튼에서 '활성화(tab-active)' 디자인 제거
+    const allButtons = [
+        'btnTabPort', 'btnTabQuant', 'btnTabCalc', 'btnTabDiv', 
+        'btnTabSingle', 'btnTabMdd', 'btnTabRsi', 'btnTabMa', 
+        'btnTabBacktestDiv', 'btnTabOneDollar'
+    ];
+    allButtons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.classList.remove('tab-active');
+    });
+
+    // 3. 선택된 탭 화면 보이기 및 버튼 하이라이트
     var capTabName = tabName.charAt(0).toUpperCase() + tabName.slice(1);
     var activeView = document.getElementById('view' + capTabName);
     var activeBtn = document.getElementById('btnTab' + capTabName);
     
-    if(activeView) {
+    if (activeView) {
         activeView.classList.remove('hidden');
         activeView.classList.add('block');
     }
     
-    if(activeBtn) {
-        if(tabName === 'div') activeBtn.className = "flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
-        else if(tabName === 'mdd') activeBtn.className = "flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
-        else if(tabName === 'rsi') activeBtn.className = "flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
-        else if(tabName === 'oneDollar') activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-sm border border-slate-200 transition-all hover:bg-yellow-50 whitespace-nowrap text-yellow-500";
-        else if(tabName === 'backtestDiv') activeBtn.className = "flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-sm border border-slate-200 transition-all whitespace-nowrap";
-        else activeBtn.className = "flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-md transition-all whitespace-nowrap";
+    if (activeBtn) {
+        activeBtn.classList.add('tab-active');
     }
 
+    // 4. 탭 이동 시 각 화면의 초기화(로딩) 함수 실행
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
     if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
@@ -128,7 +127,8 @@ async function initDashboard() {
             await loadPortfolioData('init'); 
         }
 
-        switchTab('quant');
+        // 초기 화면을 '내 대시보드 메인(클럽 현황)'으로 고정
+        switchTab('port');
     } catch (err) { 
         console.error("데이터 초기화 실패:", err); 
     }
