@@ -2,10 +2,10 @@ import pandas as pd
 import requests
 import json
 
-# 1. 동진님의 마스터 시트 CSV 주소 (로봇이 읽을 목록)
+# 1. 동진님의 마스터 시트 CSV 주소 (로봇이 스캔할 명단)
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=712569303&single=true&output=csv"
 
-# 2. 구글 시트 문지기 웹훅 주소 (로봇이 쏠 목적지)
+# 2. 방금 새로 발급받은 완벽한 구글 시트 문지기 웹훅 주소!
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbykj7ueHVVagEItBiS49H6ByqRVWeeNHaDqWR5qsGKNgzFs_qqQx2QEY1rPnT5dVIW9/exec"
 
 def send_to_google_sheet(etf_name, code):
@@ -13,7 +13,7 @@ def send_to_google_sheet(etf_name, code):
     payload = {
         "etfName": etf_name,
         "code": code,
-        # 일단 테스트용 가짜 데이터 발사 (시트 생성 및 로직 확인용)
+        # 시트 생성 및 수식 작동 테스트용 가짜 데이터
         "recordDate": "2026-09-16", 
         "payDate": "2026-09-18",
         "dividend": 999,  
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         
         for index, row in df.iterrows():
             etf_name = str(row[0]).strip()
-            code = str(row[1]).strip().zfill(6) # 0183V0 같은 영문 포함이나 앞자리 0 유지
+            code = str(row[1]).strip().zfill(6) 
             
             # 🎯 2단계: 테스트 타겟인 '0183V0'을 발견하면 즉시 사격!
             if "0183V0" in code:
