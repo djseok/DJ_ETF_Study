@@ -19,7 +19,7 @@ jobs:
           python-version: '3.10'
 
       - name: 크롤링 라이브러리 설치
-        run: pip install requests beautifulsoup4 pandas lxml
+        run: pip install requests beautifulsoup4 pandas lxml html5lib
 
       - name: 🚀 배당금 크롤링 봇 출동!
         run: python scraper.py
