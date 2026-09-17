@@ -2,39 +2,64 @@ import pandas as pd
 import requests
 import json
 import time
-import io  # 🚨 추가: 최신 pandas 경고(StringIO) 해결용
+import io
 
-# 1. 마스터 시트 CSV 명단
+# 1. 마스터 시트 CSV 주소
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=712569303&single=true&output=csv"
 # 2. 구글 시트 웹훅 주소
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbykj7ueHVVagEItBiS49H6ByqRVWeeNHaDqWR5qsGKNgzFs_qqQx2QEY1rPnT5dVIW9/exec"
 
 def get_real_dividend(code):
     url = f"https://finance.naver.com/item/main.naver?code={code}"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # 🚨 핵심 패치 1: 네이버가 봇으로 인식하지 못하게 완벽한 데스크탑 PC 크롬 브라우저로 위장!
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://finance.naver.com/',
+        'Accept-Language': 'ko-KR,ko;q=0.9'
+    }
     
     try:
         res = requests.get(url, headers=headers)
-        # 🚨 핵심 패치: res.text를 io.StringIO() 상자에 예쁘게 담아서 pandas에게 전달합니다!
-        tables = pd.read_html(io.StringIO(res.text), encoding='euc-kr')
+        res.raise_for_status()
+
+        # 🚨 핵심 패치 2: 빨간색 인코딩 경고창 제거 및 정확히 '주당분배금' 글씨가 있는 표만 스마트하게 추출
+        tables = pd.read_html(io.StringIO(res.text), match='주당분배금')
         
-        div_table = None
-        for tbl in tables:
-            if '주당분배금' in tbl.to_string() or '분배기준일' in tbl.to_string():
-                div_table = tbl
-                break
+        if tables:
+            df_div = tables[0]
+            
+            # 네이버 표 구조 변화 방어 로직 (헤더가 첫 줄에 섞인 경우 정리)
+            if '주당분배금' not in ''.join(str(c) for c in df_div.columns):
+                df_div.columns = df_div.iloc[0]
+                df_div = df_div[1:]
                 
-        if div_table is not None and not div_table.empty:
-            recent_div = div_table.iloc[0] 
+            recent_div = df_div.iloc[0]
             
-            record_date = str(recent_div.iloc[0]).replace(".", "-") 
-            div_amount = int(recent_div.iloc[1]) 
-            pay_date = record_date 
-            tax_base = div_amount 
+            # 신규 상장 등으로 빈칸(-)인 경우 방어
+            if pd.isna(recent_div.iloc[0]) or str(recent_div.iloc[1]).strip() == "-":
+                return None, None, None, None
             
-            return record_date, pay_date, div_amount, tax_base
+            # 컬럼 이름 동적 추출 (지급일이 없거나 순서가 바뀌어도 알아서 찾아냅니다)
+            rec_col = next((c for c in df_div.columns if '기준일' in str(c)), df_div.columns[0])
+            div_col = next((c for c in df_div.columns if '분배금' in str(c)), df_div.columns[-2])
+            pay_col = next((c for c in df_div.columns if '지급일' in str(c)), None)
+            
+            record_date = str(recent_div[rec_col]).replace(".", "-").strip()
+            div_text = str(recent_div[div_col]).replace(",", "").strip()
+            
+            if pay_col and pd.notna(recent_div[pay_col]) and str(recent_div[pay_col]).strip() != "-":
+                pay_date = str(recent_div[pay_col]).replace(".", "-").strip()
+            else:
+                pay_date = record_date
+                
+            if div_text.isdigit():
+                div_amount = int(div_text)
+                return record_date, pay_date, div_amount, div_amount
+
+    except ValueError:
+        print(f"[{code}] 표 찾기 실패 (신규 상장으로 아직 배당 내역이 없거나 데이터가 비어있습니다.)")
     except Exception as e:
-        print(f"[{code}] 크롤링 실패: {e}")
+        print(f"[{code}] 파싱 에러: {e}")
         
     return None, None, None, None
 
@@ -58,7 +83,7 @@ if __name__ == "__main__":
             etf_name = str(row[0]).strip()
             code = str(row[1]).strip()
             
-            if etf_name == "종목명" or etf_name == "이름": 
+            if etf_name in ["종목명", "이름"]: 
                 continue
                 
             if len(code) > 0 and code != "nan":
@@ -70,8 +95,8 @@ if __name__ == "__main__":
                 if div is not None:
                     send_to_google_sheet(etf_name, code, rec_date, pay_date, div, tax)
                 else:
-                    print(f"⚠️ [{etf_name}] 배당금 표를 찾지 못해 패스합니다.")
+                    print(f"⚠️ [{etf_name}] 배당금 내역이 존재하지 않아 패스합니다.")
                 
-                time.sleep(3) 
+                time.sleep(2) 
     except Exception as e:
         print(f"시스템 에러: {e}")
