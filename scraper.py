@@ -49,7 +49,7 @@ if __name__ == "__main__":
                 send_to_google_sheet(etf_name, code)
                 
                 # 🌟 매우 중요: 구글 시트 문지기가 체하지 않게 1.5초 휴식
-                time.sleep(1.5)
+                time.sleep(3.5)
                 
     except Exception as e:
         print(f"⚠️ CSV 명단 읽기 실패: {e}")
