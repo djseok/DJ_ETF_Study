@@ -9,34 +9,42 @@ CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjh
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbykj7ueHVVagEItBiS49H6ByqRVWeeNHaDqWR5qsGKNgzFs_qqQx2QEY1rPnT5dVIW9/exec"
 
 def get_real_dividend(code):
-    # 🚨 핵심 패치: 껍데기(웹페이지)가 아니라 알맹이(API)만 쏙 빼오는 비밀 주소!
     url = f"https://m.stock.naver.com/api/stock/{code}/dividend"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # 🚨 핵심 패치: 네이버 API 서버를 완벽하게 속이는 '진짜 크롬 브라우저' 위장 신분증
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': f'https://m.stock.naver.com/domestic/stock/{code}/dividend',
+        'Connection': 'keep-alive'
+    }
     
     try:
-        res = requests.get(url, headers=headers)
-        data = res.json() # 데이터를 JSON(딕셔너리) 형태로 즉시 해독
+        # 타임아웃 10초 설정 및 위장 헤더 전송
+        res = requests.get(url, headers=headers, timeout=10)
         
-        # 네이버 API가 정상적으로 배당 내역(dividendList)을 보내주었다면
+        # 🚨 방어 로직: 네이버가 JSON 대신 HTML 방어창을 던졌을 때 에러(Expecting value)가 나지 않도록 우회
+        data = res.json() 
+        
         if data.get('isSuccess') and data.get('dividendList'):
-            recent_div = data['dividendList'][0] # 가장 첫 번째(최근) 배당 내역 추출
+            recent_div = data['dividendList'][0] 
             
-            # API 키 값을 통해 정확한 숫자와 날짜 추출
             record_date = recent_div.get('dividendRecordDate', '').replace(".", "-").strip()
             pay_date = recent_div.get('dividendPayDate', '').replace(".", "-").strip()
             
-            # 실지급일이 공란이거나 '-' 처리되어 있으면 기준일로 대체
             if not pay_date or pay_date == "-":
                 pay_date = record_date
                 
             div_amount = int(recent_div.get('dividendAmount', 0))
             
-            # 주당 과세표준액은 네이버에서 미제공하므로 배당금과 1:1 세팅
             if div_amount > 0:
                 return record_date, pay_date, div_amount, div_amount
 
+    except json.JSONDecodeError:
+        print(f"[{code}] 봇 차단됨: 네이버가 JSON 데이터 대신 방어창을 보냈습니다.")
     except Exception as e:
-        print(f"[{code}] API 파싱 에러: {e}")
+        print(f"[{code}] API 호출 에러: {e}")
         
     return None, None, None, None
 
@@ -53,7 +61,7 @@ def send_to_google_sheet(etf_name, code, record_date, pay_date, div_amount, tax_
         print(f"❌ 통신 오류: {e}")
 
 if __name__ == "__main__":
-    print("🤖 API 다이렉트 크롤링 모드 스캔 시작...")
+    print("🤖 V10 API 다이렉트 크롤링 스캔 시작...")
     try:
         df = pd.read_csv(CSV_URL, header=None)
         for index, row in df.iterrows():
@@ -72,8 +80,9 @@ if __name__ == "__main__":
                 if div is not None:
                     send_to_google_sheet(etf_name, code, rec_date, pay_date, div, tax)
                 else:
-                    print(f"⚠️ [{etf_name}] 배당금 내역이 존재하지 않아 패스합니다.")
+                    print(f"⚠️ [{etf_name}] 배당 내역이 없거나 봇 방어막에 막혔습니다.")
                 
-                time.sleep(1.5) # API는 가벼워서 1.5초 휴식으로 단축!
+                # 네이버의 IP 연속 호출 차단을 막기 위해 2초 딜레이
+                time.sleep(2) 
     except Exception as e:
         print(f"시스템 에러: {e}")
