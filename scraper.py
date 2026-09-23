@@ -4,22 +4,25 @@ import time
 from bs4 import BeautifulSoup
 import pandas as pd
 from io import StringIO
+import urllib3
+
+# 💡 깃허브의 엄격한 SSL 인증서 검사 경고를 무시하고 뚫고 들어가기 위한 설정
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
-# 🎯 1. 마스터 세팅 (CSV 및 웹훅 주소)
+# 🎯 1. 마스터 세팅 (새로 발급받은 탭 지정 CSV 주소로 꼭 바꿔주세요!)
 # ==========================================
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=712569303&single=true&output=csv"
 WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwL3r2XjiAPLG9smZC43C6NREYFUdslS8_itfL6KcqNguVKXIsVs-838c9Npyw82LJZ/exec"
 
 def format_date(d_str):
-    """ '20260915' 같은 숫자를 '2026-09-15'로 예쁘게 바꿔주는 변환기 """
     d_str = str(d_str).strip().replace(".", "-")
     if len(d_str) == 8 and d_str.isdigit():
         return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
     return d_str
 
 # ==========================================
-# 📡 2. 운용사별 5대 크롤링 엔진 (라이브러리 충돌 완전 제거)
+# 📡 2. 운용사별 5대 크롤링 엔진 (verify=False 장착)
 # ==========================================
 
 def engine_tiger(code):
@@ -27,7 +30,7 @@ def engine_tiger(code):
     payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
     result = []
     try:
-        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=10)
+        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=10, verify=False)
         for item in res.json().get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
@@ -40,19 +43,17 @@ def engine_tiger(code):
     return result
 
 def engine_kiwoom(code):
-    """ [KIWOOM] 뷰티풀숩(BS4)을 활용한 안전한 HTML 추출 """
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
         tables = soup.find_all('table')
-        
         for table in tables:
             headers = [th.text.replace(' ', '') for th in table.find_all('th')]
             if '주당분배금' in headers:
                 rows = table.find_all('tr')
-                for row in rows[1:]: # 헤더 제외
+                for row in rows[1:]:
                     cols = [td.text.strip() for td in row.find_all('td')]
                     if len(cols) >= 5:
                         result.append({
@@ -68,7 +69,7 @@ def engine_kiwoom(code):
 def engine_kodex(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
         for item in res.json().get('dividList', []):
             result.append({
                 "recordDate": format_date(item.get('basicD')),
@@ -82,7 +83,7 @@ def engine_kodex(url):
 def engine_rise(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
         for item in res.json().get('history', []):
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
@@ -96,7 +97,7 @@ def engine_rise(url):
 def engine_ace(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
         for item in res.json().get('dividendList', []):
             result.append({
                 "recordDate": format_date(item.get('std_DT')),
@@ -108,12 +109,11 @@ def engine_ace(url):
     return result
 
 # ==========================================
-# 🚀 3. 메인 라우터 (시트 순회 및 전송)
+# 🚀 3. 메인 라우터
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V16 최종 마스터 라우터 봇 출동!\n")
+    print("🤖 V16.1 깃허브 전용 마스터 라우터 봇 출동!\n")
     
-    # 구글 마스터 시트(CSV) 읽기
     df_master = pd.read_csv(CSV_URL, header=None)
     
     for index, row in df_master.iterrows():
@@ -126,7 +126,6 @@ if __name__ == "__main__":
         print(f"🔍 [스캔 중] {etf_name} ({code})")
         extracted_data = []
         
-        # 💡 지능형 라우팅
         if "TIGER" in etf_name.upper():
             extracted_data = engine_tiger(code)
         elif "KIWOOM" in etf_name.upper():
@@ -141,10 +140,8 @@ if __name__ == "__main__":
             print(f"  ⚠️ 엔진 매칭 실패 또는 URL 누락. 건너뜁니다.")
             continue
             
-        # 데이터가 존재하면 구글 시트로 발송
         if extracted_data:
-            extracted_data.reverse() # 과거 순부터 시트 위에 차곡차곡 쌓기 위함
-            
+            extracted_data.reverse()
             for data in extracted_data:
                 payload = {
                     "etfName": etf_name, "code": code,
@@ -153,7 +150,6 @@ if __name__ == "__main__":
                 }
                 try:
                     res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
-                    
                     try:
                         res_json = res.json()
                         if res_json.get("status") == "duplicate":
@@ -162,10 +158,9 @@ if __name__ == "__main__":
                             print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
                     except:
                         print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
-                        
                 except Exception as e:
                     print(f"  ❌ 전송 실패: {e}")
-                time.sleep(1) # 구글 GAS 서버 보호를 위한 1초 대기
+                time.sleep(1)
         else:
             print("  ⚠️ 배당 데이터가 없습니다.")
             
