@@ -5,105 +5,143 @@ import time
 from io import StringIO
 
 # ==========================================
-# 🎯 1. 마스터 시트 및 웹훅 주소 세팅
+# 🎯 1. 마스터 세팅 (CSV 및 웹훅 주소)
 # ==========================================
-# (동진님의 실제 마스터 시트 CSV 주소를 넣어주세요)
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=712569303&single=true&output=csv"
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbykj7ueHVVagEItBiS49H6ByqRVWeeNHaDqWR5qsGKNgzFs_qqQx2QEY1rPnT5dVIW9/exec"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwL3r2XjiAPLG9smZC43C6NREYFUdslS8_itfL6KcqNguVKXIsVs-838c9Npyw82LJZ/exec"
+
+def format_date(d_str):
+    """ '20260915' 같은 숫자를 '2026-09-15'로 예쁘게 바꿔주는 변환기 """
+    d_str = str(d_str).strip().replace(".", "-")
+    if len(d_str) == 8 and d_str.isdigit():
+        return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
+    return d_str
 
 # ==========================================
-# 📡 2. [엔진 A] TIGER 전용 API 크롤러
+# 📡 2. 운용사별 5대 크롤링 엔진
 # ==========================================
-def get_tiger_data(code):
+
+def engine_tiger(code):
+    """ [TIGER] 미래에셋 API (종목코드 기반) """
     url = "https://investments.miraeasset.com/tigeretf/ko/distribution/overall/list.do"
-    headers = {'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest'}
-    payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15} # 최근 15개 배당 내역
-    
+    payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
     result = []
     try:
-        res = requests.post(url, headers=headers, data=payload, timeout=10)
-        dividend_list = res.json().get('resultList', [])
-        
-        for item in dividend_list:
-            div = item.get('dividendAmt', 0)
-            tax = item.get('taxStandardAmt', 0)
-            if div > 0:
+        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=10)
+        for item in res.json().get('resultList', []):
+            if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
-                    "recordDate": str(item.get('recordDate')).replace(".", "-"),
-                    "payDate": str(item.get('paymentDate', item.get('recordDate'))).replace(".", "-"),
-                    "dividend": int(div),
-                    "taxBase": int(tax)
+                    "recordDate": format_date(item.get('recordDate')),
+                    "payDate": format_date(item.get('paymentDate')),
+                    "dividend": int(item.get('dividendAmt')),
+                    "taxBase": int(item.get('taxStandardAmt', 0))
                 })
-    except Exception as e:
-        print(f"[{code}] TIGER 추출 에러: {e}")
-    
-    return result # 과거순으로 넣기 위해 역순 반환 준비
+    except Exception as e: print(f" TIGER 에러: {e}")
+    return result
 
-# ==========================================
-# 📡 3. [엔진 B] RISE / KODEX 범용 HTML 크롤러
-# ==========================================
-def get_html_data(url):
+def engine_kiwoom(code):
+    """ [KIWOOM] 키움 HTML 추출 (종목코드 기반) """
+    url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         tables = pd.read_html(StringIO(res.text))
-        
-        target_df = None
         for df in tables:
-            df.columns = df.columns.str.replace(' ', '') # 공백 정제 방어막
-            if '분배금액(원)' in df.columns:
-                target_df = df
-                break
-                
-        if target_df is not None:
-            for index, row in target_df.iterrows():
-                div = row['분배금액(원)']
-                tax = row.get('주당과세표준액(원)', div) # KODEX는 과표가 없을 수 있으므로 기본값 세팅
-                
-                if pd.notna(div) and pd.notna(tax):
+            df.columns = df.columns.str.replace(' ', '')
+            if '주당분배금' in df.columns:
+                for _, row in df.iterrows():
                     result.append({
-                        "recordDate": str(row['지급기준일']).strip(),
-                        "payDate": str(row.get('실지급일', row['지급기준일'])).strip(),
-                        "dividend": int(div),
-                        "taxBase": int(tax)
+                        "recordDate": format_date(row['분배금지급기준일']),
+                        "payDate": format_date(row.get('분배금지급일', row['분배금지급기준일'])),
+                        "dividend": int(row['주당분배금']),
+                        "taxBase": int(row.get('주당과세표준액', 0))
                     })
-    except Exception as e:
-        print(f"[HTML 추출 에러] {url}: {e}")
-        
+                break
+    except Exception as e: print(f" KIWOOM 에러: {e}")
+    return result
+
+def engine_kodex(url):
+    """ [KODEX] 삼성 API (URL 기반) """
+    result = []
+    try:
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        for item in res.json().get('dividList', []):
+            result.append({
+                "recordDate": format_date(item.get('basicD')),
+                "payDate": format_date(item.get('payD')),
+                "dividend": int(item.get('dividA', 0)),
+                "taxBase": int(item.get('taxDividA', 0))
+            })
+    except Exception as e: print(f" KODEX 에러: {e}")
+    return result
+
+def engine_rise(url):
+    """ [RISE] KB API (URL 기반) """
+    result = []
+    try:
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        for item in res.json().get('history', []):
+            result.append({
+                "recordDate": str(item.get('base_date')).strip(),
+                "payDate": str(item.get('payment_date')).strip(),
+                "dividend": int(float(item.get('amount', 0))),
+                "taxBase": int(float(item.get('tax_standard_amount', 0)))
+            })
+    except Exception as e: print(f" RISE 에러: {e}")
+    return result
+
+def engine_ace(url):
+    """ [ACE] 한국투자 API (URL 기반) """
+    result = []
+    try:
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        for item in res.json().get('dividendList', []):
+            result.append({
+                "recordDate": format_date(item.get('std_DT')),
+                "payDate": format_date(item.get('dividend_DT')),
+                "dividend": int(item.get('dividend_PRI', 0)),
+                "taxBase": int(item.get('tax_PRI', 0))
+            })
+    except Exception as e: print(f" ACE 에러: {e}")
     return result
 
 # ==========================================
-# 🚀 4. 메인 루프 (마스터 시트 순회 및 발송)
+# 🚀 3. 메인 라우터 (시트 순회 및 전송)
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V15 실전 다중 라우터 봇 출동!")
+    print("🤖 V15 최종 마스터 라우터 봇 출동!\n")
     
-    # 마스터 시트 읽기 (A열: 이름, B열: 코드, C열: 상세URL)
+    # 구글 마스터 시트(CSV) 읽기
     df_master = pd.read_csv(CSV_URL, header=None)
     
     for index, row in df_master.iterrows():
         etf_name = str(row[0]).strip()
         code = str(row[1]).strip().zfill(6)
-        # C열에 URL이 적혀있다고 가정 (없으면 무시)
-        etf_url = str(row[2]).strip() if len(row) > 2 else "" 
+        etf_url = str(row[2]).strip() if len(row) > 2 else ""
         
         if etf_name in ["종목명", "이름", "nan"]: continue
         
-        print(f"\n🔍 [타겟 온] {etf_name} ({code}) 스캔 중...")
-        
-        # [공유기 라우팅] TIGER냐 아니냐에 따라 길을 찾아갑니다.
+        print(f"🔍 [스캔 중] {etf_name} ({code})")
         extracted_data = []
+        
+        # 💡 지능형 라우팅 (브랜드 이름이나 URL 구조를 보고 알맞은 엔진을 스스로 선택)
         if "TIGER" in etf_name.upper():
-            extracted_data = get_tiger_data(code)
-        elif etf_url.startswith("http"):
-            extracted_data = get_html_data(etf_url)
+            extracted_data = engine_tiger(code)
+        elif "KIWOOM" in etf_name.upper():
+            extracted_data = engine_kiwoom(code)
+        elif "samsungfund" in etf_url:
+            extracted_data = engine_kodex(etf_url)
+        elif "kbam" in etf_url:
+            extracted_data = engine_rise(etf_url)
+        elif "aceetf" in etf_url:
+            extracted_data = engine_ace(etf_url)
         else:
-            print(f"⚠️ [{etf_name}] TIGER가 아니며 URL도 없습니다. 스킵합니다.")
+            print(f"  ⚠️ 엔진 매칭 실패 또는 URL 누락. 건너뜁니다.")
             continue
             
+        # 데이터가 존재하면 구글 시트로 발송
         if extracted_data:
-            # 💡 오래된 과거 데이터부터 시트 위에 쌓기 위해 순서를 뒤집습니다.
-            extracted_data.reverse() 
+            extracted_data.reverse() # 과거 순부터 시트 위에 차곡차곡 쌓기 위함
             
             for data in extracted_data:
                 payload = {
@@ -111,15 +149,23 @@ if __name__ == "__main__":
                     "recordDate": data["recordDate"], "payDate": data["payDate"],
                     "dividend": data["dividend"], "taxBase": data["taxBase"]
                 }
-                
                 try:
                     res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
-                    print(f" ✅ 발송 성공: {data['recordDate']} ({data['dividend']}원)")
+                    
+                    # GAS에서 보내준 상태 메시지(중복여부 등) 확인
+                    try:
+                        res_json = res.json()
+                        if res_json.get("status") == "duplicate":
+                            print(f"  ⏭️ 통과 (중복): {data['recordDate']} 데이터는 이미 시트에 있습니다.")
+                        else:
+                            print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                    except:
+                        print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                        
                 except Exception as e:
-                    print(f" ❌ 발송 실패: {e}")
-                
-                time.sleep(1) # 구글 서버 숨고르기
+                    print(f"  ❌ 전송 실패: {e}")
+                time.sleep(1) # 구글 GAS 서버 보호를 위한 1초 대기
         else:
-            print(f" ⚠️ [{etf_name}] 추출된 배당 데이터가 없습니다.")
+            print("  ⚠️ 배당 데이터가 없습니다.")
             
-    print("\n🎉 모든 마스터 시트 종목 크롤링 및 구글 시트 기입 완료!")
+    print("\n🎉 모든 종목 크롤링 및 시트 자동 업데이트가 완료되었습니다!")
