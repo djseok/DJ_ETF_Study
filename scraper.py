@@ -1,7 +1,8 @@
 import requests
-import pandas as pd
 import json
 import time
+from bs4 import BeautifulSoup
+import pandas as pd
 from io import StringIO
 
 # ==========================================
@@ -18,11 +19,10 @@ def format_date(d_str):
     return d_str
 
 # ==========================================
-# 📡 2. 운용사별 5대 크롤링 엔진
+# 📡 2. 운용사별 5대 크롤링 엔진 (라이브러리 충돌 완전 제거)
 # ==========================================
 
 def engine_tiger(code):
-    """ [TIGER] 미래에셋 API (종목코드 기반) """
     url = "https://investments.miraeasset.com/tigeretf/ko/distribution/overall/list.do"
     payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
     result = []
@@ -40,28 +40,32 @@ def engine_tiger(code):
     return result
 
 def engine_kiwoom(code):
-    """ [KIWOOM] 키움 HTML 추출 (종목코드 기반) """
+    """ [KIWOOM] 뷰티풀숩(BS4)을 활용한 안전한 HTML 추출 """
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        tables = pd.read_html(StringIO(res.text))
-        for df in tables:
-            df.columns = df.columns.str.replace(' ', '')
-            if '주당분배금' in df.columns:
-                for _, row in df.iterrows():
-                    result.append({
-                        "recordDate": format_date(row['분배금지급기준일']),
-                        "payDate": format_date(row.get('분배금지급일', row['분배금지급기준일'])),
-                        "dividend": int(row['주당분배금']),
-                        "taxBase": int(row.get('주당과세표준액', 0))
-                    })
+        soup = BeautifulSoup(res.text, 'html.parser')
+        tables = soup.find_all('table')
+        
+        for table in tables:
+            headers = [th.text.replace(' ', '') for th in table.find_all('th')]
+            if '주당분배금' in headers:
+                rows = table.find_all('tr')
+                for row in rows[1:]: # 헤더 제외
+                    cols = [td.text.strip() for td in row.find_all('td')]
+                    if len(cols) >= 5:
+                        result.append({
+                            "recordDate": format_date(cols[0]),
+                            "payDate": format_date(cols[1]),
+                            "dividend": int(cols[2].replace(',', '')),
+                            "taxBase": int(cols[4].replace('원', '').replace(',', ''))
+                        })
                 break
     except Exception as e: print(f" KIWOOM 에러: {e}")
     return result
 
 def engine_kodex(url):
-    """ [KODEX] 삼성 API (URL 기반) """
     result = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
@@ -76,7 +80,6 @@ def engine_kodex(url):
     return result
 
 def engine_rise(url):
-    """ [RISE] KB API (URL 기반) """
     result = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
@@ -91,7 +94,6 @@ def engine_rise(url):
     return result
 
 def engine_ace(url):
-    """ [ACE] 한국투자 API (URL 기반) """
     result = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
@@ -109,7 +111,7 @@ def engine_ace(url):
 # 🚀 3. 메인 라우터 (시트 순회 및 전송)
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V15 최종 마스터 라우터 봇 출동!\n")
+    print("🤖 V16 최종 마스터 라우터 봇 출동!\n")
     
     # 구글 마스터 시트(CSV) 읽기
     df_master = pd.read_csv(CSV_URL, header=None)
@@ -124,7 +126,7 @@ if __name__ == "__main__":
         print(f"🔍 [스캔 중] {etf_name} ({code})")
         extracted_data = []
         
-        # 💡 지능형 라우팅 (브랜드 이름이나 URL 구조를 보고 알맞은 엔진을 스스로 선택)
+        # 💡 지능형 라우팅
         if "TIGER" in etf_name.upper():
             extracted_data = engine_tiger(code)
         elif "KIWOOM" in etf_name.upper():
@@ -152,7 +154,6 @@ if __name__ == "__main__":
                 try:
                     res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
                     
-                    # GAS에서 보내준 상태 메시지(중복여부 등) 확인
                     try:
                         res_json = res.json()
                         if res_json.get("status") == "duplicate":
