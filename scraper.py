@@ -21,15 +21,22 @@ def format_date(d_str):
     return d_str
 
 # ==========================================
-# 📡 2. 운용사별 6대 크롤링 엔진 (Timeout 20초로 연장)
+# 📡 2. 운용사별 6대 크롤링 엔진
 # ==========================================
 
 def engine_tiger(code):
+    """ [TIGER] 강력한 위장 신분증(Headers) 장착 """
     url = "https://investments.miraeasset.com/tigeretf/ko/distribution/overall/list.do"
     payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': f'https://www.tigeretf.com/ko/product/search/detail/index.do?ksCode={code}',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json, text/javascript, */*; q=0.01'
+    }
     result = []
     try:
-        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=20, verify=False)
+        res = requests.post(url, headers=headers, data=payload, timeout=10, verify=False)
         for item in res.json().get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
@@ -45,7 +52,7 @@ def engine_kiwoom(code):
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
         tables = soup.find_all('table')
         for table in tables:
@@ -68,7 +75,7 @@ def engine_kiwoom(code):
 def engine_kodex(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
         for item in res.json().get('dividList', []):
             result.append({
                 "recordDate": format_date(item.get('basicD')),
@@ -82,7 +89,7 @@ def engine_kodex(url):
 def engine_rise(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
         for item in res.json().get('history', []):
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
@@ -96,7 +103,7 @@ def engine_rise(url):
 def engine_ace(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
         for item in res.json().get('dividendList', []):
             result.append({
                 "recordDate": format_date(item.get('std_DT')),
@@ -110,7 +117,7 @@ def engine_ace(url):
 def engine_sol(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
         for item in res.json().get('items', []):
             result.append({
                 "recordDate": format_date(item.get('WORK_DT')),
@@ -122,10 +129,10 @@ def engine_sol(url):
     return result
 
 # ==========================================
-# 🚀 3. 메인 라우터
+# 🚀 3. 메인 라우터 (재시도 로직 탑재)
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V17.1 타임아웃 20초 연장 마스터 봇 출동!\n")
+    print("🤖 V18.2 TIGER 우회 및 타임아웃 방어막 봇 출동!\n")
     
     df_master = pd.read_csv(CSV_URL, header=None)
     
@@ -163,20 +170,33 @@ if __name__ == "__main__":
                     "recordDate": data["recordDate"], "payDate": data["payDate"],
                     "dividend": data["dividend"], "taxBase": data["taxBase"]
                 }
-                try:
-                    # 구글 시트(GAS) 응답 대기 시간도 20초로 연장
-                    res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=20)
-                    try:
-                        res_json = res.json()
-                        if res_json.get("status") == "duplicate":
-                            print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
-                        else:
-                            print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
-                    except:
-                        print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
-                except Exception as e:
-                    print(f"  ❌ 웹훅 전송 실패: {e}")
                 
+                # 💡 구글 시트 지연 대비 3번 재시도 (Retry) 로직
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        # 대기 시간을 40초로 대폭 늘림
+                        res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=40)
+                        try:
+                            res_json = res.json()
+                            if res_json.get("status") == "duplicate":
+                                print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
+                            else:
+                                print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                        except:
+                            print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                        break # 성공하면 재시도 루프 탈출
+                        
+                    except requests.exceptions.ReadTimeout:
+                        if attempt < max_retries - 1:
+                            print(f"  ⏳ 구글 시트 지연, 재시도 중... ({attempt+1}/{max_retries})")
+                            time.sleep(2)
+                        else:
+                            print(f"  ❌ 웹훅 전송 실패 (최종 타임아웃): {data['recordDate']}")
+                    except Exception as e:
+                        print(f"  ❌ 웹훅 통신 에러: {e}")
+                        break
+                        
                 time.sleep(0.5)
         else:
             print("  ⚠️ 배당 데이터가 없습니다.")
