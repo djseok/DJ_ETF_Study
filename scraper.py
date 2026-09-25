@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 🎯 1. 마스터 세팅
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv"
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxon7lc3AXTJHCgs0LC7_5ANJwQ-aEmJmcmwREXNvtQmw2jy5gvNaumVL0mlpWHJKyG/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbygi1raNqs478YEVPX745hZ5mn5-GaguzIa77VLaz5Mw8Y4DQg6sR9Clo5UaNjt-UOh/exec"
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
