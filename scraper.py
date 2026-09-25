@@ -6,14 +6,14 @@ import pandas as pd
 from io import StringIO
 import urllib3
 
-# 💡 깃허브의 엄격한 SSL 인증서 검사 경고를 무시하고 뚫고 들어가기 위한 설정
+# 깃허브 보안망 강제 돌파 (SSL 경고 무시)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
-# 🎯 1. 마스터 세팅 (새로 발급받은 탭 지정 CSV 주소로 꼭 바꿔주세요!)
+# 🎯 1. 마스터 세팅
 # ==========================================
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=712569303&single=true&output=csv"
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwL3r2XjiAPLG9smZC43C6NREYFUdslS8_itfL6KcqNguVKXIsVs-838c9Npyw82LJZ/exec"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxon7lc3AXTJHCgs0LC7_5ANJwQ-aEmJmcmwREXNvtQmw2jy5gvNaumVL0mlpWHJKyG/exec"
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
@@ -22,7 +22,7 @@ def format_date(d_str):
     return d_str
 
 # ==========================================
-# 📡 2. 운용사별 5대 크롤링 엔진 (verify=False 장착)
+# 📡 2. 운용사별 6대 크롤링 엔진 (5초 타임아웃 방어막 유지)
 # ==========================================
 
 def engine_tiger(code):
@@ -30,7 +30,7 @@ def engine_tiger(code):
     payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
     result = []
     try:
-        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=10, verify=False)
+        res = requests.post(url, headers={'User-Agent': 'Mozilla/5.0'}, data=payload, timeout=5, verify=False)
         for item in res.json().get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
@@ -39,14 +39,14 @@ def engine_tiger(code):
                     "dividend": int(item.get('dividendAmt')),
                     "taxBase": int(item.get('taxStandardAmt', 0))
                 })
-    except Exception as e: print(f" TIGER 에러: {e}")
+    except Exception as e: print(f"  [TIGER 에러]: {e}")
     return result
 
 def engine_kiwoom(code):
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
         tables = soup.find_all('table')
         for table in tables:
@@ -63,13 +63,13 @@ def engine_kiwoom(code):
                             "taxBase": int(cols[4].replace('원', '').replace(',', ''))
                         })
                 break
-    except Exception as e: print(f" KIWOOM 에러: {e}")
+    except Exception as e: print(f"  [KIWOOM 에러]: {e}")
     return result
 
 def engine_kodex(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, verify=False)
         for item in res.json().get('dividList', []):
             result.append({
                 "recordDate": format_date(item.get('basicD')),
@@ -77,13 +77,13 @@ def engine_kodex(url):
                 "dividend": int(item.get('dividA', 0)),
                 "taxBase": int(item.get('taxDividA', 0))
             })
-    except Exception as e: print(f" KODEX 에러: {e}")
+    except Exception as e: print(f"  [KODEX 에러]: {e}")
     return result
 
 def engine_rise(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, verify=False)
         for item in res.json().get('history', []):
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
@@ -91,13 +91,13 @@ def engine_rise(url):
                 "dividend": int(float(item.get('amount', 0))),
                 "taxBase": int(float(item.get('tax_standard_amount', 0)))
             })
-    except Exception as e: print(f" RISE 에러: {e}")
+    except Exception as e: print(f"  [RISE 에러]: {e}")
     return result
 
 def engine_ace(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, verify=False)
         for item in res.json().get('dividendList', []):
             result.append({
                 "recordDate": format_date(item.get('std_DT')),
@@ -105,14 +105,29 @@ def engine_ace(url):
                 "dividend": int(item.get('dividend_PRI', 0)),
                 "taxBase": int(item.get('tax_PRI', 0))
             })
-    except Exception as e: print(f" ACE 에러: {e}")
+    except Exception as e: print(f"  [ACE 에러]: {e}")
+    return result
+
+# 💡 [NEW] SOL(신한) 전용 API 추출 엔진 추가
+def engine_sol(url):
+    result = []
+    try:
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, verify=False)
+        for item in res.json().get('items', []):
+            result.append({
+                "recordDate": format_date(item.get('WORK_DT')),
+                "payDate": format_date(item.get('DIVIDEND_DT')),
+                "dividend": int(item.get('DIVIDEND_PRI', 0)),
+                "taxBase": int(item.get('WEEK_PRI', 0)) # 주당과표로 WEEK_PRI 활용
+            })
+    except Exception as e: print(f"  [SOL 에러]: {e}")
     return result
 
 # ==========================================
 # 🚀 3. 메인 라우터
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V16.1 깃허브 전용 마스터 라우터 봇 출동!\n")
+    print("🤖 V17 식스팩(6-Engine) 장착 마스터 봇 출동!\n")
     
     df_master = pd.read_csv(CSV_URL, header=None)
     
@@ -123,9 +138,10 @@ if __name__ == "__main__":
         
         if etf_name in ["종목명", "이름", "nan"]: continue
         
-        print(f"🔍 [스캔 중] {etf_name} ({code})")
+        print(f"\n🔍 [스캔 중] {etf_name} ({code})")
         extracted_data = []
         
+        # 💡 지능형 라우팅 (SOL 추가)
         if "TIGER" in etf_name.upper():
             extracted_data = engine_tiger(code)
         elif "KIWOOM" in etf_name.upper():
@@ -136,6 +152,8 @@ if __name__ == "__main__":
             extracted_data = engine_rise(etf_url)
         elif "aceetf" in etf_url:
             extracted_data = engine_ace(etf_url)
+        elif "soletf" in etf_url: # SOL 인식 라우터
+            extracted_data = engine_sol(etf_url)
         else:
             print(f"  ⚠️ 엔진 매칭 실패 또는 URL 누락. 건너뜁니다.")
             continue
@@ -149,19 +167,19 @@ if __name__ == "__main__":
                     "dividend": data["dividend"], "taxBase": data["taxBase"]
                 }
                 try:
-                    res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=10)
+                    res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=5)
                     try:
                         res_json = res.json()
                         if res_json.get("status") == "duplicate":
-                            print(f"  ⏭️ 통과 (중복): {data['recordDate']} 데이터는 이미 시트에 있습니다.")
+                            print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
                         else:
                             print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
                     except:
                         print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
                 except Exception as e:
-                    print(f"  ❌ 전송 실패: {e}")
-                time.sleep(1)
+                    print(f"  ❌ 웹훅 전송 실패: {e}")
+                time.sleep(0.5)
         else:
             print("  ⚠️ 배당 데이터가 없습니다.")
             
-    print("\n🎉 모든 종목 크롤링 및 시트 자동 업데이트가 완료되었습니다!")
+    print("\n🎉 모든 종목 크롤링 및 시트 자동 업데이트 완료!")
