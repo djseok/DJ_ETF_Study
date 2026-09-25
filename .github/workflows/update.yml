@@ -1,33 +1,25 @@
-name: Update ETF PDF Data
+name: Auto Dividend Scraper
 
 on:
   schedule:
-    # 한국 시간 밤 12시 (UTC 기준 오후 3시) 매일 실행
+    # 한국 시간 밤 12시 (UTC 기준 오후 3시) 매일 실행 (월~금)
     - cron: '0 15 * * 1-5' 
-  workflow_dispatch: # 수동 실행 버튼 추가
+  workflow_dispatch: # 수동 실행 버튼 활성화
 
 jobs:
-  build:
+  run-scraper:
     runs-on: ubuntu-latest
     steps:
-      - name: 저장소 체크아웃
+      - name: 📥 저장소 코드 불러오기
         uses: actions/checkout@v3
 
-      - name: 파이썬 환경 세팅
+      - name: ⚙️ 파이썬 환경 세팅
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 퀀트 라이브러리 설치
-        run: pip install pykrx pandas
+      - name: 📦 V17.1 크롤링 필수 라이브러리 설치
+        run: pip install requests pandas lxml html5lib beautifulsoup4 urllib3
 
-      - name: 파이썬 크롤링 로봇 실행
+      - name: 🚀 배당금 마스터 봇 출동!
         run: python scraper.py
-
-      - name: 결과물(CSV) 깃허브에 자동 저장
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add etf_pdf_data.csv
-          git commit -m "✅ 자동 업데이트: ETF 구성종목 최신화" || echo "변경사항 없음"
-          git push
