@@ -25,26 +25,34 @@ def format_date(d_str):
 # ==========================================
 
 def engine_tiger(code):
-    """ [TIGER] 강력한 위장 신분증(Headers) 장착 """
-    url = "https://investments.miraeasset.com/tigeretf/ko/distribution/overall/list.do"
+    """ [TIGER] 최신 도메인 적용 및 봇 차단 우회 강력 패치 """
+    url = "https://www.tigeretf.com/ko/distribution/overall/list.do"
     payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Referer': f'https://www.tigeretf.com/ko/product/search/detail/index.do?ksCode={code}',
+        'Origin': 'https://www.tigeretf.com',
         'X-Requested-With': 'XMLHttpRequest',
         'Accept': 'application/json, text/javascript, */*; q=0.01'
     }
     result = []
     try:
-        res = requests.post(url, headers=headers, data=payload, timeout=10, verify=False)
-        for item in res.json().get('resultList', []):
-            if int(item.get('dividendAmt', 0)) > 0:
-                result.append({
-                    "recordDate": format_date(item.get('recordDate')),
-                    "payDate": format_date(item.get('paymentDate')),
-                    "dividend": int(item.get('dividendAmt')),
-                    "taxBase": int(item.get('taxStandardAmt', 0))
-                })
+        res = requests.post(url, headers=headers, data=payload, timeout=15, verify=False)
+        # 정상 응답(200)일 때만 JSON 변환을 시도하여 에러 원천 차단
+        if res.status_code == 200:
+            try:
+                for item in res.json().get('resultList', []):
+                    if int(item.get('dividendAmt', 0)) > 0:
+                        result.append({
+                            "recordDate": format_date(item.get('recordDate')),
+                            "payDate": format_date(item.get('paymentDate')),
+                            "dividend": int(item.get('dividendAmt')),
+                            "taxBase": int(item.get('taxStandardAmt', 0))
+                        })
+            except:
+                print("  [TIGER 해독 실패]: 서버가 데이터 대신 보안 페이지를 반환했습니다.")
+        else:
+            print(f"  [TIGER 접속 차단]: 미래에셋 서버 상태 코드 {res.status_code}")
     except Exception as e: print(f"  [TIGER 에러]: {e}")
     return result
 
@@ -52,7 +60,7 @@ def engine_kiwoom(code):
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
         soup = BeautifulSoup(res.text, 'html.parser')
         tables = soup.find_all('table')
         for table in tables:
@@ -75,7 +83,7 @@ def engine_kiwoom(code):
 def engine_kodex(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
         for item in res.json().get('dividList', []):
             result.append({
                 "recordDate": format_date(item.get('basicD')),
@@ -89,7 +97,7 @@ def engine_kodex(url):
 def engine_rise(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
         for item in res.json().get('history', []):
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
@@ -103,7 +111,7 @@ def engine_rise(url):
 def engine_ace(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
         for item in res.json().get('dividendList', []):
             result.append({
                 "recordDate": format_date(item.get('std_DT')),
@@ -117,7 +125,7 @@ def engine_ace(url):
 def engine_sol(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15, verify=False)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
         for item in res.json().get('items', []):
             result.append({
                 "recordDate": format_date(item.get('WORK_DT')),
@@ -129,10 +137,10 @@ def engine_sol(url):
     return result
 
 # ==========================================
-# 🚀 3. 메인 라우터 (재시도 로직 탑재)
+# 🚀 3. 메인 라우터 (재시도 로직 유지)
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V18.2 TIGER 우회 및 타임아웃 방어막 봇 출동!\n")
+    print("🤖 V18.3 TIGER 우회 및 타임아웃 방어막 봇 출동!\n")
     
     df_master = pd.read_csv(CSV_URL, header=None)
     
@@ -171,11 +179,9 @@ if __name__ == "__main__":
                     "dividend": data["dividend"], "taxBase": data["taxBase"]
                 }
                 
-                # 💡 구글 시트 지연 대비 3번 재시도 (Retry) 로직
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        # 대기 시간을 40초로 대폭 늘림
                         res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=40)
                         try:
                             res_json = res.json()
@@ -185,8 +191,7 @@ if __name__ == "__main__":
                                 print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
                         except:
                             print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
-                        break # 성공하면 재시도 루프 탈출
-                        
+                        break 
                     except requests.exceptions.ReadTimeout:
                         if attempt < max_retries - 1:
                             print(f"  ⏳ 구글 시트 지연, 재시도 중... ({attempt+1}/{max_retries})")
