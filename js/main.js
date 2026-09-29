@@ -30,7 +30,7 @@ function switchTab(tabName) {
     const allButtons = [
         'btnTabPort', 'btnTabQuant', 'btnTabCalc', 'btnTabDiv', 
         'btnTabSingle', 'btnTabMdd', 'btnTabRsi', 'btnTabMa', 
-        'btnTabBacktestDiv', 'btnTabOneDollar'
+        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt'
     ];
     allButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
@@ -60,6 +60,7 @@ function switchTab(tabName) {
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
     if(tabName === 'backtestDiv' && typeof fetchBacktestMasterData === 'function') fetchBacktestMasterData();
+    if(tabName === 'portBt' && typeof initPortfolioBacktestView === 'function') initPortfolioBacktestView();
 }
 
 function parseCsvToMatrix(text) {

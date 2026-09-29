@@ -110,6 +110,9 @@
                     <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-yellow-50 text-slate-700 hover:text-yellow-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-rocket text-yellow-500 w-5"></i> $1 프로젝트
                     </button>
+                    <button id="btnTabPortBt" onclick="switchTab('portBt')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded-xl font-bold transition-all border border-transparent">
+                        <i class="fas fa-history text-sky-500 w-5"></i> 포트폴리오 백테스트
+                    </button>
                 </div>
             </div>
         </div>
@@ -315,28 +318,6 @@
                 </div>
             </div>
 
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-md text-white border border-slate-700 mt-6">
-                <h4 class="font-black text-lg mb-4 text-emerald-400"><i class="fas fa-history mr-2"></i>타임머신 백테스팅 시뮬레이터</h4>
-                <div class="flex flex-col md:flex-row gap-4 mb-4">
-                    <div class="w-full md:w-1/2">
-                        <label class="block text-xs font-bold text-slate-400 mb-1">초기 자본금 (₩)</label>
-                        <input type="number" id="btCash" value="10000000" class="w-full p-3 bg-slate-700 border border-slate-600 rounded-xl text-white font-mono">
-                    </div>
-                    <div class="w-full md:w-1/2">
-                        <label class="block text-xs font-bold text-slate-400 mb-1">테스트 종목</label>
-                        <select id="btAsset" class="w-full p-3 bg-slate-700 border border-slate-600 rounded-xl text-white font-bold">
-                            <option value="KODEX 미국반도체">KODEX 미국반도체</option>
-                            <option value="TIGER 미국배당다우존스">TIGER 미국배당다우존스</option>
-                            <option value="RISE 미국나스닥100">RISE 미국나스닥100</option>
-                            <option value="TIME 글로벌AI인공지능액티브">TIME 글로벌AI인공지능액티브</option>
-                        </select>
-                    </div>
-                </div>
-                <button onclick="if(typeof runBacktest === 'function') runBacktest(); else alert('백테스트 모듈 로딩 중입니다.');" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-900 rounded-xl font-black transition-all">
-                    시뮬레이션 가동
-                </button>
-                <div id="btResult" class="mt-4"></div>
-            </div>
             
             <div class="bg-blue-50 p-6 rounded-2xl shadow-sm border border-blue-200 mt-6">
                 <h4 class="font-black text-lg text-blue-900 mb-4"><i class="fas fa-pen-fancy text-blue-600 mr-2"></i>포트폴리오 실시간 업데이트 (매수/매도)</h4>
@@ -1082,6 +1063,108 @@
             </div>
             
         </div>
+        <!-- 11. 포트폴리오 백테스트 -->
+        <div id="viewPortBt" class="view-section hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                <div>
+                    <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-history text-sky-500 mr-2"></i> 포트폴리오 백테스트</h2>
+                    <p class="text-xs font-semibold text-slate-400 mt-1">"이 조합으로 과거에 투자했다면?" — 실제 과거 가격으로 거치식·적립식 결과를 계산해요.</p>
+                </div>
+
+                <!-- 1) 종목 구성 -->
+                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div class="flex flex-wrap items-end gap-2 mb-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">👥 멤버 포트폴리오 불러오기</label>
+                            <select id="pbt-member" class="px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold text-slate-700 text-sm min-w-[120px]"></select>
+                        </div>
+                        <button onclick="pbtLoadMember()" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-bold text-sm"><i class="fas fa-download mr-1"></i>불러오기</button>
+                        <span class="text-[11px] text-slate-400 font-semibold pb-2">현재 평가금액 비중으로 채워요</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-slate-500 font-black">
+                                <tr><th class="text-left py-2 pr-2">종목 (이름 검색)</th><th class="text-left py-2 pr-2 w-36">종목코드</th><th class="text-right py-2 pr-2 w-24">비중 %</th><th class="w-8"></th></tr>
+                            </thead>
+                            <tbody id="pbt-rows"></tbody>
+                        </table>
+                    </div>
+                    <datalist id="pbt-name-list"></datalist>
+                    <div class="flex items-center justify-between mt-3">
+                        <button onclick="pbtAddRow()" class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg font-bold text-xs text-slate-600"><i class="fas fa-plus mr-1"></i>종목 추가</button>
+                        <div class="text-xs font-bold text-slate-500">비중 합계 <span id="pbt-weight-sum" class="mono font-black">0%</span></div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 font-semibold mt-2">종목코드: 한국 ETF는 6자리(예: 390390), 미국 주식은 티커(예: NVDA). 미국 종목은 원달러 환율을 적용해 원화로 계산해요.</p>
+                </div>
+
+                <!-- 2) 조건 -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">📅 기간</label>
+                        <select id="pbt-period" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold text-sm">
+                            <option value="1">최근 1년</option><option value="3" selected>최근 3년</option><option value="5">최근 5년</option><option value="10">최근 10년</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">💸 투자 방식</label>
+                        <select id="pbt-mode" onchange="pbtToggleInputs()" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold text-sm">
+                            <option value="lump">거치식 (한 번에)</option><option value="dca" selected>적립식 (매월)</option><option value="both">거치 + 적립</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">⚖️ 리밸런싱</label>
+                        <select id="pbt-rebal" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold text-sm">
+                            <option value="none">안 함</option><option value="yearly">매년 1월</option>
+                        </select>
+                    </div>
+                    <div id="pbt-initial-wrap">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">초기 투자금 (원)</label>
+                        <input id="pbt-initial" type="number" value="10000000" step="100000" class="w-full px-3 py-2 rounded-lg border border-slate-300 font-bold mono text-sm">
+                    </div>
+                    <div id="pbt-monthly-wrap">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">매월 적립금 (원)</label>
+                        <input id="pbt-monthly" type="number" value="500000" step="10000" class="w-full px-3 py-2 rounded-lg border border-slate-300 font-bold mono text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">📏 비교 대상</label>
+                        <select id="pbt-bench" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold text-sm">
+                            <option value="360750.KS">TIGER 미국S&amp;P500</option>
+                            <option value="133690.KS">TIGER 미국나스닥100</option>
+                            <option value="069500.KS">KODEX 200 (코스피)</option>
+                            <option value="">비교 안 함</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="pbt-run" onclick="pbtRun()" class="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black transition-all"><i class="fas fa-play mr-2"></i>백테스트 실행</button>
+                <div id="pbt-status" class="text-xs font-bold text-slate-500"></div>
+            </div>
+
+            <!-- 결과 -->
+            <div id="pbt-result" class="hidden space-y-6">
+                <div id="pbt-cards" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h4 class="font-black text-lg text-slate-800 mb-1"><i class="fas fa-chart-area text-sky-500 mr-2"></i>평가금액 추이</h4>
+                    <p id="pbt-chart-note" class="text-[11px] text-slate-400 font-semibold mb-3"></p>
+                    <div class="h-72 relative"><canvas id="pbt-value-chart"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h4 class="font-black text-lg text-slate-800 mb-3"><i class="fas fa-water text-blue-500 mr-2"></i>고점 대비 하락폭 (낙폭)</h4>
+                    <div class="h-48 relative"><canvas id="pbt-dd-chart"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <h4 class="font-black text-lg text-slate-800 mb-3"><i class="fas fa-list text-slate-500 mr-2"></i>종목별 결과</h4>
+                    <table class="w-full text-sm whitespace-nowrap">
+                        <thead class="text-xs text-slate-500 font-black border-b border-slate-200">
+                            <tr><th class="text-left py-2">종목</th><th class="text-right py-2">목표 비중</th><th class="text-right py-2">종목 자체 수익률</th><th class="text-right py-2">최종 평가금액</th><th class="text-right py-2">배당 반영</th></tr>
+                        </thead>
+                        <tbody id="pbt-asset-table" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="pbt-notes" class="text-[11px] text-slate-400 font-semibold leading-relaxed"></div>
+            </div>
+        </div>
+
         <!-- 뷰 영역 끝 -->
     </div>
 
@@ -1092,11 +1175,11 @@
     <script src="js/calc.js"></script>
     <script src="js/dividend.js"></script>
     <script src="js/mdd.js"></script>
-    <script src="js/backtest.js"></script>
     <script src="js/rsi.js"></script>
     <script src="js/one_dollar_project.js"></script>
     <script src="js/backtest_div.js"></script>
     <script src="js/ma.js"></script>
     <script src="js/single_stock_analysis.js"></script>
+    <script src="js/portfolio_backtest.js"></script>
 </body>
 </html>
