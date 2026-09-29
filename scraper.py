@@ -12,7 +12,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 🎯 1. 마스터 세팅
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv&gid=712569303"
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwL3r2XjiAPLG9smZC43C6NREYFUdslS8_itfL6KcqNguVKXIsVs-838c9Npyw82LJZ/exec"
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyQ65wQvTJZorqLUme5kND8qNzfcV8FPjhYcFxafQLba7PbVSdsYOX6R8drkBbKtiQ/exec"
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
@@ -25,35 +25,21 @@ def format_date(d_str):
 # ==========================================
 
 def engine_tiger(code):
-    """ [TIGER] 최신 도메인 적용 및 봇 차단 우회 강력 패치 """
-    url = "https://www.tigeretf.com/ko/distribution/overall/list.do"
-    payload = {'ksCode': code, 'pageIndex': 1, 'pageSize': 15}
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Referer': f'https://www.tigeretf.com/ko/product/search/detail/index.do?ksCode={code}',
-        'Origin': 'https://www.tigeretf.com',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Accept': 'application/json, text/javascript, */*; q=0.01'
-    }
+    """ [TIGER] 해외 IP 차단 방어: 구글 GAS 서버를 스파이로 활용하는 우회 통로 """
+    url = f"{WEBHOOK_URL}?action=tiger&code={code}"
     result = []
     try:
-        res = requests.post(url, headers=headers, data=payload, timeout=15, verify=False)
-        # 정상 응답(200)일 때만 JSON 변환을 시도하여 에러 원천 차단
-        if res.status_code == 200:
-            try:
-                for item in res.json().get('resultList', []):
-                    if int(item.get('dividendAmt', 0)) > 0:
-                        result.append({
-                            "recordDate": format_date(item.get('recordDate')),
-                            "payDate": format_date(item.get('paymentDate')),
-                            "dividend": int(item.get('dividendAmt')),
-                            "taxBase": int(item.get('taxStandardAmt', 0))
-                        })
-            except:
-                print("  [TIGER 해독 실패]: 서버가 데이터 대신 보안 페이지를 반환했습니다.")
-        else:
-            print(f"  [TIGER 접속 차단]: 미래에셋 서버 상태 코드 {res.status_code}")
-    except Exception as e: print(f"  [TIGER 에러]: {e}")
+        # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
+        res = requests.get(url, timeout=20, verify=False)
+        for item in res.json().get('resultList', []):
+            if int(item.get('dividendAmt', 0)) > 0:
+                result.append({
+                    "recordDate": format_date(item.get('recordDate')),
+                    "payDate": format_date(item.get('paymentDate')),
+                    "dividend": int(item.get('dividendAmt')),
+                    "taxBase": int(item.get('taxStandardAmt', 0))
+                })
+    except Exception as e: print(f"  [TIGER 프록시 에러]: {e}")
     return result
 
 def engine_kiwoom(code):
@@ -137,10 +123,10 @@ def engine_sol(url):
     return result
 
 # ==========================================
-# 🚀 3. 메인 라우터 (재시도 로직 유지)
+# 🚀 3. 메인 라우터 
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V18.3 TIGER 우회 및 타임아웃 방어막 봇 출동!\n")
+    print("🤖 V18.4 TIGER 구글 스파이 우회 봇 출동!\n")
     
     df_master = pd.read_csv(CSV_URL, header=None)
     
@@ -204,6 +190,6 @@ if __name__ == "__main__":
                         
                 time.sleep(0.5)
         else:
-            print("  ⚠️ 배당 데이터가 없습니다.")
+            print("  ⚠️️ 배당 데이터가 없습니다.")
             
     print("\n🎉 모든 종목 크롤링 및 시트 자동 업데이트 완료!")
