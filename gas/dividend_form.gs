@@ -88,11 +88,15 @@ function refreshFormChoices() {
     if (last < 2) return;
     m.sheet.getRange(2, 2, last - 1, 1).getValues().forEach(function (r) {
       var s = String(r[0] || '').trim();
-      if (s) stocks[s] = true;
+      if (!s) return;
+      // 띄어쓰기만 다른 같은 종목은 하나로 (띄어쓰기 없는 이름을 우선)
+      var key = s.replace(/\s+/g, '').toUpperCase();
+      var spaces = function (x) { return x.split(' ').length; };
+      if (!stocks[key] || spaces(s) < spaces(stocks[key])) stocks[key] = s;
     });
   });
 
-  var stockList = Object.keys(stocks).sort();
+  var stockList = Object.keys(stocks).map(function (k) { return stocks[k]; }).sort();
   stockList.push('기타 (목록에 없음)');
 
   form.getItems(FormApp.ItemType.LIST).forEach(function (item) {
