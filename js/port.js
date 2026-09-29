@@ -81,9 +81,7 @@ async function loadPortfolioData(currentTab) {
         // 탭 상태에 따라 화면 그리기
         if(currentTab === 'port') renderPortfolioView(rankArray);
         if(currentTab === 'calc' && typeof window.renderCalculatorView === 'function') window.renderCalculatorView();
-        if(currentTab === 'conc' && typeof window.initConcentrationView === 'function') window.initConcentrationView();
         if(currentTab === 'div') {
-            if(typeof window.loadDividendHistoryData === 'function') await window.loadDividendHistoryData();
             if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
         }
         

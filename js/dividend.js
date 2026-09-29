@@ -396,4 +396,3 @@ function renderStackedDividendChart(datasetsByStock) {
     });
 }
 
-window.loadActualDividendData = renderActualDividendView;
