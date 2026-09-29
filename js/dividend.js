@@ -1,8 +1,12 @@
-// ===================================================== 
-// 📈 배당 실수령 및 예상 캘린더 엔진 (V23.0 원천 데이터 동기화 완료본) 
-// ===================================================== 
+// =====================================================
+// 📈 배당 실수령 및 예상 캘린더 엔진 (V24.0)
+// - 수령 기록은 port.js가 포트폴리오 CSV를 읽을 때 함께 파싱합니다 (중복 다운로드 없음)
+// - 멤버 이름은 정확히 일치할 때만 합산합니다 (J / JBF / TestJ 섞임 방지)
+// - 캘린더/차트는 올해 기준: 지난달까지 = 실수령, 이번 달 = 실수령 + 아직 안 받은 종목 예상, 이후 = 예상
+// =====================================================
 
 var myDivChart = null;
+var dividendRulesLoadPromise = null;
 
 var CHART_COLORS = [
     'rgba(54, 162, 235, 0.7)',
@@ -14,156 +18,76 @@ var CHART_COLORS = [
     'rgba(199, 199, 199, 0.7)'
 ];
 
-// CSV 텍스트 파싱 엔진
-function localParseCsvToMatrix(text) {
-    if (!text) return [];
-    var lines = text.split('\n');
-    var result = [];
-
-    for (var j = 0; j < lines.length; j++) {
-        var line = lines[j];
-        var rowResult = [];
-        var current = '';
-        var inQuotes = false;
-
-        for (var i = 0; i < line.length; i++) {
-            var char = line[i];
-            if (char === '"') {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                rowResult.push(current.trim().replace(/^"|"$/g, ''));
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-        rowResult.push(current.trim().replace(/^"|"$/g, ''));
-        
-        if (rowResult.length > 0 && rowResult.join('').trim() !== '') {
-            result.push(rowResult);
-        }
-    }
-    return result;
+// 종목명 비교용: 공백 제거 + 대문자 (예: "Rise 미국 나스닥 100" == "RISE 미국나스닥100")
+function normalizeStockName(name) {
+    return String(name || '').replace(/\s+/g, '').toUpperCase();
 }
 
 // "2026. 7. 2" 한국식 날짜 포맷 표준 객체 변환기
 function parseCustomDate(dateStr) {
     if (!dateStr) return { month: 1, jsDate: new Date(0) };
-    var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, ''); 
-    var parts = clean.split('.');
-    
+    var clean = dateStr.replace(/\s+/g, '').replace(/\.$/, '');
+    var parts = clean.split(/[.\-\/]/);
+
     if (parts.length >= 3) {
-        var y = parseInt(parts[0]) || 2026;
+        var y = parseInt(parts[0]) || new Date().getFullYear();
         var m = parseInt(parts[1]) || 1;
         var d = parseInt(parts[2]) || 1;
         return { month: m, jsDate: new Date(y, m - 1, d) };
     }
-    
+
     var fallback = new Date(dateStr);
     if (isNaN(fallback.getTime())) fallback = new Date(0);
     return { month: fallback.getMonth() + 1, jsDate: fallback };
 }
 
-// ETF 자체의 배당 규칙 정보 로드 (DIVIDEND_RULES_CSV_URL 사용)
-async function loadDynamicDividendRules() {
-    try {
-        if(typeof DIVIDEND_RULES_CSV_URL === 'undefined') return;
-        var res = await fetch(DIVIDEND_RULES_CSV_URL);
-        var textData = await res.text();
-        
-        var matrix = localParseCsvToMatrix(textData);
-        var rulesObj = {};
+// ETF 배당 규칙(지급월, 1주당 예상배당금) 로드 — 한 번만 받아서 재사용
+function loadDynamicDividendRules() {
+    if (!dividendRulesLoadPromise) {
+        dividendRulesLoadPromise = (async function () {
+            var res = await fetch(DIVIDEND_RULES_CSV_URL);
+            var matrix = parseCsvToMatrix(await res.text());
+            var rulesObj = {};
 
-        for(var i = 1; i < matrix.length; i++) {
-            var row = matrix[i];
-            if(!row || row.length < 3) continue; 
-            var rawStockName = String(row[0] || "").trim();
-            var rawMonths = String(row[1] || "").trim();
-            var rawAmount = String(row[2] || "").replace(/[^0-9.]/g, '');
+            for (var i = 1; i < matrix.length; i++) {
+                var row = matrix[i];
+                if (!row || row.length < 3) continue;
+                var rawStockName = String(row[0] || "").trim();
+                if (!rawStockName) continue;
 
-            if (!rawStockName) continue; 
-            
-            var payMonthsArray = rawMonths.split(',').map(function(m) {
-                return parseInt(m.trim());
-            }).filter(function(m) {
-                return !isNaN(m);
-            });
+                var payMonthsArray = String(row[1] || "").split(',')
+                    .map(function (m) { return parseInt(m.trim()); })
+                    .filter(function (m) { return !isNaN(m) && m >= 1 && m <= 12; });
 
-            var expectedAmount = parseFloat(rawAmount) || 0;
-            var cleanKey = rawStockName.replace(/\s+/g, '');
-            rulesObj[cleanKey] = { payMonths: payMonthsArray, expectedAmount: expectedAmount };
-        }
-        
-        globalDividendRulesMatrix = rulesObj;
-        console.log("📊 동적 배당 사전 장착 완료:", globalDividendRulesMatrix);
-    } catch (e) {
-        console.error("동적 배당 룰북 로드 실패:", e);
+                rulesObj[normalizeStockName(rawStockName)] = {
+                    name: rawStockName,
+                    payMonths: payMonthsArray,
+                    expectedAmount: parseFloat(String(row[2] || "").replace(/[^0-9.]/g, '')) || 0
+                };
+            }
+            globalDividendRulesMatrix = rulesObj;
+        })().catch(function (e) {
+            dividendRulesLoadPromise = null; // 실패하면 다음 번에 다시 시도
+            console.error("동적 배당 룰북 로드 실패:", e);
+        });
     }
+    return dividendRulesLoadPromise;
 }
 
-// 🔥 [초강력 핵심 수술] 동진님의 힌트를 바탕으로 수기 장부가 들어있는 PORTFOLIO_CSV_URL을 다이렉트로 정조준합니다!
-async function loadDividendLogs() {
-    try {
-        if(typeof PORTFOLIO_CSV_URL === 'undefined') {
-            console.warn("⚠️ PORTFOLIO_CSV_URL이 설정되지 않아 개인 배당 내역을 불러올 수 없습니다.");
-            globalActualDividendLogs = [];
-            return;
-        }
-
-        // 통합 포트폴리오 시트(수기 장부 포함) 로드
-        var res = await fetch(PORTFOLIO_CSV_URL + "&t=" + new Date().getTime());
-        var text = await res.text();
-        var matrix = localParseCsvToMatrix(text);
-        
-        globalActualDividendLogs = [];
-        
-        for(var i = 1; i < matrix.length; i++) {
-            var row = matrix[i];
-            
-            // 🚨 H열(인덱스 7)에 개인 수기 장부 이름(D, S, J)이 없으면 배당 로그가 없는 행이므로 패스!
-            if(!row || row.length <= 7 || !row[7]) continue; 
-
-            var userName = String(row[7]).trim();
-            // 데이터 헤더 텍스트 필터링
-            if(!userName || userName === "이름" || userName === "구분" || userName === "유저") continue;
-
-            // I열(8) 날짜, J열(9) 종목, L열(11) 실수령액 정밀 추출
-            var dateStr = row[8] ? String(row[8]).trim() : "";
-            var stockName = row[9] ? String(row[9]).trim() : "";
-            var rawAmount = row[11] ? String(row[11]).replace(/[^0-9.-]/g, '') : "0";
-            var amountVal = parseFloat(rawAmount) || 0;
-
-            var dateInfo = parseCustomDate(dateStr);
-
-            globalActualDividendLogs.push({
-                userName: userName,
-                date: dateStr,
-                parsedMonth: dateInfo.month,
-                jsDate: dateInfo.jsDate,
-                stockName: stockName,
-                amount: amountVal
-            });
-        }
-        console.log("✅ 배당 로그 데이터 로드 완료:", globalActualDividendLogs);
-    } catch(e) {
-        console.error("배당 로그 로드 실패:", e);
-    }
+// 보유 종목에 맞는 배당 규칙 찾기: 공백·대소문자만 무시하고 이름이 정확히 같을 때만 연결
+// (비슷한 이름 연결은 'RISE 미국S&P500' ↔ 'RISE 미국S&P500 데일리 고정 커버드콜' 같은 오연결을 만들어서 쓰지 않음)
+function findDividendRule(stockName) {
+    return globalDividendRulesMatrix[normalizeStockName(stockName)] || null;
 }
 
 async function renderActualDividendView() {
     try {
-        const ruleLoader = typeof loadDynamicDividendRules === 'function' 
-            ? loadDynamicDividendRules() 
-            : Promise.resolve();
-
         await Promise.all([
-            ruleLoader,
-            loadDividendLogs()
+            loadDynamicDividendRules(),
+            (typeof loadPortfolioData === 'function') ? loadPortfolioData('div') : Promise.resolve()
         ]);
-        
         initDividendUserSelector();
         calculateAndDrawDividends();
-        
     } catch (error) {
         console.error("차트 렌더링 중 오류 발생:", error);
     }
@@ -171,16 +95,12 @@ async function renderActualDividendView() {
 
 function initDividendUserSelector() {
     var selector = document.getElementById('divUserSelector');
-    if(!selector) return;
+    if (!selector) return;
 
-    var names = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers) ? Object.keys(globalParsedUsers) : [];
+    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
 
-    if(selector.options.length !== names.length && names.length > 0) {
-        var htmlStr = '';
-        for(var i = 0; i < names.length; i++){
-            htmlStr += '<option value="' + names[i] + '">' + names[i] + '</option>';
-        }
-        selector.innerHTML = htmlStr;
+    if (selector.options.length !== names.length && names.length > 0) {
+        selector.innerHTML = names.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
         selector.removeEventListener('change', calculateAndDrawDividends);
         selector.addEventListener('change', calculateAndDrawDividends);
     }
@@ -188,200 +108,193 @@ function initDividendUserSelector() {
 
 function calculateAndDrawDividends() {
     var selector = document.getElementById('divUserSelector');
-    if(!selector) return;
-    
-    var names = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers) ? Object.keys(globalParsedUsers) : [];
+    if (!selector) return;
+
+    var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
     var targetUser = selector.value || (names.length > 0 ? names[0] : "");
-    if(!targetUser) return; 
-    
-    var totalReceived = 0;
+    if (!targetUser) return;
+
+    var now = new Date();
+    var currentYear = now.getFullYear();
+    var currentMonth = now.getMonth() + 1;
+    var targetKey = targetUser.trim().toUpperCase();
+
+    // 이 멤버의 수령 기록만 (이름 정확히 일치)
+    var myLogs = (globalActualDividendLogs || []).filter(function (log) {
+        return String(log.userName || '').trim().toUpperCase() === targetKey;
+    }).sort(function (a, b) { return b.jsDate.getTime() - a.jsDate.getTime(); });
+
+    var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
+    var holdings = (userObj && userObj.items) ? userObj.items.filter(function (it) { return it.qty > 0; }) : [];
+
+    // 기록에 적힌 종목명을 보유 종목명으로 맞춰서 차트 범례가 흩어지지 않게 함
+    var holdingNameByKey = {};
+    holdings.forEach(function (it) { holdingNameByKey[normalizeStockName(it.stock)] = it.stock; });
+    function displayName(stock) { return holdingNameByKey[normalizeStockName(stock)] || stock; }
+
+    var totalReceivedAllTime = 0;          // 누적 실수령 (전체 기간)
+    var actualByMonth = new Array(12).fill(0);    // 올해 실수령
+    var expectedByMonth = new Array(12).fill(0);  // 올해 남은 예상
+    var actualByStock = {}, expectedByStock = {};
+    var receivedThisMonthKeys = {};        // 이번 달에 이미 받은 종목
     var actualLogsHtml = "";
-    var chartDatasetsByStock = {};
-    var totalMonthlyCalendar = new Array(12).fill(0);
-    var currentMonth = new Date().getMonth() + 1;
 
-    if(typeof globalActualDividendLogs !== 'undefined' && globalActualDividendLogs.length > 0) {
-        var sortedActualLogs = globalActualDividendLogs.slice().sort(function(a, b){
-            return b.jsDate.getTime() - a.jsDate.getTime();
+    myLogs.forEach(function (log) {
+        totalReceivedAllTime += log.amount;
+        var qtyText = log.qty ? ' <span class="text-xs text-slate-400 font-normal">(' + log.qty.toLocaleString() + '주)</span>' : '';
+        actualLogsHtml += '<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">'
+            + '<td class="py-3 px-4 text-slate-500 font-mono text-sm">' + log.date + '</td>'
+            + '<td class="py-3 px-4 text-slate-800 font-bold">' + log.stockName + qtyText + '</td>'
+            + '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + Math.round(log.amount).toLocaleString() + '</td>'
+            + '</tr>';
+
+        var y = log.jsDate.getFullYear(), m = log.parsedMonth;
+        if (y !== currentYear || m < 1 || m > 12) return; // 캘린더·차트는 올해 기록만
+        var name = displayName(log.stockName);
+        actualByMonth[m - 1] += log.amount;
+        if (!actualByStock[name]) actualByStock[name] = new Array(12).fill(0);
+        actualByStock[name][m - 1] += log.amount;
+        if (m === currentMonth) receivedThisMonthKeys[normalizeStockName(name)] = true;
+    });
+
+    // 예상 배당: 이번 달(아직 안 받은 종목) + 남은 달
+    var missingRules = [];
+    holdings.forEach(function (item) {
+        var rule = findDividendRule(item.stock);
+        if (!rule) { missingRules.push(item.stock); return; }
+        if (!rule.payMonths.length || rule.expectedAmount <= 0) return;
+        var perPayment = rule.expectedAmount * item.qty;
+
+        rule.payMonths.forEach(function (month) {
+            if (month < currentMonth) return;
+            if (month === currentMonth && receivedThisMonthKeys[normalizeStockName(item.stock)]) return;
+            expectedByMonth[month - 1] += perPayment;
+            if (!expectedByStock[item.stock]) expectedByStock[item.stock] = new Array(12).fill(0);
+            expectedByStock[item.stock][month - 1] += perPayment;
         });
+    });
 
-        for(var j=0; j<sortedActualLogs.length; j++){
-            var log = sortedActualLogs[j];
+    var yearActual = actualByMonth.reduce(function (a, b) { return a + b; }, 0);
+    var yearExpected = expectedByMonth.reduce(function (a, b) { return a + b; }, 0);
 
-            var logUser = log.userName.toLowerCase();
-            var searchUser = targetUser.toLowerCase();
-
-            if (logUser.includes(searchUser) || searchUser.includes(logUser)) {
-                totalReceived += log.amount;
-                
-                actualLogsHtml += '<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">';
-                actualLogsHtml += '<td class="py-3 px-4 text-slate-500 font-mono text-sm">' + log.date + '</td>';
-                actualLogsHtml += '<td class="py-3 px-4 text-slate-800 font-bold">' + log.stockName + '</td>';
-                actualLogsHtml += '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + Math.round(log.amount).toLocaleString() + '</td>';
-                actualLogsHtml += '</tr>';
-
-                var mIndex = log.parsedMonth - 1;
-                if (mIndex >= 0 && mIndex < 12) {
-                    totalMonthlyCalendar[mIndex] += log.amount;
-                    
-                    if (!chartDatasetsByStock[log.stockName]) {
-                        chartDatasetsByStock[log.stockName] = new Array(12).fill(0);
-                    }
-                    chartDatasetsByStock[log.stockName][mIndex] += log.amount;
-                }
-            }
-        }
-    }
-
-    var userObj = (typeof globalParsedUsers !== 'undefined' && globalParsedUsers) ? globalParsedUsers[targetUser] : null;
-    var totalAnnualExpected = 0;
-
-    if (userObj && userObj.items) {
-        for(var k=0; k<userObj.items.length; k++){
-            var item = userObj.items[k];
-            if (item.qty <= 0) continue; 
-            
-            var cleanedItemStock = item.stock.replace(/\s+/g, '');
-            var activeRule = null;
-
-            if (typeof globalDividendRulesMatrix !== 'undefined') {
-                for (var ruleKey in globalDividendRulesMatrix) {
-                    if (cleanedItemStock.includes(ruleKey) || ruleKey.includes(cleanedItemStock)) {
-                        activeRule = globalDividendRulesMatrix[ruleKey];
-                        break;
-                    }
-                }
-            }
-
-            if (activeRule && activeRule.payMonths && activeRule.payMonths.length > 0) {
-                var expectedSinglePayment = activeRule.expectedAmount * item.qty;
-                
-                for (var m = 0; m < activeRule.payMonths.length; m++) {
-                    var ruleMonth = activeRule.payMonths[m];
-                    var isFutureMonth = ruleMonth > currentMonth;
-                    var calIndex = ruleMonth - 1;
-
-                    if (isFutureMonth) {
-                        totalMonthlyCalendar[calIndex] += expectedSinglePayment;
-                        totalAnnualExpected += expectedSinglePayment;
-
-                        if (!chartDatasetsByStock[item.stock]) {
-                            chartDatasetsByStock[item.stock] = new Array(12).fill(0);
-                        }
-                        chartDatasetsByStock[item.stock][calIndex] += expectedSinglePayment;
-                    }
-                }
-            }
-        }
-    }
-
-    var nameLabel = document.getElementById("actual-received-name-label");
-    if(nameLabel) nameLabel.innerText = "[" + targetUser + "]님의 배당금 현황";
-    
-    var divAmount = document.getElementById("actual-received-dividend");
-    if(divAmount) divAmount.innerText = "₩" + Math.round(totalReceived).toLocaleString();
-
-    var annualPure = document.getElementById("annual-dividend-pure");
-    if(annualPure) {
-        var totalYearly = totalReceived + totalAnnualExpected;
-        annualPure.innerText = "₩" + Math.round(totalYearly).toLocaleString();
-    }
+    setText("actual-received-name-label", "[" + targetUser + "]님의 배당금 현황");
+    setText("actual-received-dividend", "₩" + Math.round(totalReceivedAllTime).toLocaleString());
+    setText("actual-table-title-name", targetUser + " · " + myLogs.length + "건");
+    setText("annual-dividend-pure", "₩" + Math.round(yearActual + yearExpected).toLocaleString());
 
     var tableBody = document.getElementById("actual-dividend-table-body");
-    if(tableBody) {
-        if(actualLogsHtml === "") {
-            tableBody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-slate-400">배당금 수령 내역이 없습니다.</td></tr>';
-        } else {
-            tableBody.innerHTML = actualLogsHtml;
-        }
+    if (tableBody) {
+        var skipped = (typeof portfolioSkippedDividendRows !== 'undefined') ? portfolioSkippedDividendRows : [];
+        var warnHtml = skipped.length > 0
+            ? '<tr><td colspan="3" class="py-3 px-4 text-xs font-bold text-orange-600 bg-orange-50">⚠️ 시트에 이름(H열)이 비어 있는 배당 기록 ' + skipped.length + '건은 누구 것인지 몰라 제외했어요 (시트 ' + skipped.map(function (s) { return s.sheetRow + '행'; }).join(', ') + ')</td></tr>'
+            : '';
+        tableBody.innerHTML = warnHtml + (actualLogsHtml || '<tr><td colspan="3" class="py-6 text-center text-slate-400">배당금 수령 내역이 없습니다.</td></tr>');
     }
 
+    // 월별 캘린더 (올해)
     var calendarHtml = "";
-    var averageMonthly = (totalReceived + totalAnnualExpected) / 12; 
-    
+    var averageMonthly = (yearActual + yearExpected) / 12;
     for (var x = 0; x < 12; x++) {
-        var amount = totalMonthlyCalendar[x];
-        var monthStr = (x + 1) + "월";
-        var isHighMonth = amount > averageMonthly * 1.5;
-        var isFuture = (x + 1) > currentMonth;
-        
-        var bgClass = "bg-slate-50 border-slate-100 opacity-60";
-        var textClass = "text-slate-400";
-        var extraIcon = "";
+        var actual = actualByMonth[x], expected = expectedByMonth[x], total = actual + expected;
+        var isHighMonth = total > averageMonthly * 1.5;
 
-        if (amount > 0) {
-            if (isFuture) {
-                bgClass = "bg-orange-50 border-orange-200 border-dashed";
-                textClass = "text-orange-600 opacity-80";
-                extraIcon = '<span class="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-bold">예상</span>';
-            } else {
-                bgClass = isHighMonth ? "bg-emerald-50 border-emerald-300 shadow-sm" : "bg-white border-slate-200";
-                textClass = "text-emerald-700";
-                if(isHighMonth) extraIcon = '<span class="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-600 font-bold">🔥</span>';
-            }
+        var bgClass = "bg-slate-50 border-slate-100 opacity-60", textClass = "text-slate-400", badge = "", sub = "";
+        if (actual > 0) {
+            bgClass = isHighMonth ? "bg-emerald-50 border-emerald-300 shadow-sm" : "bg-white border-slate-200";
+            textClass = "text-emerald-700";
+            if (isHighMonth) badge = '<span class="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-600 font-bold">🔥</span>';
+            if (expected > 0) sub = '<div class="text-[10px] font-bold text-orange-500 font-mono mt-0.5">+ 예상 ₩' + Math.round(expected).toLocaleString() + '</div>';
+        } else if (expected > 0) {
+            bgClass = "bg-orange-50 border-orange-200 border-dashed";
+            textClass = "text-orange-600 opacity-80";
+            badge = '<span class="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-bold">예상</span>';
         }
-        
-        calendarHtml += '<div class="flex flex-col p-3 rounded-xl border ' + bgClass + ' transition-all">';
-        calendarHtml += '<div class="text-xs font-bold text-slate-500 mb-1 flex items-center">' + monthStr + ' ' + extraIcon + '</div>';
-        calendarHtml += '<div class="' + textClass + ' font-black font-mono text-sm tracking-tight">' + (amount > 0 ? '₩' + Math.round(amount).toLocaleString() : '-') + '</div>';
-        calendarHtml += '</div>';
-    }
-    
-    var calendarDiv = document.getElementById("dividend-calendar");
-    if(calendarDiv) calendarDiv.innerHTML = calendarHtml;
+        var shown = actual > 0 ? actual : expected;
+        if (x + 1 === currentMonth) bgClass += " ring-2 ring-emerald-400";
 
-    renderStackedDividendChart(chartDatasetsByStock);
+        calendarHtml += '<div class="flex flex-col p-3 rounded-xl border ' + bgClass + ' transition-all">'
+            + '<div class="text-xs font-bold text-slate-500 mb-1 flex items-center">' + (x + 1) + '월 ' + badge + '</div>'
+            + '<div class="' + textClass + ' font-black font-mono text-sm tracking-tight">' + (shown > 0 ? '₩' + Math.round(shown).toLocaleString() : '-') + '</div>'
+            + sub + '</div>';
+    }
+    var calendarDiv = document.getElementById("dividend-calendar");
+    if (calendarDiv) calendarDiv.innerHTML = calendarHtml;
+
+    // 배당주기 시트에 규칙이 없는 보유 종목 안내 (예상 배당에서 빠짐)
+    var note = document.getElementById("dividend-missing-rules");
+    if (!note && calendarDiv) {
+        note = document.createElement('div');
+        note.id = "dividend-missing-rules";
+        calendarDiv.parentNode.insertBefore(note, calendarDiv.nextSibling);
+    }
+    if (note) {
+        note.className = missingRules.length ? "mb-6 -mt-3 text-xs font-bold text-orange-600" : "hidden";
+        note.innerText = missingRules.length
+            ? "ℹ️ 'ETF 배당주기' 시트에 없어서 예상 배당에서 빠진 종목: " + missingRules.join(', ')
+            : "";
+    }
+
+    renderStackedDividendChart(actualByStock, expectedByStock);
 }
 
-function renderStackedDividendChart(datasetsByStock) {
+function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.innerText = text;
+}
+
+function renderStackedDividendChart(actualByStock, expectedByStock) {
     var ctx = document.getElementById('dividendChart');
-    if(!ctx) return;
+    if (!ctx) return;
 
     var labels = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
-    var finalDatasets = [];
-    var colorIndex = 0;
-    
-    for (var stockName in datasetsByStock) {
-        var monthlyArray = datasetsByStock[stockName];
-        var hasData = false;
-        
-        for(var i=0; i<monthlyArray.length; i++){
-            if(monthlyArray[i] > 0) hasData = true;
-        }
-        
-        if (hasData) {
-            var chartColor = CHART_COLORS[colorIndex % CHART_COLORS.length];
-            finalDatasets.push({
-                label: stockName,
-                data: monthlyArray,
-                backgroundColor: chartColor,
-                borderColor: chartColor.replace('0.7', '1'),
-                borderWidth: 1,
-                borderRadius: 4
-            });
-            colorIndex++;
-        }
-    }
+    var hasData = function (arr) { return arr.some(function (v) { return v > 0; }); };
 
-    if(myDivChart) {
-        myDivChart.destroy();
-    }
+    // 종목마다 같은 색: 실수령은 진하게, 예상은 연하게(점선 테두리)
+    var colorOf = {}, colorIndex = 0;
+    Object.keys(actualByStock).concat(Object.keys(expectedByStock)).forEach(function (name) {
+        if (!(name in colorOf)) colorOf[name] = CHART_COLORS[colorIndex++ % CHART_COLORS.length];
+    });
+
+    var datasets = [];
+    Object.keys(actualByStock).forEach(function (name) {
+        if (!hasData(actualByStock[name])) return;
+        datasets.push({
+            label: name, data: actualByStock[name], stack: 'div',
+            backgroundColor: colorOf[name], borderColor: colorOf[name].replace('0.7', '1'),
+            borderWidth: 1, borderRadius: 4
+        });
+    });
+    Object.keys(expectedByStock).forEach(function (name) {
+        if (!hasData(expectedByStock[name])) return;
+        datasets.push({
+            label: name + ' (예상)', data: expectedByStock[name], stack: 'div', isExpected: true,
+            backgroundColor: colorOf[name].replace('0.7', '0.25'), borderColor: colorOf[name].replace('0.7', '1'),
+            borderWidth: 1, borderDash: [4, 3], borderRadius: 4
+        });
+    });
+
+    if (myDivChart) myDivChart.destroy();
 
     myDivChart = new Chart(ctx, {
         type: 'bar',
-        data: {
-            labels: labels,
-            datasets: finalDatasets
-        },
+        data: { labels: labels, datasets: datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { family: "'Pretendard', sans-serif", weight: 'bold' } } },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12, padding: 15, font: { family: "'Pretendard', sans-serif", weight: 'bold' },
+                        // 범례에는 종목명만 한 번씩 (예상 항목은 같은 색이라 생략)
+                        filter: function (item, data) { return !data.datasets[item.datasetIndex].isExpected; }
+                    }
+                },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    callbacks: { label: function(context) { return context.dataset.label + ': ₩' + Math.round(context.raw).toLocaleString(); } }
+                    filter: function (item) { return item.raw > 0; },
+                    callbacks: { label: function (context) { return context.dataset.label + ': ₩' + Math.round(context.raw).toLocaleString(); } }
                 }
             },
             scales: {
@@ -389,10 +302,9 @@ function renderStackedDividendChart(datasetsByStock) {
                 y: {
                     stacked: true,
                     beginAtZero: true,
-                    ticks: { callback: function(value) { return '₩' + value.toLocaleString(); } }
+                    ticks: { callback: function (value) { return '₩' + value.toLocaleString(); } }
                 }
             }
         }
     });
 }
-

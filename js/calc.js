@@ -188,6 +188,6 @@ function runStressTest() {
     if (balanceEl) balanceEl.innerText = `₩${Math.round(stressedTotal).toLocaleString()}`;
     if (lossEl) {
         lossEl.innerText = `${totalLoss >= 0 ? '+' : ''}₩${Math.round(totalLoss).toLocaleString()}`;
-        lossEl.className = `text-xl font-black mono px-3 py-1 rounded-lg ${totalLoss >= 0 ? 'text-blue-500 bg-blue-100/50' : 'text-red-500 bg-red-100/50'}`;
+        lossEl.className = `text-xl font-black mono px-3 py-1 rounded-lg ${totalLoss >= 0 ? 'text-red-500 bg-red-100/50' : 'text-blue-500 bg-blue-100/50'}`;
     }
 }
