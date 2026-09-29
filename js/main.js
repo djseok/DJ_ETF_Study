@@ -53,7 +53,10 @@ function switchTab(tabName) {
 
     // 4. 탭 이동 시 각 화면의 초기화(로딩) 함수 실행
     if(tabName === 'port' && typeof loadPortfolioData === 'function') loadPortfolioData('port');
-    if(tabName === 'calc' && typeof renderCalculatorView === 'function') renderCalculatorView();
+    if(tabName === 'calc' && typeof renderCalculatorView === 'function') {
+        // 포트폴리오 데이터가 아직 로딩 중이면 끝난 뒤에 계산기를 그립니다
+        Promise.resolve(typeof loadPortfolioData === 'function' ? loadPortfolioData('calc') : null).then(renderCalculatorView);
+    }
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
     if(tabName === 'backtestDiv' && typeof fetchBacktestMasterData === 'function') fetchBacktestMasterData();

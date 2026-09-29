@@ -30,7 +30,8 @@
         details > summary { list-style: none; }
         details > summary::-webkit-details-marker { display: none; }
         /* 선택된 탭 스타일 효과를 위한 클래스 */
-        .tab-active { @apply bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-500; }
+        /* @apply는 일반 <style>에서 동작하지 않아 CSS로 직접 작성 (Tailwind 유틸리티보다 우선하도록 !important) */
+        .tab-active { background-color: #eff6ff !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; box-shadow: 0 0 0 1px #3b82f6 !important; }
     </style>
 </head>
 <body class="text-slate-800 antialiased p-4 md:p-8 bg-slate-50">
@@ -309,7 +310,7 @@
                     </div>
                     <div class="text-right">
                         <div class="text-xs font-bold text-slate-400">예상 평가손익</div>
-                        <div id="stressResultLoss" class="text-xl font-black text-red-500 mono bg-red-100/50 px-3 py-1 rounded-lg">-₩0</div>
+                        <div id="stressResultLoss" class="text-xl font-black text-blue-500 mono bg-blue-100/50 px-3 py-1 rounded-lg">-₩0</div>
                     </div>
                 </div>
             </div>
@@ -400,17 +401,17 @@
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
-                    <h4 class="font-black text-lg text-slate-800 mb-4"><i class="fas fa-chart-bar text-emerald-500 mr-2"></i>월별 예상 배당금 흐름</h4>
+                    <h4 class="font-black text-lg text-slate-800 mb-4"><i class="fas fa-chart-bar text-emerald-500 mr-2"></i>올해 월별 배당 흐름 <span class="text-xs font-bold text-slate-400 ml-1">진한 색 = 실수령 · 연한 색 = 예상</span></h4>
                     <div class="h-64 relative">
                         <canvas id="dividendChart"></canvas>
                     </div>
                 </div>
 
-                <div class="mb-4 text-emerald-800 font-black"><i class="fas fa-money-bill-wave mr-2"></i>남은 하반기 캘린더 (월별 예상 수령액)</div>
+                <div class="mb-4 text-emerald-800 font-black"><i class="fas fa-money-bill-wave mr-2"></i>올해 배당 캘린더 (실수령 · 예상)</div>
                 <div id="dividend-calendar" class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6"></div>
 
                 <div class="bg-white rounded-xl p-5 border border-emerald-100 shadow-sm flex justify-between items-center">
-                    <div class="text-sm font-bold text-emerald-700"><i class="fas fa-chart-line mr-2"></i>향후 1년 예상 총 배당금 합계</div>
+                    <div class="text-sm font-bold text-emerald-700"><i class="fas fa-chart-line mr-2"></i>올해 총 배당금 (실수령 + 남은 예상)</div>
                     <div id="annual-dividend-pure" class="text-3xl font-black text-emerald-700 mono">₩0</div>
                 </div>
             </div>

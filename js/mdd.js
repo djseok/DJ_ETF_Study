@@ -46,9 +46,10 @@ async function runAdvancedMDD() {
         let prices = [];
         let fetchSuccess = false;
         
-        let isKorean = /^\d{6}$/.test(tickerInput) || tickerInput.endsWith('.KS');
+        // 6자리 한국 코드(005930, 0005A0 등) 또는 .KS/.KQ 접미사면 한국 종목
+        let isKorean = /^\d[0-9A-Z]{5}$/.test(tickerInput) || tickerInput.endsWith('.KS') || tickerInput.endsWith('.KQ');
         let queryTicker = tickerInput;
-        if (/^\d{6}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
+        if (/^\d[0-9A-Z]{5}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
 
         // 1. 미국 개별주 전용 다이렉트 통신 (FMP API)
         if (!isKorean) {
@@ -133,10 +134,12 @@ async function runAdvancedMDD() {
         }
 
         let currentDrawdown = ((currentPrice - athPrice) / athPrice) * 100;
+        // 한국 종목은 원화(소수점 없음), 해외 종목은 달러(소수점 2자리)로 표시
+        const fmtPrice = (v) => isKorean ? `₩${Math.round(v).toLocaleString()}` : `$${v.toFixed(2)}`;
 
-        document.getElementById('mdd-current-price').innerText = `$${currentPrice.toFixed(2)}`;
+        document.getElementById('mdd-current-price').innerText = fmtPrice(currentPrice);
         document.getElementById('mdd-current-date').innerText = currentDate;
-        document.getElementById('mdd-ath-price').innerText = `$${athPrice.toFixed(2)}`;
+        document.getElementById('mdd-ath-price').innerText = fmtPrice(athPrice);
         document.getElementById('mdd-ath-date').innerText = athDate;
 
         const ddDisplay = document.getElementById('mdd-current-drawdown');
@@ -167,10 +170,10 @@ async function runAdvancedMDD() {
         document.getElementById('stat-max-date').innerText = maxDrawdownDate;
         document.getElementById('stat-start-date').innerText = dates[0];
         document.getElementById('stat-total-days').innerText = `${prices.length.toLocaleString()}일`;
-        document.getElementById('price-drop-10').innerText = `$${(athPrice * 0.90).toFixed(2)}`;
-        document.getElementById('price-drop-20').innerText = `$${(athPrice * 0.80).toFixed(2)}`;
-        document.getElementById('price-drop-30').innerText = `$${(athPrice * 0.70).toFixed(2)}`;
-        document.getElementById('price-drop-40').innerText = `$${(athPrice * 0.60).toFixed(2)}`;
+        document.getElementById('price-drop-10').innerText = fmtPrice(athPrice * 0.90);
+        document.getElementById('price-drop-20').innerText = fmtPrice(athPrice * 0.80);
+        document.getElementById('price-drop-30').innerText = fmtPrice(athPrice * 0.70);
+        document.getElementById('price-drop-40').innerText = fmtPrice(athPrice * 0.60);
 
         calculateRecoveryMatrix(prices, drawdowns);
         renderUnderwaterChart(dates, drawdowns, tickerInput);

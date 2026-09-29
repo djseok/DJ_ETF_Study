@@ -2,13 +2,33 @@
 // 🏆 포트폴리오 & 배당 일지 동시 로드 모듈 (V16.0 하드코어 패치)
 // =====================================================
 
-async function loadPortfolioData(currentTab) {
+// 포트폴리오 CSV는 페이지를 열 때 한 번만 받아서 재사용합니다. (탭 이동마다 다시 받지 않음)
+var portfolioLoadPromise = null;
+var portfolioRankArray = [];
+var portfolioSkippedDividendRows = []; // 이름(H열)이 비어서 집계에서 빠진 배당 기록
+
+async function loadPortfolioData(currentTab, forceReload) {
     try {
+        if (!portfolioLoadPromise || forceReload) {
+            portfolioLoadPromise = fetchAndParsePortfolio();
+        }
+        await portfolioLoadPromise;
+
+        // 탭 상태에 따라 화면 그리기
+        if(currentTab === 'port') renderPortfolioView(portfolioRankArray);
+    } catch (e) {
+        portfolioLoadPromise = null; // 실패하면 다음 번에 다시 시도
+        console.error("포트폴리오 및 배당금 로드 실패:", e);
+    }
+}
+
+async function fetchAndParsePortfolio() {
         const res = await fetch(PORTFOLIO_CSV_URL);
         const matrix = parseCsvToMatrix(await res.text());
         
         const users = {}; // A~F 포트폴리오 데이터 보관함
         const divLogs = []; // H~L 실수령 배당금 보관함
+        const skippedDivRows = [];
 
         // 첫 번째 줄(헤더)은 건너뛰고 인덱스 1부터 바로 읽기 시작합니다.
         for(let i = 1; i < matrix.length; i++) {
@@ -51,7 +71,7 @@ async function loadPortfolioData(currentTab) {
             // ⚔️ [2] 배당금 실수령 파싱 (H~L열: 인덱스 7~11)
             // --------------------------------------------------
             // CSV 특성상 뒤쪽 열이 비어있으면 배열 길이가 짧을 수 있으므로 방어 로직 추가
-            if (row.length >= 11) {
+            if (row.length >= 9) {
                 let dName = String(row[7] || "").trim();
                 let dDate = String(row[8] || "").trim();
                 let dStock = String(row[9] || "").trim();
@@ -61,9 +81,17 @@ async function loadPortfolioData(currentTab) {
                 let dQty = parseFloat(dQtyStr) || 0;
                 let dAmount = parseFloat(dAmountStr) || 0;
 
-                // 이름과 일자가 있는 정상적인 배당금 기록만 취급
-                if (dName && dDate && !dName.includes("이름") && !dDate.includes("수령일자")) {
-                    divLogs.push({ name: dName, date: dDate, stock: dStock, qty: dQty, amount: dAmount });
+                if (dDate && !dDate.includes("수령일자")) {
+                    if (!dName) {
+                        // 날짜는 있는데 이름이 비어 있으면 누구 것인지 알 수 없어 제외하고 기록해 둡니다
+                        skippedDivRows.push({ sheetRow: i + 1, date: dDate, stock: dStock, amount: dAmount });
+                    } else if (!dName.includes("이름")) {
+                        let dateInfo = (typeof parseCustomDate === 'function') ? parseCustomDate(dDate) : { month: 0, jsDate: new Date(0) };
+                        divLogs.push({
+                            userName: dName, date: dDate, stockName: dStock, qty: dQty, amount: dAmount,
+                            parsedMonth: dateInfo.month, jsDate: dateInfo.jsDate, year: dateInfo.jsDate.getFullYear()
+                        });
+                    }
                 }
             }
         }
@@ -71,21 +99,16 @@ async function loadPortfolioData(currentTab) {
         // 전역 변수에 파싱된 데이터 저장 (다른 파일에서도 접근 가능하도록)
         globalParsedUsers = users;
         globalActualDividendLogs = divLogs; 
+        portfolioSkippedDividendRows = skippedDivRows;
+        if (skippedDivRows.length > 0) {
+            console.warn("⚠️ 이름(H열)이 비어 있어 집계에서 제외된 배당 기록:", skippedDivRows);
+        }
 
         // 수익률 계산 및 명예의 전당(랭킹) 정렬
-        let rankArray = Object.values(users).filter(u => u.totalInvest > 0).map(u => {
+        portfolioRankArray = Object.values(users).filter(u => u.totalInvest > 0).map(u => {
             u.totalReturnPct = ((u.totalCurrent - u.totalInvest) / u.totalInvest * 100) || 0;
             return u;
         }).sort((a,b) => b.totalReturnPct - a.totalReturnPct);
-
-        // 탭 상태에 따라 화면 그리기
-        if(currentTab === 'port') renderPortfolioView(rankArray);
-        if(currentTab === 'calc' && typeof window.renderCalculatorView === 'function') window.renderCalculatorView();
-        if(currentTab === 'div') {
-            if(typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
-        }
-        
-    } catch (e) { console.error("포트폴리오 및 배당금 로드 실패:", e); }
 }
 
 function renderPortfolioView(rankArray) {
