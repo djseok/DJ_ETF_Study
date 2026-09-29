@@ -15,6 +15,10 @@
  *   (createDividendForm 실행 시 매일 새벽 자동 갱신도 함께 설정됩니다)
  */
 
+// 기록할 스프레드시트: 동진ETF공부_개인일기장
+// (시트에서 [확장 프로그램 → Apps Script]로 열었든, script.google.com에서 따로 만들었든 동작하도록 ID로 지정)
+var SPREADSHEET_ID = '1nVnpen14YDDWRxODwt36HVlG7GId-zKzFIyQYn9p7vY';
+
 // 모아보기용 탭이라 멤버 목록에서 제외할 탭 이름
 var EXCLUDED_TABS = ['마스터 포토폴리오', '1달러 마스터 포토폴리오'];
 var TAB_SUFFIX = '포토폴리오';
@@ -115,7 +119,7 @@ function onDividendFormSubmit(e) {
   var dateParts = String(answers[Q_DATE] || '').split('-'); // 폼 날짜 응답은 "YYYY-MM-DD"
   var date = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name + TAB_SUFFIX);
+  var sheet = getSpreadsheet_().getSheetByName(name + TAB_SUFFIX);
   if (!sheet) throw new Error('탭을 찾을 수 없어요: ' + name + TAB_SUFFIX);
 
   var lock = LockService.getScriptLock();
@@ -133,6 +137,10 @@ function onDividendFormSubmit(e) {
 // ---------------------------------------------------------
 // 내부 도우미
 // ---------------------------------------------------------
+function getSpreadsheet_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
 function getDividendForm_() {
   var id = PropertiesService.getScriptProperties().getProperty('DIVIDEND_FORM_ID');
   if (!id) throw new Error('먼저 createDividendForm 을 실행해 주세요.');
@@ -140,7 +148,7 @@ function getDividendForm_() {
 }
 
 function getMemberTabs_() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheets()
+  return getSpreadsheet_().getSheets()
     .filter(function (s) {
       var n = s.getName();
       return n.slice(-TAB_SUFFIX.length) === TAB_SUFFIX && EXCLUDED_TABS.indexOf(n) === -1;
