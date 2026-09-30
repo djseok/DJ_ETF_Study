@@ -221,11 +221,24 @@ function renderTargetAssetDashboard(target) {
     if(document.getElementById('threshSellUI')) document.getElementById('threshSellUI').innerText = `+${tSell}%`;
 
     let rawDelta = 0, tableHtml = "";
+    // 비중 구분: 현금(티커 없음) · 가격 없음(계산 제외) · 국내 · 해외
+    const isDomestic = (t) => /^(KRX:|KOSDAQ:)?(\d[0-9A-Z]{5}|\d{1,5})$/i.test(String(t || '').trim()); // 숫자로 저장돼 앞자리 0이 빠진 코드(88980)도 국내
+    let wTotal = 0, wMissing = 0, wForeign = 0, missingNames = [];
+    comps.forEach(c => {
+        const hasTicker = String(c.ticker || '').trim() !== '';
+        wTotal += c.w;
+        if (hasTicker && !(c.prev > 0)) { wMissing += c.w; missingNames.push(c.name); return; }
+        if (hasTicker && !isDomestic(c.ticker)) wForeign += c.w;
+    });
+    // 가격 없는 종목은 빼고 나머지 비중으로 다시 맞춤 (예: 합계 100% 중 3%가 가격 없음 → 97% 기준으로 환산)
+    const priced = wTotal - wMissing;
+    const scale = priced > 0 ? 100 / priced : 1;
+    const foreignShare = priced > 0 ? Math.min(1, wForeign / priced) : 1;
     
     comps.forEach(c => {
         let live = (isNaN(c.live) || c.live === 0) ? c.prev : c.live;
         let d = c.prev > 0 ? (live - c.prev) / c.prev : 0;
-        let cont = d * (c.w / 100);
+        let cont = d * (c.w / 100) * scale;
         rawDelta += cont;
         
         tableHtml += `<tr class="hover:bg-slate-50">
@@ -244,20 +257,29 @@ function renderTargetAssetDashboard(target) {
 
     let vMult = (globalVixValue >= 25) ? 1.30 : (globalVixValue >= 20 ? 1.15 : 1.0);
     
-    // 🌟 1. 기존 예측 엔진 (본장 100% 기준)
-    let baseRet = ((1 + rawDelta * beta) * (1 + globalFxDelta) - 1) * 100 * vMult;
+    // 🌟 1. 본장 예측: 구성종목 변동 × 베타, 환율은 해외 비중만큼만 반영
+    let baseRet = ((1 + rawDelta * beta) * (1 + globalFxDelta * foreignShare) - 1) * 100 * vMult;
     
-    // 🌟 2. 나스닥 선물 믹스 적용 (최종 예측 = 본장 90% + 선물 10%)
-    let finalRet = (baseRet * 0.9) + ((globalFuturesDelta * 100) * 0.1);
+    // 🌟 2. 나스닥 선물 믹스 (해외 비중 부분만: 본장 90% + 선물 10%, 국내 비중은 본장 그대로)
+    const futMix = 0.1 * foreignShare;
+    let finalRet = (baseRet * (1 - futMix)) + ((globalFuturesDelta * 100) * futMix);
     
     // UI 업데이트
     if(document.getElementById('mathPure')) document.getElementById('mathPure').innerText = `${(rawDelta*100).toFixed(2)}%`;
     if(document.getElementById('mathBeta')) document.getElementById('mathBeta').innerText = `${beta}x`;
-    if(document.getElementById('mathFx')) document.getElementById('mathFx').innerText = `${(globalFxDelta*100).toFixed(2)}%`;
+    if(document.getElementById('mathFx')) document.getElementById('mathFx').innerText = `${(globalFxDelta*100).toFixed(2)}% × 해외 ${(foreignShare*100).toFixed(0)}%`;
+    const coverEl = document.getElementById('mathCoverage');
+    if (coverEl) {
+        coverEl.innerHTML = wMissing > 0
+            ? `⚠️ 가격 없는 ${missingNames.length}개 종목(비중 ${wMissing.toFixed(1)}%)을 빼고 나머지 비중으로 환산: ${missingNames.slice(0, 5).join(', ')}${missingNames.length > 5 ? ' 외' : ''}`
+            : `구성종목 ${comps.length}개 · 비중 합계 ${wTotal.toFixed(1)}% · 해외 비중 ${(foreignShare*100).toFixed(0)}%`;
+    }
     if(document.getElementById('mathVix')) document.getElementById('mathVix').innerText = `${vMult}x`;
     
     if(document.getElementById('mathBase')) document.getElementById('mathBase').innerText = `${baseRet.toFixed(2)}%`;
     if(document.getElementById('mathFutures')) document.getElementById('mathFutures').innerText = `${(globalFuturesDelta*100).toFixed(2)}%`;
+    if(document.getElementById('mathBaseMix')) document.getElementById('mathBaseMix').innerText = Math.round((1 - futMix) * 100);
+    if(document.getElementById('mathFutMix')) document.getElementById('mathFutMix').innerText = Math.round(futMix * 100);
 
     if(document.getElementById('predictedChange')) {
         document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;

@@ -206,9 +206,9 @@
                             VIX <span id="mathVix" class="text-red-500 mono">1.0</span>
                         </div>
                         <div class="text-[11px] font-bold text-slate-600 mb-1 flex items-center justify-end gap-1 mt-1 border-t border-slate-200 pt-1">
-                            <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">본장 예측 <span id="mathBase" class="text-slate-800 mono font-black">0.00%</span> (90%)</span> 
+                            <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">본장 예측 <span id="mathBase" class="text-slate-800 mono font-black">0.00%</span> (<span id="mathBaseMix">90</span>%)</span> 
                             <i class="fas fa-plus text-slate-400 text-[8px]"></i> 
-                            <span class="bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-orange-700">선물 <span id="mathFutures" class="mono font-black">0.00%</span> (10%)</span>
+                            <span class="bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 text-orange-700">선물 <span id="mathFutures" class="mono font-black">0.00%</span> (<span id="mathFutMix">10</span>%)</span>
                         </div>
                         
                         <div class="text-xs opacity-80 mb-1 mt-2 font-bold text-slate-500">▼ 최종 예상 변동률 (복리)</div>
@@ -222,6 +222,7 @@
             </div>
             
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div id="mathCoverage" class="px-6 py-2 text-[11px] font-semibold text-slate-500 bg-slate-50 border-b border-slate-100"></div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left whitespace-nowrap">
                         <thead class="text-xs text-slate-500 font-bold bg-slate-50 border-b border-slate-100">
