@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<!-- 두 손가락으로 확대 가능 (user-scalable 막지 않음) -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=6">
+<title>개장 전 예상가</title>
+<style>
+  :root { --bg:#1c1d20; --ink:#fff; --sub:#c3c2b7; --chip:#2a2b2f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  header { position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; padding:10px 12px; background:rgba(28,29,32,.96); }
+  header b { font-size:15px; margin-right:auto; }
+  header a { color:var(--ink); text-decoration:none; font-size:13px; padding:6px 12px; border-radius:16px; background:var(--chip); }
+  header a.on { background:#e34948; }
+  section { padding:0 0 14px; }
+  img { display:block; width:100%; height:auto; background:#fcfcfb; }
+  p { margin:8px 12px 0; color:var(--sub); font-size:12px; line-height:1.5; }
+  .err { padding:40px 16px; text-align:center; color:var(--sub); }
+</style>
+</head>
+<body>
+<header>
+  <b id="t">개장 전 예상가</b>
+  <a href="#A" id="la">막대</a>
+  <a href="#B" id="lb">표</a>
+  <a href="../">대시보드</a>
+</header>
+<main id="m"></main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), m = document.getElementById('m');
+  function show(stamp) {
+    if (!stamp) { m.innerHTML = '<div class="err">이미지를 찾지 못했어요.</div>'; return; }
+    var d = stamp.slice(5, 10).replace('-', '/'), hm = stamp.slice(11, 13) + ':' + stamp.slice(13, 15);
+    document.getElementById('t').textContent = d + ' ' + hm + ' 개장 전 예상';
+    m.innerHTML = ['A', 'B'].map(function (k) {
+      var u = stamp + '_' + k + '.png?v=' + stamp;
+      return '<section id="' + k + '"><a href="' + u + '"><img src="' + u + '" alt="' + k + '"></a></section>';
+    }).join('') + '<p>두 손가락으로 벌리면 확대돼요 · 이미지를 누르면 원본만 따로 열려요<br>투자 판단 참고용 · 개별 투자 자문이 아닙니다</p>';
+    if (location.hash) { var el = document.querySelector(location.hash); if (el) setTimeout(function () { el.scrollIntoView(); }, 300); }
+  }
+  var s = q.get('s');
+  if (s && /^[0-9_-]+$/.test(s)) return show(s);
+  fetch('latest.json?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (j) { show(j.stamp); }).catch(function () { show(''); });
+})();
+</script>
+</body>
+</html>
