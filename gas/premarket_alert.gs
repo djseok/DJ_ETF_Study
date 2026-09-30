@@ -82,7 +82,7 @@ function runPremarket_(dryRun) {
   });
   var usMove = pmDailyMoves_(Object.keys(usTickers).concat(['SPY']));
   var usNote = '';
-  if (!pmUsSessionFresh_()) { usMove = {}; usNote = '미국 휴장 → 종목 등락 0'; Logger.log('ℹ️ 지난밤 미국장 휴장으로 보고 종목 등락을 0으로 계산'); }
+  if (!pmUsSessionFresh_()) { Object.keys(usTickers).forEach(function (t) { usMove[t] = 0; }); usNote = '미국 휴장 → 종목 등락 0'; Logger.log('ℹ️ 지난밤 미국장 휴장으로 보고 종목 등락을 0으로 계산'); }
 
   // 선물 · 환율 · ETF 전일 종가
   var futInfo = pmFuturesAll_();
@@ -421,7 +421,7 @@ function pmUsSessionFresh_() {
       if (dow <= 5 && !(k === 0 && hm < '16:00')) break; // 오늘(뉴욕)이 평일이고 장 마감 후면 오늘이 기대 날짜
       d = new Date(d.getTime() - 864e5);
     }
-    return lastDay === Utilities.formatDate(d, 'America/New_York', 'yyyy-MM-dd');
+    return lastDay >= Utilities.formatDate(d, 'America/New_York', 'yyyy-MM-dd'); // 장중이면 오늘 봉이 있어 더 최근
   } catch (e) { return true; }
 }
 
