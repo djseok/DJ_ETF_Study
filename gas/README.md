@@ -134,3 +134,22 @@ GitHub Actions(`premarket_image.yml` → `tools/render_premarket.py`)가 그린 
 5. `previewPremarket`(계산만) → `sendPremarketAlert`(실제 발송) → `installPremarketTrigger`
 
 키·토큰은 스크립트 속성에만 두고 코드·채팅에 붙여넣지 않기. 카카오 리프레시 토큰은 매일 쓰면 자동 연장돼요.
+
+## ⚡ 장중 신호 알림 — `intraday_signal.gs` (관리시트, premarket_alert 와 같은 프로젝트)
+
+평일 09:05~15:25, 10분마다 '본체ETF'의 실제 등락(현재가 ÷ 전일 종가)이 `ETF_Quant_Signals` 기준(매수 % 이하 / 매도 % 이상)을 처음 넘으면 카톡으로 알리고 `장중_신호` 탭에 기록합니다.
+- 같은 날 같은 ETF·같은 방향은 1번. 기준에서 1%p 더 벌어지면 '추가 하락/상승'으로 1번 더
+- 가격: 야후 → 네이버 실시간 → MasterData D·E
+- 설치: `previewIntraday`(로그만) → `installIntradayTrigger` · 끄기: `removeIntradayTrigger`
+
+## 📅 주간 리포트 — `weekly_report.gs` (관리시트, 같은 프로젝트)
+
+매주 금요일 17:10 카톡 이미지 1장: 관리 ETF 주간 등락 · 코스피/나스닥/원달러 · 멤버 평가액·수익률(지난주 대비)·이번 주 배당 · 다음 주 예정 배당 · 07:30 예측 오차 · 장중 신호.
+- 멤버 데이터는 개인일기장 `마스터 포토폴리오` 를 **읽기만** 합니다
+- 이미지: GitHub Actions `premarket_image.yml` (weekly-image) → `tools/render_weekly.py` → `alerts/{날짜}_W.png`
+- 설치: `previewWeekly`(로그만) → `sendWeeklyReport`(테스트 발송) → `installWeeklyTrigger`
+
+## 🧮 예측 공식 공통 함수
+
+`premarket_alert.gs` 의 `predictRet_ · futKeyFor_ · signalFor_` 는 대시보드 `js/quant_core.js` 와 본문이 같아야 합니다.
+GitHub Actions `Tests` 가 PR 마다 `tests/parity.test.js` 로 확인하니, 공식을 바꿀 땐 두 파일을 같이 고치세요.
