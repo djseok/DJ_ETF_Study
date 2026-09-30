@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from io import StringIO
 import urllib3
+import os
+import sys
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -12,7 +14,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 🎯 1. 마스터 세팅
 # ==========================================
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?output=csv&gid=712569303"
-WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyQ65wQvTJZorqLUme5kND8qNzfcV8FPjhYcFxafQLba7PbVSdsYOX6R8drkBbKtiQ/exec"
+# 🔐 Webhook 주소와 토큰은 코드에 적지 않고 GitHub Secrets에서 받습니다
+#    (저장소 Settings → Secrets and variables → Actions 에 WEBHOOK_URL, WEBHOOK_TOKEN 등록)
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").strip()
+WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "").strip()
+if not WEBHOOK_URL or not WEBHOOK_TOKEN:
+    print("❌ WEBHOOK_URL / WEBHOOK_TOKEN 환경변수가 없습니다. GitHub Secrets 등록을 확인하세요.")
+    sys.exit(1)
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
@@ -26,7 +34,7 @@ def format_date(d_str):
 
 def engine_tiger(code):
     """ [TIGER] 해외 IP 차단 방어: 구글 GAS 서버를 스파이로 활용하는 우회 통로 """
-    url = f"{WEBHOOK_URL}?action=tiger&code={code}"
+    url = f"{WEBHOOK_URL}?action=tiger&code={code}&token={WEBHOOK_TOKEN}"
     result = []
     try:
         # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
@@ -160,6 +168,7 @@ if __name__ == "__main__":
             extracted_data.reverse()
             for data in extracted_data:
                 payload = {
+                    "token": WEBHOOK_TOKEN,
                     "etfName": etf_name, "code": code,
                     "recordDate": data["recordDate"], "payDate": data["payDate"],
                     "dividend": data["dividend"], "taxBase": data["taxBase"]
@@ -171,6 +180,9 @@ if __name__ == "__main__":
                         res = requests.post(WEBHOOK_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=40)
                         try:
                             res_json = res.json()
+                            if res_json.get("status") == "unauthorized":
+                                print("  ❌ 토큰 불일치: GAS 스크립트 속성 WEBHOOK_TOKEN 과 GitHub Secret 이 같은지 확인하세요.")
+                                sys.exit(1)
                             if res_json.get("status") == "duplicate":
                                 print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
                             else:

@@ -51,37 +51,13 @@ async function runAdvancedMDD() {
         let queryTicker = tickerInput;
         if (/^\d[0-9A-Z]{5}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
 
-        // 1. 미국 개별주 전용 다이렉트 통신 (FMP API)
-        if (!isKorean) {
-            try {
-                const FMP_API_KEY = "UJT2GZE4YWddOWp4SczYFpYufroPrlAy"; 
-                const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${tickerInput}?timeseries=1250&apikey=${FMP_API_KEY}`;
-                
-                const fmpRes = await fetchWithTimeout(fmpUrl, {}, 3500);
-                if (fmpRes.ok) {
-                    const fmpData = await fmpRes.json();
-                    if (fmpData.historical && fmpData.historical.length > 0) {
-                        const historical = fmpData.historical.reverse();
-                        for (let item of historical) {
-                            dates.push(item.date);
-                            prices.push(item.close);
-                        }
-                        fetchSuccess = true;
-                        statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (FMP API 다이렉트 가동 중 ⚡)`;
-                    }
-                }
-            } catch(e) {
-                console.warn("FMP API 호출 실패. 전용 구글 터널로 전환합니다.");
-            }
-        }
-
-        // 2. 동진님 전용 GAS 터널 (ETF, 한국 주식, FMP 실패 시)
+        // 가격 서버(GAS → 야후 파이낸스)에서 5년치 조회 (FMP API는 키 노출 문제로 제거)
         if (!fetchSuccess) {
             statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
             
             // 발급받은 동진님 고유 웹 앱 URL
             const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
-            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
+            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}&range=5y`;
 
             const response = await fetchWithTimeout(targetUrl, {}, 8000); // 구글 서버 응답 여유 시간
             if (!response.ok) throw new Error("전용 서버 응답 실패");
