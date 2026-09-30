@@ -184,6 +184,9 @@ def main():
     b = os.path.join(OUT_DIR, f"{d['stamp']}_B.png")
     draw_a(d, a)
     draw_b(d, b)
+    if d["stamp"] != "sample":  # alerts/view.html 이 주소에 날짜가 없을 때 가장 최근 것을 보여줌
+        with open(os.path.join(OUT_DIR, "latest.json"), "w") as f:
+            json.dump({"stamp": d["stamp"]}, f)
     cleanup()
     print("✅", a, b)
 

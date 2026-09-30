@@ -156,9 +156,12 @@ function runPremarket_(dryRun) {
     try {
       var urls = pmRequestImages_(token, payload);
       if (urls) {
-        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상 등락률', summary, urls.A);
+        // 카톡 사진은 미리보기라 작게 잘려 보임 → 누르면 확대 가능한 보기 페이지(alerts/view.html)로 연결
+        var view = PM_IMAGE_BASE + 'view.html?s=' + payload.stamp;
+        var n = payload.rows.length;
+        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상 등락률', summary, urls.A, view + '#A', 1080, Math.round((1.55 + 0.52 * n + 0.95 + 0.72) * 100));
         Utilities.sleep(400);
-        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상가', '종목명 · 등락률 · 전일종가 · 오늘 예상가', urls.B);
+        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상가', '👆 사진을 누르면 크게 볼 수 있어요 (두 손가락 확대)', urls.B, view + '#B', 1080, Math.round((1.55 + 0.46 * (n + 1) + 0.9 + 0.72) * 100));
         sentImages = true;
       }
     } catch (e) { Logger.log('⚠️ 이미지 발송 실패 → 글자 메시지로 대신: ' + e); }
@@ -566,13 +569,15 @@ function kakaoAccessToken_() {
   return j.access_token;
 }
 
-// 사진 메시지 (이미지는 GitHub Pages 주소 — 카카오 앱 플랫폼에 djseok.github.io 등록 필요)
-function kakaoSendFeed_(title, desc, imageUrl) {
-  var link = { web_url: imageUrl, mobile_web_url: imageUrl };
+// 사진 메시지 (링크가 열리려면 카카오 앱 > 플랫폼 > Web 사이트 도메인에 https://djseok.github.io 등록 필요)
+function kakaoSendFeed_(title, desc, imageUrl, viewUrl, w, h) {
+  var link = { web_url: viewUrl || imageUrl, mobile_web_url: viewUrl || imageUrl };
+  var content = { title: String(title).slice(0, 60), description: String(desc).slice(0, 190), image_url: imageUrl, link: link };
+  if (w && h) { content.image_width = w; content.image_height = h; } // 세로로 긴 사진이 덜 잘리게 크기 알려줌
   var tpl = {
     object_type: 'feed',
-    content: { title: String(title).slice(0, 60), description: String(desc).slice(0, 190), image_url: imageUrl, link: link },
-    buttons: [{ title: '원본 보기', link: link }, { title: '대시보드', link: { web_url: PM_DASHBOARD_URL, mobile_web_url: PM_DASHBOARD_URL } }]
+    content: content,
+    buttons: [{ title: '크게 보기', link: link }, { title: '대시보드', link: { web_url: PM_DASHBOARD_URL, mobile_web_url: PM_DASHBOARD_URL } }]
   };
   var res = UrlFetchApp.fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
     method: 'post', headers: { Authorization: 'Bearer ' + kakaoAccessToken_() },
