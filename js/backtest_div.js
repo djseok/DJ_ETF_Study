@@ -2,7 +2,7 @@
 // 📜 배당투자설계도 & 10년 복리 시뮬레이터 (js/backtest_div.js)
 // =========================================================
 
-const BACKTEST_DIV_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxhI6i-75x1SCVScxYjhb6_6PdpYUhCrP2b4FNu2zxDSUpqETmPSy6JnsIesHhGbikjdG3YCCv6oFh/pub?gid=795942259&single=true&output=csv";
+const BACKTEST_DIV_CSV_URL = APP_CONFIG.SHEETS.DIVIDEND_DB;
 
 let simEtfDatabase = {};
 let isDivDataLoaded = false;
@@ -29,23 +29,9 @@ function formatMonthlyAdd() {
     runPortfolioSimulator();
 }
 
+// 공통 CSV 파서 사용 (기존과 동일하게 빈 줄 유지, 공백 그대로)
 function parseCSV(str) {
-    const arr = [];
-    let quote = false;
-    let row = 0, col = 0;
-    for (let c = 0; c < str.length; c++) {
-        let cc = str[c], nc = str[c+1];
-        arr[row] = arr[row] || [];
-        arr[row][col] = arr[row][col] || '';
-        if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
-        if (cc == '"') { quote = !quote; continue; }
-        if (cc == ',' && !quote) { ++col; continue; }
-        if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
-        if (cc == '\n' && !quote) { ++row; col = 0; continue; }
-        if (cc == '\r' && !quote) { ++row; col = 0; continue; }
-        arr[row][col] += cc;
-    }
-    return arr;
+    return parseCsv(str, { trim: false, dropBlankLines: false });
 }
 
 async function fetchBacktestMasterData() {

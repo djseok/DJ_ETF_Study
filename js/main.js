@@ -1,13 +1,12 @@
 // =========================================================
 // 🌐 [1] 전역 변수 및 분할 시트(CSV) 주소 설정 (V19.1 검색필터 장착)
 // =========================================================
-var timestamp = new Date().getTime();
-
-var MACRO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=2016694665&single=true&output=csv&t=" + timestamp;
-var SIGNAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=1985460214&single=true&output=csv&t=" + timestamp;
-var MASTER_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=223914478&single=true&output=csv&t=" + timestamp;
-var PORTFOLIO_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv&t=" + timestamp;
-var DIVIDEND_RULES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyotJ2TeefWbfE61uwtnUh68sk-QE4H9HULDkIaKFXbihMYFqNGXL9N2gqSBgxONQze_sTwuo4QgBN/pub?gid=686768122&single=true&output=csv&t=" + timestamp;
+// 시트 주소는 js/common.js 의 APP_CONFIG 에서 관리합니다
+var MACRO_CSV_URL = sheetUrl('MACRO');
+var SIGNAL_CSV_URL = sheetUrl('SIGNAL');
+var MASTER_CSV_URL = sheetUrl('MASTER');
+var PORTFOLIO_CSV_URL = sheetUrl('PORTFOLIO');
+var DIVIDEND_RULES_CSV_URL = sheetUrl('DIVIDEND_RULES');
 
 var macroData = [];
 var signalData = [];
@@ -63,40 +62,7 @@ function switchTab(tabName) {
     if(tabName === 'portBt' && typeof initPortfolioBacktestView === 'function') initPortfolioBacktestView();
 }
 
-function parseCsvToMatrix(text) {
-    if (!text) return [];
-    text = text.replace(/^\uFEFF/, '');
-    var lines = text.split('\n');
-    var result = [];
-    
-    for (var j = 0; j < lines.length; j++) {
-        var line = lines[j];
-        if (!line || line.trim() === '') continue;
-        
-        var rowResult = [];
-        var current = '';
-        var inQuotes = false;
-        
-        for (var i = 0; i < line.length; i++) {
-            var char = line[i];
-            if (char === '"') {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-        rowResult.push((current || '').trim().replace(/^"|"$/g, ''));
-        
-        var isAllEmpty = rowResult.every(val => val === '');
-        if (!isAllEmpty) {
-            result.push(rowResult);
-        }
-    }
-    return result;
-}
+// parseCsvToMatrix 는 js/common.js 로 이동
 
 async function initDashboard() {
     try {

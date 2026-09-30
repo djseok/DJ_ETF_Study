@@ -123,7 +123,7 @@ async function fetchAndCalculateRSI() {
         if (/^\d{6}$/.test(ticker)) queryTicker = ticker + ".KS";
 
         // 동진님 전용 GAS 웹 앱 URL 적용
-        const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+        const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
         const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
 
         const response = await fetch(targetUrl);

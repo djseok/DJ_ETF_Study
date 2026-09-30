@@ -23,7 +23,7 @@ async function runQuantAnalysis() {
             throw new Error("한국 종목은 티커 뒤에 거래소 식별자(.KS 코스피, .KQ 코스닥)를 명시해주세요. (예: 005930.KS)");
         }
         let queryTicker = tickerStr;
-        const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+        const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
 
         const cfg = {
             maxExposure: 0.70,        
@@ -45,7 +45,11 @@ async function runQuantAnalysis() {
         const spyData = await spyRes.json();
         const qqqData = await qqqRes.json();
 
-        if (tgtData.error || !tgtData.chart || !tgtData.chart.result) throw new Error("유효하지 않은 티커 또는 데이터 부족");
+        if (tgtData.error || !tgtData.chart || !tgtData.chart.result) {
+            // 가격 서버(야후)가 알려준 실제 이유를 함께 보여줌
+            const reason = describePriceError(tgtData);
+            throw new Error(`${queryTicker} 가격 데이터를 받지 못했어요${reason ? ` (${reason})` : ''}. 야후 파이낸스에 없는 종목이거나 코드가 틀렸을 수 있어요.`);
+        }
 
         const rawTarget = extractOHLCV(tgtData);
         const rawSpy = spyData.error ? null : extractOHLCV(spyData);

@@ -80,7 +80,7 @@ async function runAdvancedMDD() {
             statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
             
             // 발급받은 동진님 고유 웹 앱 URL
-            const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+            const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
             const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
 
             const response = await fetchWithTimeout(targetUrl, {}, 8000); // 구글 서버 응답 여유 시간

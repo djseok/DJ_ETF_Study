@@ -58,7 +58,7 @@ async function runMACalculation() {
         // 2. 야후 파이낸스 다중 프록시 터널 (한국주식 & ETF 백업) -> 🔥 GAS 전용 터널로 교체 완료
         if (!fetchSuccess) {
             // 💡 동진님이 과거에 배포하셨던 완벽한 GAS 프록시 URL 적용
-            const GAS_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+            const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
             const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
 
             const response = await fetch(targetUrl);
