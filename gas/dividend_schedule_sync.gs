@@ -10,6 +10,7 @@
  *   2) 그 밖의 종목: 운용사 공식 API 직접 조회 (KODEX · RISE · ACE · SOL · TIGER · KIWOOM)
  *   3) 수집할 수 없는 종목(TIME, HANARO 등): 기존 기록 그대로 유지 (수기)
  *   조회에 실패한 종목도 기존 기록을 그대로 둡니다.
+ *   D열이 '✅ 지급월 고정'으로 시작하는 종목은 B열을 건드리지 않고 배당이력만 갱신합니다.
  *
  * ▶ 처음 한 번
  *   1) previewDividendSchedule 실행 → 종목별로 무엇이 바뀔지 로그로 확인 (시트에 쓰지 않음)
@@ -20,6 +21,9 @@
 var DS_MASTER_SHEET_ID = '1UcY_X1GOMQAg9ceojcs2paiR6uIsXYV7NMy8IID7TDE'; // 동진_웹송출용_마스터시트
 var DS_SCHEDULE_TAB = 'ETF 배당주기';
 var DS_HISTORY_TAB = 'ETF들 배당이력';
+// 'ETF 배당주기' D열을 이 글자로 시작하게 적으면 B열(지급월)은 자동 갱신하지 않음 (배당이력은 계속 갱신)
+//   예) TIGER 증권: 기준일 1·4·7·10월 말이지만 수익이 없으면 건너뛰어 기록만으로는 주기를 알 수 없음
+var DS_LOCK_MARK = '✅ 지급월 고정';
 var DS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 function previewDividendSchedule() { runDividendSchedule_(true); }
@@ -39,7 +43,7 @@ function runDividendSchedule_(dryRun) {
   var schedule = ss.getSheetByName(DS_SCHEDULE_TAB);
   var historySheet = ss.getSheetByName(DS_HISTORY_TAB);
   var lastRow = schedule.getLastRow();
-  var sched = schedule.getRange(2, 1, Math.max(lastRow - 1, 1), 3).getDisplayValues();
+  var sched = schedule.getRange(2, 1, Math.max(lastRow - 1, 1), 4).getDisplayValues();
 
   var ctx = { cache: {}, master: SpreadsheetApp.openById(DS_MASTER_SHEET_ID), local: ss };
   var today = new Date();
@@ -59,7 +63,12 @@ function runDividendSchedule_(dryRun) {
 
     var line = { row: i + 2, name: name, source: result.source, oldMonths: r[1], oldAvg: r[2] };
     var oldMonthCount = String(r[1]).split(',').filter(function (s) { return s.trim(); }).length;
-    if (result.rows && recent.length === 1 && oldMonthCount > 1) {
+    var locked = String(r[3]).indexOf(DS_LOCK_MARK) === 0; // D열이 '✅ 지급월 고정'으로 시작 → B열은 수기 값 유지
+    if (locked && result.rows && recent.length) {
+      // 지급월은 그대로 두고 배당이력(평균·실수령 자동 기록용)만 최신화
+      updated[dsNorm_(name)] = { name: name, rows: recent, source: result.source };
+      line.locked = true; line.count = recent.length; line.lastPay = recent[0].pay; line.note = r[3];
+    } else if (result.rows && recent.length === 1 && oldMonthCount > 1) {
       // 1년에 1건뿐인데 기존 값은 여러 번 지급 → 조회 누락일 수 있어 덮어쓰지 않음
       result.source = '확인 필요';
       line.source = result.source;
@@ -76,7 +85,8 @@ function runDividendSchedule_(dryRun) {
   });
 
   report.forEach(function (l) {
-    if (l.keep) Logger.log('➖ ' + l.name + ' [' + l.source + '] ' + l.keep + ' (지급월 ' + l.oldMonths + ', 평균 ' + l.oldAvg + ')');
+    if (l.locked) Logger.log('🔒 ' + l.name + ' [' + l.source + '] ' + l.count + '건, 최근 ' + l.lastPay + ' | 지급월 ' + l.oldMonths + ' (고정)');
+    else if (l.keep) Logger.log('➖ ' + l.name + ' [' + l.source + '] ' + l.keep + ' (지급월 ' + l.oldMonths + ', 평균 ' + l.oldAvg + ')');
     else Logger.log('🔄 ' + l.name + ' [' + l.source + '] ' + l.count + '건, 최근 ' + l.lastPay +
       ' | 지급월 ' + l.oldMonths + ' → ' + l.newMonths + ' | 평균 ' + l.oldAvg + ' → ' + l.newAvg);
   });
@@ -108,6 +118,10 @@ function runDividendSchedule_(dryRun) {
       if (l.source === '수집 불가') schedule.getRange(l.row, 4).setValue('수기');
       else if (l.source === '조회 실패') schedule.getRange(l.row, 4).setValue('⚠️ 조회 실패 (기존 값 유지)');
       else if (l.source === '확인 필요') schedule.getRange(l.row, 4).setValue(l.keep);
+      return;
+    }
+    if (l.locked) {
+      schedule.getRange(l.row, 5).setValue(l.lastPay + ' (' + l.count + '건)'); // B열·D열(수기 메모)은 그대로
       return;
     }
     schedule.getRange(l.row, 2).setValue(l.newMonths);

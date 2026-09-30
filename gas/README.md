@@ -84,6 +84,7 @@ B열 지급월과 D·E열(출처, 최근 지급일)을 갱신해요. C열 수식
 
 - 커버드콜: 마스터시트 `DB_` 탭 / 그 밖: 운용사 공식 API(KODEX·RISE·ACE·SOL·TIGER·KIWOOM) / TIME·HANARO 등: 기존 값 유지(수기)
 - 기록이 짧아도 지급 간격으로 주기 추정(매월·분기·반기). 1년에 1건뿐인데 기존 값이 여러 번이면 덮어쓰지 않고 `⚠️ 확인 필요`
+- 주기가 기록만으로 안 보이는 종목은 D열을 `✅ 지급월 고정`으로 시작하게 적고 B열을 직접 입력 → B열은 그대로, 배당이력만 갱신 (TIGER 증권·K방산&우주: 기준일 1·4·7·10월 말 → 지급월 2,5,8,11)
 - `previewDividendSchedule`(미리보기) → `syncDividendSchedule`(갱신) → `installDividendScheduleTrigger`(매일 아침 7시대)
 
 ## 💸 실수령 배당 자동 기록 — `dividend_autolog.gs` (배당 입력 폼 프로젝트)
