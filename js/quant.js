@@ -222,7 +222,7 @@ function renderTargetAssetDashboard(target) {
 
     let rawDelta = 0, tableHtml = "";
     // 비중 구분: 현금(티커 없음) · 가격 없음(계산 제외) · 국내 · 해외
-    const isDomestic = (t) => /^(KRX:|KOSDAQ:)?\d[0-9A-Z]{5}$/i.test(String(t || '').trim());
+    const isDomestic = (t) => /^(KRX:|KOSDAQ:)?(\d[0-9A-Z]{5}|\d{1,5})$/i.test(String(t || '').trim()); // 숫자로 저장돼 앞자리 0이 빠진 코드(88980)도 국내
     let wTotal = 0, wMissing = 0, wForeign = 0, missingNames = [];
     comps.forEach(c => {
         const hasTicker = String(c.ticker || '').trim() !== '';

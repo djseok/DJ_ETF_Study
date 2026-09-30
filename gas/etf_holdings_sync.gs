@@ -27,7 +27,7 @@ var HS_DEFAULT_PARAMS = { buy: -1.5, sell: 2, beta: 1 }; // 새 ETF 의 기본 �
 
 // 현금·파생 분류 (가격 계산에서 제외)
 var HS_CASH_RE = /(현금|예금|증거금|미수|미지급|원천세|분배금|콜론|\bCASH\b|\bRP\b)/i;
-var HS_DERIV_RE = /(선물|옵션|위클리|FUTURE|\bFUT\b|E-?MINI|\bCALL\b|\bPUT\b|\s[CP]\s\d{3,}|\d{2}\/\d{2}\/\d{2,4})/i;
+var HS_DERIV_RE = /(선물|옵션|위클리|FUTURE|\bFUT\b|E-?MINI|\bCALL\b|\bPUT\b|\bINDEX$|\s[CP]\s\d{3,}|\d{2}\/\d{2}\/\d{2,4})/i;
 
 function previewHoldings() { runHoldings_(true); }
 function syncHoldings() { runHoldings_(false); }
@@ -137,6 +137,7 @@ function runHoldings_(dryRun) {
   var ok = targets.filter(function (t) { return t.rows.length; });
   if (!ok.length) { Logger.log('❌ 보유종목을 하나도 받지 못해 중단 (기존 시트 유지)'); return; }
   if (newMaps.length) mapSheet.getRange(mapSheet.getLastRow() + 1, 1, newMaps.length, 4).setValues(newMaps);
+  hsFixMasterCodes_(master);
   if (newMaster.length) hsAppendMaster_(master, newMaster);
   hsWritePdf_(ss, targets);
   hsRebuildSignals_(ss, targets);
@@ -177,15 +178,25 @@ function hsNormName_(s) {
   return t.filter(function (w) { return w && !drop[w]; }).join('');
 }
 
+// 셀 값 → 티커 문자열 (숫자로 저장된 국내 코드 88980 → '088980')
+function hsTickerStr_(v) {
+  var t = String(v === null || v === undefined ? '' : v).trim();
+  if (/^\d{1,5}$/.test(t)) t = ('000000' + t).slice(-6);
+  return t;
+}
+
 // 코드 비교용: KRX:000660 / 000660 / 000660.KS → 000660, TYO:6981 / 6981.T → 6981.T, BRK.B / BRK-B → BRK-B
 function hsCodeKey_(ticker) {
-  var t = String(ticker || '').trim().toUpperCase();
+  var t = hsTickerStr_(ticker).toUpperCase();
   var m = t.match(/^(?:KRX:|KOSDAQ:)?(\d[0-9A-Z]{5})(?:\.K[SQ])?$/);
   if (m) return m[1];
   m = t.match(/^TYO:(\w+)$/); if (m) return m[1] + '.T';
   m = t.match(/^TPE:(\w+)$/); if (m) return m[1] + '.TW';
   m = t.match(/^HKG:(\w+)$/); if (m) return m[1] + '.HK';
-  return t.replace(/\./g, '-').replace(/-(T|TW|HK)$/, '.$1');
+  m = t.match(/^SHE:(\w+)$/); if (m) return m[1] + '.SZ';
+  m = t.match(/^SHA:(\w+)$/); if (m) return m[1] + '.SS';
+  if (/\.(T|TW|HK|SZ|SS)$/.test(t)) return t;
+  return t.replace(/\./g, '-');
 }
 
 function hsMarket_(ticker) {
@@ -194,6 +205,7 @@ function hsMarket_(ticker) {
   if (/\.T$/.test(k)) return '일본';
   if (/\.TW$/.test(k)) return '대만';
   if (/\.HK$/.test(k)) return '홍콩';
+  if (/\.(SZ|SS)$/.test(k)) return '중국';
   return '미국';
 }
 
@@ -202,7 +214,7 @@ function hsNameIndex_(master, mapSheet) {
   var m = master.getRange(3, 1, master.getLastRow() - 2, 3).getValues();
   m.forEach(function (r) {
     if (!r[1] || String(r[0]).trim() === '지표' || String(r[0]).trim() === '본체ETF') return;
-    var tk = String(r[1]).trim();
+    var tk = hsTickerStr_(r[1]);
     byCode[hsCodeKey_(tk)] = byCode[hsCodeKey_(tk)] || tk;
     var n = hsNormName_(r[2]);
     if (n && !byName[n]) byName[n] = { ticker: tk, src: 'MasterData' };
@@ -210,7 +222,7 @@ function hsNameIndex_(master, mapSheet) {
   if (mapSheet && mapSheet.getLastRow() >= 2) {
     mapSheet.getRange(2, 1, mapSheet.getLastRow() - 1, 2).getValues().forEach(function (r) {
       var n = hsNormName_(r[0]);
-      if (n && r[1]) byName[n] = { ticker: String(r[1]).trim(), src: '매핑테이블' }; // 매핑테이블이 우선
+      if (n && r[1]) byName[n] = { ticker: hsTickerStr_(r[1]), src: '매핑테이블' }; // 매핑테이블이 우선 (아래 줄이 위 줄보다 우선)
     });
   }
   return { byName: byName, byCode: byCode };
@@ -222,7 +234,10 @@ function hsSearchTickers_(names) {
   if (!names.length) return out;
   var reqs = names.map(function (n) {
     if (/[가-힣]/.test(n)) return { url: 'https://ac.stock.naver.com/ac?q=' + encodeURIComponent(n) + '&target=stock%2Cetf', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
-    var q = n.replace(/-CL\s*([A-C])\b/i, ' Class $1').replace(/\s+/g, ' ');
+    // 검색어 다듬기: '/THE', 'ORD.', 'Equity', '-CLASS A', '-A' 같은 꼬리 제거
+    var q = n.replace(/\/.*$/, '').replace(/\b(EQUITY|ORD)\b\.?/gi, ' ')
+      .replace(/[-\s]+CL(?:ASS)?\s+[A-C]\b.*$/i, '').replace(/-CL(?:ASS)?[A-C]?\b.*$/i, '')
+      .replace(/\s*-\s*[A-C]$/i, '').replace(/[.\s]+$/, '').replace(/\s+/g, ' ').trim();
     return { url: 'https://query2.finance.yahoo.com/v1/finance/search?q=' + encodeURIComponent(q) + '&quotesCount=6&newsCount=0', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
   });
   var res = hsFetchAll_(reqs);
@@ -235,9 +250,15 @@ function hsSearchTickers_(names) {
         var exact = items.filter(function (x) { return hsNormName_(x.name) === hsNormName_(n); })[0] || items[0];
         if (exact) out[n] = { ticker: exact.code, src: '자동(네이버)' }; // 국내는 6자리 코드 그대로 (GOOGLEFINANCE 가 코스피·코스닥 모두 인식)
       } else {
-        var qs = (j.quotes || []).filter(function (x) { return (x.quoteType === 'EQUITY' || x.quoteType === 'ETF') && x.symbol; });
-        var us = qs.filter(function (x) { return /^(NMS|NYQ|NGM|NCM|ASE|PCX|BTS|NYS|NAS)$/i.test(x.exchange || ''); })[0];
-        var pick = us || qs[0];
+        // 주식(EQUITY) 우선 — 이름에 ETF/TRUST/FUND 가 있을 때만 ETF 허용 (예: TESLA → TSLY(ETF) 오답 방지)
+        var wantEtf = /\b(ETF|TRUST|FUND)\b/i.test(n);
+        var qs = (j.quotes || []).filter(function (x) {
+          return x.symbol && (x.quoteType === 'EQUITY' || (wantEtf && x.quoteType === 'ETF')) && x.symbol.charAt(0) !== '^';
+        });
+        // 미국 본 상장 우선, 없으면 본국 거래소(일본·홍콩·중국·대만·한국)만 — 독일·싱가포르 등 2차 상장은 제외
+        var us = qs.filter(function (x) { return /^(NMS|NYQ|NGM|NCM|ASE|PCX|BTS|NYS|NAS)$/i.test(x.exchange || '') && /^[A-Z]{1,5}([.-][A-Z])?$/.test(x.symbol); })[0];
+        var home = qs.filter(function (x) { return /\.(T|HK|SS|SZ|TW|KS|KQ)$/.test(x.symbol); })[0];
+        var pick = us || home;
         if (pick) out[n] = { ticker: hsFromYahoo_(pick.symbol), src: '자동(야후)' };
       }
     } catch (e) { /* 다음 실행에서 다시 시도 */ }
@@ -252,6 +273,8 @@ function hsFromYahoo_(sym) {
   if ((m = s.match(/^(\w+)\.T$/))) return 'TYO:' + m[1];
   if ((m = s.match(/^(\w+)\.TW$/))) return 'TPE:' + m[1];
   if ((m = s.match(/^(\w+)\.HK$/))) return 'HKG:' + m[1];
+  if ((m = s.match(/^(\w+)\.SZ$/))) return 'SHE:' + m[1];
+  if ((m = s.match(/^(\w+)\.SS$/))) return 'SHA:' + m[1];
   return s.replace(/-/g, '.'); // BRK-B → BRK.B
 }
 
@@ -334,15 +357,33 @@ function hsAppendMaster_(master, rows) {
   var start = master.getLastRow() + 1;
   var out = rows.map(function (r, i) {
     var n = start + i, mk = hsMarket_(r[1]);
+    var cur = { 대만: 'TWD', 홍콩: 'HKD', 중국: 'CNY' }[mk];
     var fx = mk === '한국' ? '' : (mk === '일본' ? '*Characteristic!$E$4' : (mk === '미국' ? '*Characteristic!$E$3' :
-      '*GOOGLEFINANCE("CURRENCY:' + (mk === '대만' ? 'TWD' : 'HKD') + 'KRW")'));
+      '*GOOGLEFINANCE("CURRENCY:' + cur + 'KRW")'));
     return [r[0], r[1], r[2],
       '=IFERROR(GOOGLEFINANCE($B' + n + ',"closeyest"), 0)',
       '=IFERROR(GOOGLEFINANCE($B' + n + ',"price"), 0)',
       mk === '한국' ? '=D' + n : '=ROUND($D' + n + fx + ')',
       mk === '한국' ? '=E' + n : '=ROUND($E' + n + fx + ')'];
   });
+  master.getRange(start, 2, out.length, 1).setNumberFormat('@'); // 국내 코드 앞자리 0 유지
   master.getRange(start, 1, out.length, 7).setValues(out);
+}
+
+// MasterData 에 숫자로 저장된 국내 코드(88980)를 6자리 글자('088980')로 — VLOOKUP 이 글자/숫자 구분 없이 맞도록
+function hsFixMasterCodes_(master) {
+  var n = master.getLastRow() - 2;
+  if (n < 1) return;
+  var rng = master.getRange(3, 2, n, 1);
+  var v = rng.getValues(), changed = 0;
+  var out = v.map(function (r) {
+    if (typeof r[0] === 'number') { changed++; return [hsTickerStr_(r[0])]; }
+    return [r[0]];
+  });
+  if (!changed) return;
+  rng.setNumberFormat('@');
+  rng.setValues(out);
+  Logger.log('🔧 MasterData 국내 코드 ' + changed + '개를 6자리 글자로 정리');
 }
 
 // ETF_Quant_Signals 다시 만들기 (기준·베타 유지, 백업 후)
@@ -388,6 +429,8 @@ function hsRebuildSignals_(ss, targets) {
   });
 
   sh.clear();
+  sh.getRange(1, 3, out.length, 1).setNumberFormat('@'); // 티커 열: 국내 코드 앞자리 0 유지
+  out.forEach(function (r) { if (r[0] === '기준' || r[0] === '베타') { r[2] = String(r[2]); if (r[0] === '기준') r[3] = Number(r[3]); } });
   sh.getRange(1, 1, out.length, 8).setValues(out);
   // 서식: 비중·변동률 %
   sh.getRange(1, 4, out.length, 1).setNumberFormat('0.00%');
