@@ -113,3 +113,24 @@ B열 지급월과 D·E열(출처, 최근 지급일)을 갱신해요. C열 수식
 - 티커를 못 찾은 종목은 로그에 나옴 → `매핑테이블` A열 종목명, B열 티커 추가 후 다시 실행
 
 대시보드 예측(`js/quant.js`): 가격 없는 종목은 빼고 나머지 비중으로 환산, 환율·나스닥 선물은 **해외 비중만큼만** 반영
+
+## 🌅 개장 전 예상가 카톡 알림 — `premarket_alert.gs` (관리시트, etf_holdings_sync 와 같은 프로젝트)
+
+평일 07:30 `본체ETF` 전부의 예상 등락·예상가·신호를 계산해 `개장전_예측` 탭에 쌓고,
+GitHub Actions(`premarket_image.yml` → `tools/render_premarket.py`)가 그린 **이미지 A(막대)·B(표)**를 카카오톡 사진 메시지로 보내요.
+이미지가 5분 안에 안 올라오면 글자 메시지로 대신 보내요.
+
+- 공식 (대시보드 `js/quant.js` 와 동일): 예상 = (1 + β × 구성종목 변동) × (1 + β × 선물 마감후 변동 × 미국 비중) × (1 + 환율 변동 × 해외 비중) − 1
+- 선물: 이름에 S&P → ES=F, 다우 → YM=F, 나머지 NQ=F. 기준은 미국 정규장 마감(뉴욕 16:00). VIX 는 곱하지 않고 20 이상이면 '변동성 경계' 배지
+- `Characteristic` 의 나스닥·S&P·다우 선물 행 전일지수(D)에 매일 05:40 '마감 시점 가격'을 기록 → 대시보드도 같은 기준
+- 16:10 실제 시가·종가·오차(예상 − 실제 시가 등락)를 `개장전_예측` 에 기록, 월요일 알림에 지난주 평균 오차·방향 적중률
+- 미국 휴장 다음 날은 종목 등락 0 처리 (SPY 마지막 일봉으로 판단)
+
+### 설정 (처음 한 번)
+1. **카카오** (developers.kakao.com): 앱 추가 → 플랫폼 Web 도메인 `https://djseok.github.io` → 카카오 로그인 ON, Redirect URI `https://djseok.github.io/DJ_ETF_Study/` → 동의항목 **카카오톡 메시지 전송** 선택 동의
+2. **GitHub 토큰**: github.com → Settings → Developer settings → Fine-grained tokens → Generate new token → Repository access: `DJ_ETF_Study` 만 → Permissions: **Contents: Read and write** → 만료 1년
+3. **Apps Script → 프로젝트 설정 → 스크립트 속성**: `KAKAO_REST_KEY`, `KAKAO_REDIRECT_URI`, (쓰면) `KAKAO_CLIENT_SECRET`, `GH_DISPATCH_TOKEN`
+4. `kakaoAuthUrl` → 동의 후 주소의 `code=` 값을 `KAKAO_AUTH_CODE` 에 (10분 안에) → `kakaoExchangeCode` → `kakaoTest`
+5. `previewPremarket`(계산만) → `sendPremarketAlert`(실제 발송) → `installPremarketTrigger`
+
+키·토큰은 스크립트 속성에만 두고 코드·채팅에 붙여넣지 않기. 카카오 리프레시 토큰은 매일 쓰면 자동 연장돼요.

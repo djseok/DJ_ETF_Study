@@ -1,0 +1,47 @@
+name: Premarket Alert Image
+
+# 관리시트 Apps Script(premarket_alert.gs)가 평일 07:30 에 repository_dispatch 로 계산 결과를 보내면
+# A(막대)·B(표) 이미지를 그려 alerts/ 에 올립니다 → GitHub Pages 주소로 카카오톡 사진 메시지 발송
+on:
+  repository_dispatch:
+    types: [premarket-image]
+  workflow_dispatch: # 수동 실행 = 예시 데이터로 그리기 테스트
+
+permissions:
+  contents: write
+
+concurrency:
+  group: premarket-image
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 저장소 불러오기
+        uses: actions/checkout@v4
+
+      - name: 🔤 한글 글꼴 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk > /dev/null
+
+      - name: ⚙️ 파이썬
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 라이브러리
+        run: pip install -q matplotlib pillow
+
+      - name: 🖼 이미지 그리기
+        env:
+          PREMARKET_DATA: ${{ github.event.client_payload.data }}
+        run: |
+          if [ -n "$PREMARKET_DATA" ]; then python tools/render_premarket.py; else python tools/render_premarket.py --sample; fi
+
+      - name: 📤 올리기
+        run: |
+          git config user.name "premarket-bot"
+          git config user.email "premarket-bot@users.noreply.github.com"
+          git add -A alerts
+          git commit -m "개장 전 예상 이미지 $(TZ=Asia/Seoul date +%F_%H%M)" || exit 0
+          git pull --rebase -q && git push -q
