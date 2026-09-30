@@ -68,7 +68,11 @@ function premarketDaily_() {
 // =========================================================
 // 계산
 // =========================================================
+var PM_T0 = 0;
+function pmLap_(label) { Logger.log('⏱ ' + label + ' ' + Math.round((Date.now() - PM_T0) / 1000) + '초'); }
+
 function runPremarket_(dryRun) {
+  PM_T0 = Date.now();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var master = ss.getSheetByName(HS_TAB_MASTER);
   var etfs = pmEtfList_(master);
@@ -80,7 +84,9 @@ function runPremarket_(dryRun) {
   Object.keys(holdings).forEach(function (k) {
     holdings[k].forEach(function (h) { if (h.market === '미국' && h.ticker) usTickers[h.ticker] = true; });
   });
+  pmLap_('시트 읽기');
   var usMove = pmDailyMoves_(Object.keys(usTickers).concat(['SPY']));
+  pmLap_('미국 종목 ' + Object.keys(usMove).length + '/' + (Object.keys(usTickers).length + 1) + '개 등락');
   var usNote = '';
   if (!pmUsSessionFresh_()) { Object.keys(usTickers).forEach(function (t) { usMove[t] = 0; }); usNote = '미국 휴장 → 종목 등락 0'; Logger.log('ℹ️ 지난밤 미국장 휴장으로 보고 종목 등락을 0으로 계산'); }
 
@@ -90,6 +96,7 @@ function runPremarket_(dryRun) {
   var fx = pmFxSinceKrClose_();
   var vix = pmVix_();
   var etfClose = pmEtfCloses_(etfs, master);
+  pmLap_('선물·환율·VIX·ETF 종가');
 
   var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
   var rows = [];
@@ -201,13 +208,14 @@ function pmRequestImages_(token, payload) {
   });
   if (res.getResponseCode() !== 204) throw new Error('GitHub 요청 실패 ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
   var urls = { A: PM_IMAGE_BASE + payload.stamp + '_A.png', B: PM_IMAGE_BASE + payload.stamp + '_B.png' };
-  for (var i = 0; i < 20; i++) {
+  var limit = PM_T0 + 330000; // 실행 한도 6분 안에서 기다림 (끝나기 30초 전까지)
+  for (var i = 0; i < 20 && Date.now() + 15000 < limit; i++) {
     Utilities.sleep(15000);
     var a = UrlFetchApp.fetch(urls.A, { muteHttpExceptions: true, followRedirects: true }).getResponseCode();
     var b = UrlFetchApp.fetch(urls.B, { muteHttpExceptions: true, followRedirects: true }).getResponseCode();
     if (a === 200 && b === 200) { Logger.log('🖼 이미지 준비 완료 (' + ((i + 1) * 15) + '초)'); return urls; }
   }
-  Logger.log('⚠️ 5분 안에 이미지가 올라오지 않았어요 (GitHub Actions 실행 기록 확인)');
+  Logger.log('⚠️ 시간 안에 이미지가 올라오지 않았어요 (GitHub Actions 실행 기록 확인) → 글자 메시지로 대신');
   return null;
 }
 
@@ -305,18 +313,50 @@ function pmHoldings_(ss) {
 }
 
 // 미국 종목: 가장 최근 미국장 종가 / 그 전날 종가 - 1
+//   야후 spark 로 20개씩 묶어 조회(요청 수 1/20) → 빠진 종목만 하나씩 조회. 전체 150초를 넘기면 남은 종목은 '가격 없음'
 function pmDailyMoves_(tickers) {
-  var out = {};
-  var res = hsFetchAll_(tickers.map(function (t) {
-    return { url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(hsToYahoo_(t)[0]) + '?range=5d&interval=1d', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
+  var out = {}, budget = PM_T0 + 150000;
+  var sym = {}; tickers.forEach(function (t) { sym[t] = hsToYahoo_(t)[0]; });
+  var groups = [];
+  for (var i = 0; i < tickers.length; i += 20) groups.push(tickers.slice(i, i + 20));
+  var res = hsFetchAll_(groups.map(function (g) {
+    return { url: 'https://query1.finance.yahoo.com/v8/finance/spark?range=5d&interval=1d&symbols=' + encodeURIComponent(g.map(function (t) { return sym[t]; }).join(',')),
+      headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
   }));
-  tickers.forEach(function (t, i) {
+  groups.forEach(function (g, k) {
     try {
-      var r = JSON.parse(res[i].getContentText()).chart.result[0];
-      var c = (r.indicators.quote[0].close || []).filter(function (x) { return x !== null && x > 0; });
-      if (c.length >= 2) out[t] = c[c.length - 1] / c[c.length - 2] - 1;
+      var j = JSON.parse(res[k].getContentText());
+      // 응답 형태 두 가지 모두 처리: { "AAPL": {close:[…]} } 또는 { spark: { result: [{ symbol, response:[{ indicators… }] }] } }
+      if (j && j.spark && j.spark.result) {
+        var flat = {};
+        j.spark.result.forEach(function (r) {
+          try { flat[r.symbol] = { close: r.response[0].indicators.quote[0].close }; } catch (e) { }
+        });
+        j = flat;
+      }
+      g.forEach(function (t) {
+        var d = j[sym[t]];
+        var c = d && (d.close || []).filter(function (x) { return x !== null && x > 0; });
+        if (c && c.length >= 2) out[t] = c[c.length - 1] / c[c.length - 2] - 1;
+      });
     } catch (e) { }
   });
+  var miss = tickers.filter(function (t) { return out[t] === undefined; });
+  if (miss.length) Logger.log('ℹ️ spark 로 못 받은 ' + miss.length + '개는 하나씩 조회');
+  for (var m = 0; m < miss.length && Date.now() < budget; m += 40) {
+    var chunk = miss.slice(m, m + 40);
+    var r2 = hsFetchAll_(chunk.map(function (t) {
+      return { url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym[t]) + '?range=5d&interval=1d', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
+    }));
+    chunk.forEach(function (t, i) {
+      try {
+        var q = JSON.parse(r2[i].getContentText()).chart.result[0].indicators.quote[0];
+        var c = (q.close || []).filter(function (x) { return x !== null && x > 0; });
+        if (c.length >= 2) out[t] = c[c.length - 1] / c[c.length - 2] - 1;
+      } catch (e) { }
+    });
+  }
+  if (Date.now() >= budget) Logger.log('⚠️ 시간 초과 방지: 일부 종목 가격 없이 계산 (야후 응답 지연)');
   return out;
 }
 
