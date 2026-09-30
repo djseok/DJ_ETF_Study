@@ -415,9 +415,22 @@
             </div>
 
             <div class="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl shadow-sm">
-                <div class="mb-6">
-                    <label class="block text-xs font-bold text-emerald-800 mb-1">👨‍💻 향후 배당 예측 멤버 선택</label>
-                    <select id="divUserSelector" class="px-4 py-2 rounded-xl border border-emerald-200 bg-white font-bold text-slate-700 min-w-[150px] shadow-sm"></select>
+                <div class="mb-6 flex flex-wrap items-end gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-800 mb-1">👨‍💻 향후 배당 예측 멤버 선택</label>
+                        <select id="divUserSelector" class="px-4 py-2 rounded-xl border border-emerald-200 bg-white font-bold text-slate-700 min-w-[150px] shadow-sm"></select>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <button id="divTaxBtn_pre" onclick="setDividendTaxMode(false)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-700 text-white">세전</button>
+                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후 (15.4%)</button>
+                    </div>
+                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후는 금액 전체에 15.4%를 단순 적용한 값이에요.<br>해외주식형 ETF는 과세표준 기준이라 실제 세금은 더 적을 수 있어요.</div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
+                    <h4 class="font-black text-lg text-slate-800 mb-1"><i class="fas fa-calendar-day text-emerald-500 mr-2"></i>다가오는 배당 (60일)</h4>
+                    <p class="text-xs text-slate-400 mb-3">지급 예정일은 최근 지급일 기준 추정 · 분배금을 받으려면 기준일 전에 매수해 보유하고 있어야 해요</p>
+                    <div id="dividend-upcoming"></div>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
