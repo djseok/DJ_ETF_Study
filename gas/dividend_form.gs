@@ -130,9 +130,12 @@ function onDividendFormSubmit(e) {
   lock.waitLock(30000); // 두 명이 동시에 제출해도 같은 줄에 겹쳐 쓰지 않도록
   try {
     var qty = qtyRaw === '' ? findHoldingQty_(sheet, stock) : Number(qtyRaw);
-    var row = findNextEmptyLogRow_(sheet);
+    // 같은 종목·비슷한 날짜(±5일)의 자동 기록이 있으면 수기 값으로 교체 (수기 우선)
+    var autoRow = findAutoLogRow_(sheet, stock, date);
+    var row = autoRow || findNextEmptyLogRow_(sheet);
     sheet.getRange(row, 8, 1, 5).setValues([[name, date, stock, qty, amount]]);
     sheet.getRange(row, 9).setNumberFormat('yyyy. m. d');
+    if (autoRow) sheet.getRange(row, 13).setValue('수기(자동 교체)');
   } finally {
     lock.releaseLock();
   }
@@ -158,6 +161,20 @@ function getMemberTabs_() {
       return n.slice(-TAB_SUFFIX.length) === TAB_SUFFIX && EXCLUDED_TABS.indexOf(n) === -1;
     })
     .map(function (s) { return { name: s.getName().slice(0, -TAB_SUFFIX.length), sheet: s }; });
+}
+
+// M열이 '자동'이고 종목이 같고 날짜가 ±5일 안인 줄 (실수령 자동 기록: dividend_autolog.gs)
+function findAutoLogRow_(sheet, stock, date) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 0;
+  var key = stock.replace(/\s+/g, '').toUpperCase();
+  var v = sheet.getRange(2, 8, last - 1, 6).getValues(); // H~M
+  for (var i = 0; i < v.length; i++) {
+    if (v[i][5] !== '자동' || !(v[i][1] instanceof Date)) continue;
+    if (String(v[i][2]).replace(/\s+/g, '').toUpperCase() !== key) continue;
+    if (Math.abs(v[i][1] - date) <= 5 * 864e5) return i + 2;
+  }
+  return 0;
 }
 
 // H열(이름)과 I열(수령일자)이 모두 비어 있는 첫 줄 (2행부터)
