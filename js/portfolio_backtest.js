@@ -11,7 +11,6 @@
 // - 수수료·세금·환전 비용은 반영하지 않음
 // =========================================================
 
-const PBT_PRICE_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
 const PBT_FX_TICKER = "KRW=X"; // 원달러 환율 (미국 종목을 원화로 환산)
 
 // MasterData 시트 이름과 멤버 시트 이름이 다른 경우 보정 (정규화된 이름 → 종목코드)
@@ -111,7 +110,7 @@ function pbtAddRow(name, code, weight) {
     // 이름을 고르면 코드 자동 채움
     nameEl.addEventListener('change', () => {
         const t = pbtLookupTicker(nameEl.value);
-        if (t) { codeEl.value = t.replace(/\.KS$/, ''); pbtMarkCode(codeEl, true); }
+        if (t) { codeEl.value = stripKrxSuffix(t); pbtMarkCode(codeEl, true); }
     });
     codeEl.addEventListener('input', () => pbtMarkCode(codeEl, !!codeEl.value.trim()));
     wEl.addEventListener('input', pbtUpdateWeightSum);
@@ -148,7 +147,7 @@ async function pbtLoadMember() {
     document.getElementById('pbt-rows').innerHTML = '';
     held.sort((a, b) => b.current - a.current).forEach(it => {
         const t = pbtLookupTicker(it.stock);
-        pbtAddRow(it.stock, t ? t.replace(/\.KS$/, '') : '', Math.round(it.current / total * 1000) / 10);
+        pbtAddRow(it.stock, t ? stripKrxSuffix(t) : '', Math.round(it.current / total * 1000) / 10);
     });
     if (held.length === 0) pbtAddRow();
 }
@@ -161,13 +160,8 @@ async function pbtFetchSeries(ticker, years) {
     const key = `${ticker}|${range}`;
     if (pbtPriceCache[key]) return pbtPriceCache[key];
 
-    const res = await fetch(`${PBT_PRICE_PROXY_URL}?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=1d&events=div`);
-    if (!res.ok) throw new Error(`${ticker}: 가격 서버 응답 실패`);
-    const data = await res.json();
-    if (data.error || !data.chart || !data.chart.result || !data.chart.result[0]) {
-        const reason = describePriceError(data);
-        throw new Error(`${ticker}: 가격 데이터를 찾을 수 없어요${reason ? ` (${reason})` : ''}`);
-    }
+    // 코스피(.KS)에 없으면 코스닥(.KQ)으로 자동 재시도
+    const { data } = await fetchPriceChart(ticker, { range, interval: '1d', events: 'div' });
     const series = pbtParseChart(data.chart.result[0]);
     if (series.dates.length < 2) throw new Error(`${ticker}: 가격 데이터가 너무 적어요`);
     pbtPriceCache[key] = series;
@@ -480,7 +474,7 @@ function pbtRender(r) {
     const divLabel = { adj: '✅ 포함', events: '✅ 포함', price: '— 기록 없음' };
     document.getElementById('pbt-asset-table').innerHTML = r.assets.map(a => `
         <tr>
-            <td class="py-2 font-bold text-slate-800">${a.name} <span class="text-[11px] text-slate-400 mono">${a.ticker.replace(/\.KS$/, '')}</span></td>
+            <td class="py-2 font-bold text-slate-800">${a.name} <span class="text-[11px] text-slate-400 mono">${stripKrxSuffix(a.ticker)}</span></td>
             <td class="py-2 text-right mono text-slate-500">${(a.w * 100).toFixed(1)}%</td>
             <td class="py-2 text-right mono font-bold ${color(a.selfReturn)}">${pct(a.selfReturn)}</td>
             <td class="py-2 text-right mono font-bold text-slate-800">${won(a.finalValue)}</td>

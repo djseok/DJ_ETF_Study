@@ -4,14 +4,6 @@
 
 let mddChartInstance = null;
 
-async function fetchWithTimeout(resource, options = {}, timeout = 3500) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    const response = await fetch(resource, { ...options, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-}
-
 async function runAdvancedMDD() {
     const tickerInputElem = document.getElementById('mdd-ticker-input');
     if (!tickerInputElem) return;
@@ -44,42 +36,21 @@ async function runAdvancedMDD() {
     try {
         let dates = [];
         let prices = [];
-        let fetchSuccess = false;
-        
-        // 6자리 한국 코드(005930, 0005A0 등) 또는 .KS/.KQ 접미사면 한국 종목
-        let isKorean = /^\d[0-9A-Z]{5}$/.test(tickerInput) || tickerInput.endsWith('.KS') || tickerInput.endsWith('.KQ');
-        let queryTicker = tickerInput;
-        if (/^\d[0-9A-Z]{5}$/.test(tickerInput)) queryTicker = tickerInput + ".KS";
+        // 가격 서버(GAS → 야후 파이낸스)에서 5년치 조회. 6자리 코드는 .KS(코스피) → .KQ(코스닥) 순서로 자동 시도
+        statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
+        const { data, ticker: foundTicker } = await fetchPriceChart(tickerInput, { range: '5y' }, { timeoutMs: 8000 });
+        const isKorean = /\.K[SQ]$/.test(foundTicker);
 
-        // 가격 서버(GAS → 야후 파이낸스)에서 5년치 조회 (FMP API는 키 노출 문제로 제거)
-        if (!fetchSuccess) {
-            statusMsg.innerHTML = `<i class="fas fa-spinner fa-spin text-red-500 mr-1"></i> 전용 구글 서버(GAS) 연결 중... 🛡️`;
-            
-            // 발급받은 동진님 고유 웹 앱 URL
-            const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
-            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}&range=5y`;
-
-            const response = await fetchWithTimeout(targetUrl, {}, 8000); // 구글 서버 응답 여유 시간
-            if (!response.ok) throw new Error("전용 서버 응답 실패");
-            
-            const data = await response.json();
-            if (data.error) throw new Error(`야후 파이낸스 에러: ${data.error}`);
-            if (!data.chart || !data.chart.result) throw new Error("종목을 찾을 수 없거나 데이터가 없습니다.");
-
-            const timestamps = data.chart.result[0].timestamp;
-            const quote = data.chart.result[0].indicators.quote[0];
-            const rawPrices = quote.close; 
-            
-            for(let i = 0; i < rawPrices.length; i++) {
-                if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
-                    const d = new Date(timestamps[i] * 1000);
-                    dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
-                    prices.push(rawPrices[i]);
-                }
+        const timestamps = data.chart.result[0].timestamp;
+        const rawPrices = data.chart.result[0].indicators.quote[0].close;
+        for (let i = 0; i < rawPrices.length; i++) {
+            if (rawPrices[i] !== null && rawPrices[i] !== undefined) {
+                const d = new Date(timestamps[i] * 1000);
+                dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+                prices.push(rawPrices[i]);
             }
-            fetchSuccess = true;
-            statusMsg.innerHTML = `✅ <b>${tickerInput}</b> 분석 완료 (전용 GAS 터널 가동 중 🛡️)`;
         }
+        statusMsg.innerHTML = `✅ <b>${foundTicker}</b> 분석 완료 (전용 GAS 터널 가동 중 🛡️)`;
 
         if (prices.length < 2) throw new Error("MDD를 계산하기 위한 데이터가 부족합니다.");
 

@@ -19,10 +19,6 @@ async function runQuantAnalysis() {
     if(resultContainer) resultContainer.classList.add('hidden');
 
     try {
-        if (/^\d{6}$/.test(tickerStr)) {
-            throw new Error("한국 종목은 티커 뒤에 거래소 식별자(.KS 코스피, .KQ 코스닥)를 명시해주세요. (예: 005930.KS)");
-        }
-        let queryTicker = tickerStr;
         const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
 
         const cfg = {
@@ -34,22 +30,16 @@ async function runQuantAnalysis() {
             exitType: "A"             
         };
 
-        const [tgtRes, spyRes, qqqRes] = await Promise.all([
-            fetch(`${GAS_PROXY_URL}?ticker=${queryTicker}&range=5y`),
+        // 6자리 코드(005930)도 입력 가능: .KS(코스피) → .KQ(코스닥) 순서로 자동 시도
+        const [tgt, spyRes, qqqRes] = await Promise.all([
+            fetchPriceChart(tickerStr, { range: '5y' }).catch(e => { throw new Error(`${e.message}. 야후 파이낸스에 없는 종목이거나 코드가 틀렸을 수 있어요.`); }),
             fetch(`${GAS_PROXY_URL}?ticker=SPY&range=5y`),
             fetch(`${GAS_PROXY_URL}?ticker=QQQ&range=5y`)
         ]);
-
-        if (!tgtRes.ok) throw new Error("타겟 종목 데이터 호출 실패");
-        const tgtData = await tgtRes.json();
+        const tgtData = tgt.data;
+        const queryTicker = tgt.ticker;
         const spyData = await spyRes.json();
         const qqqData = await qqqRes.json();
-
-        if (tgtData.error || !tgtData.chart || !tgtData.chart.result) {
-            // 가격 서버(야후)가 알려준 실제 이유를 함께 보여줌
-            const reason = describePriceError(tgtData);
-            throw new Error(`${queryTicker} 가격 데이터를 받지 못했어요${reason ? ` (${reason})` : ''}. 야후 파이낸스에 없는 종목이거나 코드가 틀렸을 수 있어요.`);
-        }
 
         const rawTarget = extractOHLCV(tgtData);
         const rawSpy = spyData.error ? null : extractOHLCV(spyData);
