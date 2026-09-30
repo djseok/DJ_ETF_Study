@@ -277,7 +277,8 @@ function pmKakaoMessages_(rows, fut, fx, today, usNote) {
 
   var lines = sorted.map(function (r) {
     var mark = r.signal === 'BUY' ? '🔵' : (r.signal === 'SELL' ? '🔴' : (r.pct >= 0 ? '▲' : '▼'));
-    return mark + pmShort_(r.name) + ' ' + pmPct_(r.pct) + ' ' + (r.price ? r.price.toLocaleString() : '-');
+    // 종목명 등락% 전일종가→오늘예상가
+    return mark + pmShort_(r.name) + ' ' + pmPct_(r.pct) + ' ' + (r.close ? Math.round(r.close).toLocaleString() : '-') + '→' + (r.price ? r.price.toLocaleString() : '-');
   });
   var dom = rows.filter(function (r) { return r.domestic || !r.hasPdf; });
   if (dom.length) lines.push('🇰🇷국내 ' + dom.length + '개는 장중 계산(대시보드)');
