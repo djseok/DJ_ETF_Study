@@ -3,6 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 📱 휴대폰 홈 화면에 앱처럼 추가 (PWA) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#1c1d20">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="투자 공부실">
     <title>동진 투자 공부실 - 퀀트 대시보드 v12 (선물 연동 엔진)</title>
     
     <!-- 💡 프리텐다드 웹 폰트 로드 -->
@@ -1235,5 +1243,9 @@
     <script src="js/single_stock_analysis.js"></script>
     <script src="js/portfolio_backtest.js"></script>
     <script src="js/accuracy.js"></script>
+    <script>
+        // 📱 오프라인에서도 마지막 데이터로 열리도록 서비스워커 등록
+        if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    </script>
 </body>
 </html>

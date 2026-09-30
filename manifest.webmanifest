@@ -1,0 +1,16 @@
+{
+  "name": "동진 투자 공부실",
+  "short_name": "투자 공부실",
+  "description": "ETF 예측 엔진 · 배당 · 개장 전 예상가 대시보드",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1c1d20",
+  "lang": "ko",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
