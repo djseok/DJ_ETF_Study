@@ -113,3 +113,22 @@ B열 지급월과 D·E열(출처, 최근 지급일)을 갱신해요. C열 수식
 - 티커를 못 찾은 종목은 로그에 나옴 → `매핑테이블` A열 종목명, B열 티커 추가 후 다시 실행
 
 대시보드 예측(`js/quant.js`): 가격 없는 종목은 빼고 나머지 비중으로 환산, 환율·나스닥 선물은 **해외 비중만큼만** 반영
+
+## 🌅 개장 전 예상가 카톡 알림 — `premarket_alert.gs` (관리시트, etf_holdings_sync 와 같은 프로젝트)
+
+평일 07:30 `본체ETF` 전부의 예상 등락·예상가·신호를 계산해 `개장전_예측` 탭에 쌓고 카카오톡(나에게 보내기)으로 보내요.
+
+- 예상 = 미국 구성종목의 지난밤 등락 × 비중 × 베타 + **미국장 마감(뉴욕 16:00) 이후 새벽 선물 변동** × 베타 × 미국 비중 + 어제 15:30 이후 원/달러 × 해외 비중
+- 선물: 이름에 S&P → ES=F, 다우 → YM=F, 나머지 NQ=F / 국내 ETF는 개장 전 변동이 없어 "장중 계산"으로 표시
+- 미국 휴장 다음 날은 종목 등락 0 처리 (SPY 마지막 일봉으로 판단)
+
+### 카카오 설정 (처음 한 번)
+1. developers.kakao.com → 내 애플리케이션 → 애플리케이션 추가
+2. 앱 설정 → 플랫폼 → Web → 사이트 도메인 `https://djseok.github.io`
+3. 카카오 로그인 → 활성화 ON, Redirect URI `https://djseok.github.io/DJ_ETF_Study/`
+4. 카카오 로그인 → 동의항목 → **카카오톡 메시지 전송(talk_message)** 선택 동의
+5. Apps Script → 프로젝트 설정 → 스크립트 속성: `KAKAO_REST_KEY`(앱 키의 REST API 키), `KAKAO_REDIRECT_URI`(3번 주소), 보안 → Client Secret 을 켰다면 `KAKAO_CLIENT_SECRET`
+6. `kakaoAuthUrl` 실행 → 로그 주소를 열어 동의 → 이동한 주소의 `code=` 값을 스크립트 속성 `KAKAO_AUTH_CODE` 에 저장 (10분 안에)
+7. `kakaoExchangeCode` → `kakaoTest`(카톡 확인) → `previewPremarket` → `sendPremarketAlert` → `installPremarketTrigger`
+
+키·토큰은 스크립트 속성에만 두고 코드·채팅에 붙여넣지 않기. 리프레시 토큰은 매일 쓰면 자동 연장돼요.
