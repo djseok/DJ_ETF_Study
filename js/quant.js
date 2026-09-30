@@ -266,11 +266,11 @@ function renderTargetAssetDashboard(target) {
     // 🌟 예측 공식 (개장 전 카톡 알림 premarket_alert.gs 와 동일)
     //   예상 = (1 + 베타 × 구성종목 변동) × (1 + 베타 × 선물 마감후 변동 × 미국 비중) × (1 + 환율 변동 × 해외 비중) − 1
     //   선물: 이름에 S&P → S&P 선물, 다우 → 다우 선물, 나머지는 나스닥 선물 / VIX 는 곱하지 않고 경고 배지로만 표시
-    const futKey = /S&P|S＆P/i.test(target) ? 'ES' : (/다우/.test(target) ? 'YM' : 'NQ');
+    const futKey = futKeyFor(target);
     const futDelta = globalFutures[futKey] || 0;
     const futLabel = { NQ: '나스닥', ES: 'S&P', YM: '다우' }[futKey];
-    let baseRet = ((1 + rawDelta * beta) * (1 + globalFxDelta * foreignShare) - 1) * 100;
-    let finalRet = ((1 + rawDelta * beta) * (1 + beta * futDelta * usShare) * (1 + globalFxDelta * foreignShare) - 1) * 100;
+    let baseRet = predictRet(rawDelta, beta, 0, usShare, globalFxDelta, foreignShare) * 100;
+    let finalRet = predictRet(rawDelta, beta, futDelta, usShare, globalFxDelta, foreignShare) * 100;
     const vixWarn = globalVixValue >= 20;
     
     // UI 업데이트
