@@ -51,3 +51,28 @@
 4. **검사 켜기**: 기존 `doPost` 첫 줄(과 `doGet`의 tiger 처리)에 토큰 확인 한 줄을 추가 → **배포 → 배포 관리 → ✏️ 수정 → 버전: 새 버전 → 배포**
    (새 배포를 만들지 말고 기존 배포를 새 버전으로 바꿔야 주소가 그대로 유지돼요)
 5. **Run workflow**로 다시 실행해서 정상인지 확인. `토큰 불일치`가 나오면 1번 토큰과 GitHub Secret 값이 같은지 확인하세요.
+
+## 📥 배당 봇 Webhook 원본 — `dividend_webhook.gs`
+
+동진_웹송출용_마스터시트 Apps Script 의 `Code.gs` 사본이에요 (토큰 검사 포함).
+
+- **TIGER**: 2026-09 미래에셋 사이트 개편으로 `investments.miraeasset.com/tigeretf/ko/distribution/overall/list.ajax`
+  에 종목코드(`q`) + 연도·월을 보내야 하고, 결과가 표(HTML)로 와요. 최근 12개월을 한 번에 조회해서 예전 JSON 형식으로 바꿔 봇에 넘겨요.
+- TIGER 가 또 안 되면 편집기에서 `testTigerFetch` 를 실행해 보세요. 종목별 건수와 최근 기록이 로그에 나와요.
+
+## 🧩 관리코드 C열 자동 채우기 — `etf_url_autofill.gs`
+
+`관리코드` 탭에 **A열 이름, B열 종목코드만** 적으면 KODEX · RISE · ACE · SOL 의 C열(운용사 배당 API 주소)을 자동으로 채워요.
+TIGER · KIWOOM 은 원래 C열이 필요 없어요. 이미 채워진 C열은 덮어쓰지 않아요.
+
+| 운용사 | 목록 출처 | 코드 → 번호 |
+|---|---|---|
+| KODEX | `m.samsungfund.com/api/v1/kodex/product.do?pageNo=N` | `stkTicker` → `fId` |
+| RISE | `kbam.co.kr/api/products/etfs?page=N&page_size=100` | `krx_cd` → `fund_cd` |
+| ACE | `papi.aceetf.co.kr/api/funds?size=500` | `stockCd`(ISIN) 가운데 6자리 → `fundCd` |
+| SOL | `soletf.com/ko/fund` 목록 페이지 | `종목명 (코드)` 링크 → `/fund/etf/번호` |
+
+- `verifyEtfUrlResolver`: 이미 채워진 줄로 정확도 검증 (시트에 쓰지 않음). 2026-09-30 기준 12/12 일치
+- `previewAutoFillEtfUrls`: 채울 내용 미리보기 (시트에 쓰지 않음)
+- `autoFillEtfUrls`: 빈 C열 채우기. `installAutoFillTrigger` 로 매일 밤 10시대 자동 실행 (배당 봇은 자정)
+- 못 찾은 줄은 C열에 `⚠️ 번호를 못 찾음` 표시 → 다음 날 밤 다시 시도
