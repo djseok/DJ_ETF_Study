@@ -33,3 +33,21 @@
 - 종목을 새로 샀거나 멤버 탭이 늘면 `refreshFormChoices`를 실행하세요. 매일 새벽 4시에도 자동 갱신돼요.
 - 잘못 입력한 기록은 해당 멤버 탭(예: `D포토폴리오`)에서 직접 지우거나 고치면 됩니다.
 - **`마스터 포토폴리오` 탭에는 직접 입력하지 마세요.** A1 수식이 멤버 탭을 모아 보여주는 탭이라, 값을 넣으면 전체가 `#REF!`가 됩니다.
+
+## 🔐 배당 봇 Webhook 보안 — `webhook_security.gs`
+
+배당 봇이 데이터를 보내는 Apps Script 주소가 예전에 public 저장소에 올라가 있었어요.
+주소만 알면 누구나 시트에 가짜 기록을 넣을 수 있어서, **토큰을 함께 보낸 요청만 받도록** 바꿉니다.
+
+**순서가 중요해요.** GAS에서 검사를 먼저 켜면, 토큰을 안 보내는 옛 봇이 막혀서 그날 배당 기록이 빠져요.
+
+1. **토큰 만들기**: 배당 봇이 기록하는 시트(동진_웹송출용_마스터시트)의 Apps Script를 열고,
+   `webhook_security.gs` 파일을 새로 만들어 붙여넣은 뒤 **`setupWebhookToken`만 실행** → 로그의 토큰 복사
+2. **GitHub Secrets 등록**: 저장소 **Settings → Secrets and variables → Actions → New repository secret**
+   - `WEBHOOK_URL` : 지금 쓰는 웹앱 주소 (`https://script.google.com/macros/s/AKfycbyQ65.../exec`)
+   - `WEBHOOK_TOKEN` : 1번에서 복사한 토큰
+3. **보안 PR 병합** 후 **Actions → Auto Dividend Scraper → Run workflow**로 한 번 실행해서 `✅ 전송 완료`/`⏭️ 통과 (중복)`이 나오는지 확인
+   (이 단계까지는 GAS가 토큰을 검사하지 않으니 옛 방식과 똑같이 동작해요)
+4. **검사 켜기**: 기존 `doPost` 첫 줄(과 `doGet`의 tiger 처리)에 토큰 확인 한 줄을 추가 → **배포 → 배포 관리 → ✏️ 수정 → 버전: 새 버전 → 배포**
+   (새 배포를 만들지 말고 기존 배포를 새 버전으로 바꿔야 주소가 그대로 유지돼요)
+5. **Run workflow**로 다시 실행해서 정상인지 확인. `토큰 불일치`가 나오면 1번 토큰과 GitHub Secret 값이 같은지 확인하세요.

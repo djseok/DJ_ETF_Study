@@ -37,29 +37,11 @@ async function runMACalculation() {
         let isKorean = /^\d{6}$/.test(tickerInput) || tickerInput.endsWith('.KS');
         let queryTicker = /^\d{6}$/.test(tickerInput) ? tickerInput + ".KS" : tickerInput;
 
-        // 1. FMP API 다이렉트 호출 (미국주식 우선)
-        if (!isKorean) {
-            try {
-                const FMP_API_KEY = "UJT2GZE4YWddOWp4SczYFpYufroPrlAy"; // 동진님 기존 FMP 키 재사용
-                const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${tickerInput}?timeseries=500&apikey=${FMP_API_KEY}`;
-                
-                const fmpRes = await fetch(fmpUrl);
-                if (fmpRes.ok) {
-                    const fmpData = await fmpRes.json();
-                    if (fmpData.historical && fmpData.historical.length > 0) {
-                        const historical = fmpData.historical.reverse();
-                        historical.forEach(item => { dates.push(item.date); prices.push(item.close); });
-                        fetchSuccess = true;
-                    }
-                }
-            } catch(e) { console.warn("FMP 막힘, 야후로 우회"); }
-        }
-
-        // 2. 야후 파이낸스 다중 프록시 터널 (한국주식 & ETF 백업) -> 🔥 GAS 전용 터널로 교체 완료
+        // 가격 서버(GAS → 야후 파이낸스)에서 2년치 조회 (FMP API는 키 노출 문제로 제거)
         if (!fetchSuccess) {
             // 💡 동진님이 과거에 배포하셨던 완벽한 GAS 프록시 URL 적용
             const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
-            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
+            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}&range=2y`;
 
             const response = await fetch(targetUrl);
             if (!response.ok) throw new Error("서버 응답 실패");
