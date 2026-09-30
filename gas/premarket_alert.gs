@@ -55,14 +55,27 @@ function installPremarketTrigger() {
 function futuresRefDaily_() { pmUpdateFuturesRows_(pmFuturesAll_()); }
 function recordActualsDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
-  if (dow >= 6) return;
+  if (dow >= 6 || pmKrHoliday_()) return;
   recordActuals();
 }
 
 function premarketDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u')); // 1=월 … 7=일
   if (dow >= 6) return;
+  if (pmKrHoliday_()) { Logger.log('ℹ️ 오늘은 국내 증시 휴장일이라 알림을 보내지 않아요.'); return; }
   runPremarket_(false);
+}
+
+// 국내 증시(KRX) 평일 휴장일 — 해마다 12월에 다음 해 날짜 추가 (스크립트 속성 PM_KR_HOLIDAYS 에 'yyyy-MM-dd,…' 로 더할 수도 있음)
+var PM_KR_HOLIDAYS = [
+  '2026-10-09', '2026-12-25', '2026-12-31',
+  '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-01', '2027-05-05', '2027-05-13', '2027-08-16',
+  '2027-09-14', '2027-09-15', '2027-09-16', '2027-10-04', '2027-10-11', '2027-12-27', '2027-12-31'
+];
+function pmKrHoliday_() {
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+  var extra = (PropertiesService.getScriptProperties().getProperty('PM_KR_HOLIDAYS') || '').split(',').map(function (x) { return x.trim(); });
+  return PM_KR_HOLIDAYS.indexOf(today) >= 0 || extra.indexOf(today) >= 0;
 }
 
 // =========================================================
@@ -490,6 +503,12 @@ function pmWriteLog_(ss, rows, fut, fx) {
     return [r.date, r.name, r.code, r.group, r.close, Math.round(r.pct * 100) / 100, r.price, r.signal, Math.round(r.usRet * 100) / 100,
       Math.round(r.usShare), r.futKey, Math.round(r.fut * 100) / 100, Math.round(r.fx * 100) / 100, Math.round(r.foreignShare), r.beta, r.buy + ' / ' + r.sell];
   });
+  // 같은 날짜를 다시 실행하면(테스트 후 07:30 실행 등) 그날 기록을 지우고 새로 씀 → 오차 통계 중복 방지
+  var day = out.length ? out[0][0] : '';
+  if (day && sh.getLastRow() > 1) {
+    var dates = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues();
+    for (var i = dates.length - 1; i >= 0; i--) if (dates[i][0] === day) sh.deleteRow(i + 2);
+  }
   var start = sh.getLastRow() + 1;
   sh.getRange(start, 1, out.length, 1).setNumberFormat('@'); // 날짜는 글자로 (비교·조회용)
   sh.getRange(start, 3, out.length, 1).setNumberFormat('@');
