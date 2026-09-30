@@ -11,7 +11,7 @@
 // - 수수료·세금·환전 비용은 반영하지 않음
 // =========================================================
 
-const PBT_PRICE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec";
+const PBT_PRICE_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
 const PBT_FX_TICKER = "KRW=X"; // 원달러 환율 (미국 종목을 원화로 환산)
 
 // MasterData 시트 이름과 멤버 시트 이름이 다른 경우 보정 (정규화된 이름 → 종목코드)
@@ -165,7 +165,8 @@ async function pbtFetchSeries(ticker, years) {
     if (!res.ok) throw new Error(`${ticker}: 가격 서버 응답 실패`);
     const data = await res.json();
     if (data.error || !data.chart || !data.chart.result || !data.chart.result[0]) {
-        throw new Error(`${ticker}: 가격 데이터를 찾을 수 없어요`);
+        const reason = describePriceError(data);
+        throw new Error(`${ticker}: 가격 데이터를 찾을 수 없어요${reason ? ` (${reason})` : ''}`);
     }
     const series = pbtParseChart(data.chart.result[0]);
     if (series.dates.length < 2) throw new Error(`${ticker}: 가격 데이터가 너무 적어요`);

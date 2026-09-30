@@ -2,11 +2,8 @@
 // 🌐 $1 복리 프로젝트 전용 엔진 (💎 시트 G,H열 원본 수치 100% 미러링 패치)
 // =========================================================
 
-const DOLLAR_TIMESTAMP = typeof timestamp !== 'undefined' ? timestamp : new Date().getTime();
-const DOLLAR_MASTER_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoSBQw1UoGbpQx22iY5kEbkOWsKXxYhpmUVHLv7a7CWYMjsCdUwh4PccuyZ8p79Ma6IvivG7xT4Lv/pub?gid=0&single=true&output=csv";
-const DOLLAR_MASTER_URL = DOLLAR_MASTER_BASE + "&t=" + DOLLAR_TIMESTAMP;
-const DOLLAR_PORT_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv";
-const DOLLAR_PORT_URL = DOLLAR_PORT_BASE + "&t=" + DOLLAR_TIMESTAMP;
+const DOLLAR_MASTER_URL = sheetUrl('DOLLAR_MASTER');
+const DOLLAR_PORT_URL = sheetUrl('DOLLAR_PORT');
 
 const dollarApp = {
     masterData: [],
@@ -52,18 +49,9 @@ function switchDollarSubTab(tabName) {
     }
 }
 
+// 공통 CSV 파서 사용 (빈 줄만 제외, ",,," 같은 빈 칸 줄은 유지해서 행 번호가 바뀌지 않게)
 function parseSimpleArrayCSV(text) {
-    if(!text) return [];
-    text = text.replace(/^\uFEFF/, '');
-    const lines = text.split('\n').filter(l => l.trim() !== '');
-    return lines.map(line => {
-        const values = line.split(',');
-        return values.map(val => {
-            val = val ? val.trim() : '';
-            if (val.startsWith('"') && val.endsWith('"')) val = val.substring(1, val.length - 1);
-            return val;
-        });
-    });
+    return parseCsv(text);
 }
 
 function cleanNumber(val) {
