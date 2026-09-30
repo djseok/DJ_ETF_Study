@@ -6,7 +6,7 @@
  *   · 기준 매도 %(예: +2) 이상으로 처음 올라가면 🔴 매도 구간 진입
  * 을 카톡(나에게 보내기)으로 알리고 '장중_신호' 탭에 기록합니다.
  *   · 같은 날 같은 ETF·같은 방향은 1번만 (기준에서 1%p 더 벌어지면 '추가 하락/상승' 으로 1번 더)
- *   · 가격: 야후(약 1분 지연) → 안 되면 MasterData D(전일종가)·E(현재가, GOOGLEFINANCE)
+ *   · 가격: 야후 → 네이버 실시간 → 안 되면 MasterData D(전일종가)·E(현재가, GOOGLEFINANCE)
  *   · 국내 휴장일(premarket_alert.gs 의 PM_KR_HOLIDAYS)은 쉼
  *
  * ▶ 처음 한 번: previewIntraday 실행(로그만) → installIntradayTrigger 실행
@@ -105,6 +105,16 @@ function idQuotes_(etfs, master) {
       if (t === today && m.regularMarketPrice > 0 && m.chartPreviousClose > 0) out[e.code] = { price: m.regularMarketPrice, prev: m.chartPreviousClose, src: '야후' };
     } catch (err) { }
   });
+  // 야후에 없는 종목(영문 섞인 새 코드 등) → 네이버 실시간
+  var miss = etfs.filter(function (e) { return !out[e.code]; }).map(function (e) { return e.code; });
+  if (miss.length) {
+    try {
+      var nv = UrlFetchApp.fetch('https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:' + miss.join(','), { muteHttpExceptions: true, headers: { 'User-Agent': HS_UA } });
+      JSON.parse(nv.getContentText('EUC-KR')).result.areas[0].datas.forEach(function (x) {
+        if (x.nv > 0 && x.sv > 0) out[String(x.cd).toUpperCase()] = { price: x.nv, prev: x.sv, src: '네이버' };
+      });
+    } catch (err) { }
+  }
   master.getRange(3, 1, master.getLastRow() - 2, 5).getValues().forEach(function (r) {
     if (String(r[0]).trim() !== '본체ETF') return;
     var code = String(r[1]).replace(/^KRX:/i, '').trim().toUpperCase();
