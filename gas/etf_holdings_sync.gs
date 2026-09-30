@@ -13,6 +13,10 @@
  *   2) syncHoldings      : 실제 갱신 (PDF_자동 · 매핑테이블 · MasterData · ETF_Quant_Signals)
  *   3) installHoldingsTrigger : 매일 아침 6시대 자동 실행
  *
+ * ▶ 새 ETF 추가: MasterData 맨 아래에 A '본체ETF', B 'KRX:코드', C 이름, H 대분류(성장/배당), I 중분류(해외/국내)만 적으면
+ *   다음 날 아침 자동으로 ⓐ D~G 가격 수식 ⓑ H가 '배당'이면 'ETF 배당주기'에 등록
+ *   ⓒ 이름에 '커버드콜'이 있고 H가 '배당'이면 마스터시트 '관리코드'에도 등록 (C열 주소는 밤 10시 자동 채우기)
+ *
  * ▶ 티커를 못 찾은 종목이 있으면
  *   '매핑테이블' A열에 로그에 나온 종목명 그대로, B열에 티커(예: NVDA, KRX:005930, TYO:6981)를 적고 다시 실행
  */
@@ -23,6 +27,8 @@ var HS_TAB_PDF = 'PDF_자동';
 var HS_TAB_SIGNAL = 'ETF_Quant_Signals';
 var HS_TAB_SIGNAL_BACKUP = 'ETF_Quant_Signals_백업';
 var HS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+var HS_TAB_SCHEDULE = 'ETF 배당주기';
+var HS_MASTER_SHEET_ID = '1UcY_X1GOMQAg9ceojcs2paiR6uIsXYV7NMy8IID7TDE'; // 동진_웹송출용_마스터시트 (관리코드 탭)
 var HS_DEFAULT_PARAMS = { buy: -1.5, sell: 2, beta: 1 }; // 새 ETF 의 기본 기준·베타
 
 // 현금·파생 분류 (가격 계산에서 제외)
@@ -49,6 +55,7 @@ function runHoldings_(dryRun) {
   var mapSheet = ss.getSheetByName(HS_TAB_MAP);
   var t0 = Date.now();
 
+  hsRegisterNewEtfs_(ss, master, dryRun);
   var targets = hsTargets_(master);
   Logger.log('대상 ETF ' + targets.length + '개');
 
@@ -147,6 +154,60 @@ function runHoldings_(dryRun) {
 // =========================================================
 // 대상 ETF · WiseReport
 // =========================================================
+// 새로 적은 본체ETF 줄 마무리: 가격 수식 · 배당주기 등록 · 관리코드 등록
+function hsRegisterNewEtfs_(ss, master, dryRun) {
+  var last = master.getLastRow();
+  if (last < 3) return;
+  var v = master.getRange(3, 1, last - 2, 9).getValues();
+  var norm = function (x) { return String(x || '').replace(/\s+/g, '').replace(/커브드/g, '커버드').toUpperCase(); };
+
+  var schedule = ss.getSheetByName(HS_TAB_SCHEDULE);
+  var schedNames = {};
+  if (schedule && schedule.getLastRow() >= 2) schedule.getRange(2, 1, schedule.getLastRow() - 1, 1).getValues().forEach(function (r) { schedNames[norm(r[0])] = true; });
+  var codeSheet = null, codeKeys = {};
+  try {
+    codeSheet = SpreadsheetApp.openById(HS_MASTER_SHEET_ID).getSheetByName('관리코드');
+    if (codeSheet && codeSheet.getLastRow() >= 1) codeSheet.getRange(1, 1, codeSheet.getLastRow(), 2).getDisplayValues().forEach(function (r) { codeKeys[norm(r[0])] = true; codeKeys[norm(r[1])] = true; });
+  } catch (e) { Logger.log('⚠️ 마스터시트 관리코드 탭을 열 수 없어요: ' + e); }
+
+  var log = [];
+  v.forEach(function (r, i) {
+    if (String(r[0]).trim() !== '본체ETF' || !r[1] || !r[2]) return;
+    var row = i + 3, name = String(r[2]).trim(), code = String(r[1]).replace(/^KRX:/i, '').trim().toUpperCase();
+    var isDiv = String(r[7]).trim() === '배당';
+
+    // ⓐ 가격 수식 (D열이 비어 있을 때만)
+    if (r[3] === '' || r[3] === null) {
+      log.push('💲 ' + name + ': MasterData ' + row + '행 D~G 가격 수식');
+      if (!dryRun) master.getRange(row, 4, 1, 4).setValues([[
+        '=IFERROR(GOOGLEFINANCE(SUBSTITUTE($B' + row + ',"KRX:",""), "closeyest"), 0)',
+        '=IFERROR(GOOGLEFINANCE(SUBSTITUTE($B' + row + ',"KRX:",""), "price"), D' + row + ')',
+        '=D' + row, '=E' + row]]);
+    }
+    // ⓑ 배당주기 등록
+    if (isDiv && schedule && !schedNames[norm(name)]) {
+      log.push('📅 ' + name + ': ETF 배당주기에 등록 (지급월·평균은 아침 7시 자동 갱신)');
+      if (!dryRun) {
+        var sr = schedule.getLastRow() + 1;
+        schedule.getRange(sr, 1, 1, 4).setValues([[name, '',
+          "=IFERROR(AVERAGEIF('ETF들 배당이력'!$A$1:$A, A" + sr + ", 'ETF들 배당이력'!$C$1:$C), 0)", '신규 (자동 등록 ' + hsToday_() + ')']]);
+      }
+      schedNames[norm(name)] = true;
+    }
+    // ⓒ 관리코드 등록 (월배당 커버드콜)
+    if (isDiv && /커버드콜|커브드콜/.test(name) && codeSheet && !codeKeys[norm(name)] && !codeKeys[norm(code)]) {
+      log.push('🧩 ' + name + ': 마스터시트 관리코드에 등록 (C열 주소는 밤 10시, 배당 수집은 자정 봇)');
+      if (!dryRun) {
+        var cr = codeSheet.getLastRow() + 1;
+        codeSheet.getRange(cr, 2).setNumberFormat('@');
+        codeSheet.getRange(cr, 1, 1, 2).setValues([[name, code]]);
+      }
+      codeKeys[norm(name)] = true; codeKeys[norm(code)] = true;
+    }
+  });
+  if (log.length) Logger.log('🆕 새 ETF 등록' + (dryRun ? ' (미리보기)' : '') + '\n' + log.join('\n'));
+}
+
 function hsTargets_(master) {
   var v = master.getRange(3, 1, master.getLastRow() - 2, 3).getValues();
   return v.filter(function (r) { return String(r[0]).trim() === '본체ETF' && r[1]; })
