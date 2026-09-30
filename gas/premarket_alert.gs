@@ -18,22 +18,45 @@
  *   3) kakaoExchangeCode 실행 → 토큰 저장 (KAKAO_AUTH_CODE 는 지워도 됨)
  *   4) previewPremarket 실행 → 계산 결과를 로그로 확인 (카톡·시트 안 씀)
  *   5) sendPremarketAlert 실행 → 실제 카톡 발송 테스트
- *   6) installPremarketTrigger 실행 → 매일 07시대 자동 (토·일 제외)
+ *   6) 스크립트 속성 GH_DISPATCH_TOKEN (GitHub 토큰, README 참고) → 이미지 A·B 를 GitHub Actions 가 그려서 카톡으로 발송
+ *   7) installPremarketTrigger 실행 → 평일 07:30 알림 · 16:10 실제 시가·종가 기록 · 05:40 선물 기준가 갱신
+ *
+ * 대시보드 예측 엔진(js/quant.js)과 같은 공식:
+ *   예상 = (1 + 베타 × 구성종목 변동) × (1 + 베타 × 선물 마감후 변동 × 미국 비중) × (1 + 환율 변동 × 해외 비중) − 1
+ *   VIX 는 곱하지 않고 20 이상이면 '변동성 경계' 배지
  */
 
 var PM_TAB_LOG = '개장전_예측';
 var PM_DASHBOARD_URL = 'https://djseok.github.io/DJ_ETF_Study/';
 var PM_KAKAO_MAX = 190; // 카카오 텍스트 메시지 1건 최대 200자
+var PM_REPO = 'djseok/DJ_ETF_Study';
+var PM_IMAGE_BASE = 'https://djseok.github.io/DJ_ETF_Study/alerts/';
+var PM_TAB_MACRO = 'Characteristic';
+var PM_FUT_ROWS = [ // Characteristic 행: 전일지수(D) = 미국장 마감 시점 가격 (이 스크립트가 매일 기록), 현재지수(E) = 실시간
+  { key: 'NQ', sym: 'NQ=F', ticker: '나스닥선물지수', name: '크롤링' },
+  { key: 'ES', sym: 'ES=F', ticker: 'S&P선물지수', name: 'ES=F' },
+  { key: 'YM', sym: 'YM=F', ticker: '다우선물지수', name: 'YM=F' }
+];
 
 function previewPremarket() { runPremarket_(true); }
 function sendPremarketAlert() { runPremarket_(false); }
 
 function installPremarketTrigger() {
+  var names = ['premarketDaily_', 'recordActualsDaily_', 'futuresRefDaily_'];
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'premarketDaily_') ScriptApp.deleteTrigger(t);
+    if (names.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('premarketDaily_').timeBased().everyDays(1).atHour(7).nearMinute(30).create();
-  Logger.log('✅ 평일 아침 7시 30분대 개장 전 예상가 알림 트리거 설치');
+  ScriptApp.newTrigger('recordActualsDaily_').timeBased().everyDays(1).atHour(16).nearMinute(10).create();
+  ScriptApp.newTrigger('futuresRefDaily_').timeBased().everyDays(1).atHour(5).nearMinute(40).create();
+  Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 05:40 선물 기준가 갱신');
+}
+
+function futuresRefDaily_() { pmUpdateFuturesRows_(pmFuturesAll_()); }
+function recordActualsDaily_() {
+  var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
+  if (dow >= 6) return;
+  recordActuals();
 }
 
 function premarketDaily_() {
@@ -62,8 +85,10 @@ function runPremarket_(dryRun) {
   if (!pmUsSessionFresh_()) { usMove = {}; usNote = '미국 휴장 → 종목 등락 0'; Logger.log('ℹ️ 지난밤 미국장 휴장으로 보고 종목 등락을 0으로 계산'); }
 
   // 선물 · 환율 · ETF 전일 종가
-  var fut = { NQ: pmFuturesSinceClose_('NQ=F'), ES: pmFuturesSinceClose_('ES=F'), YM: pmFuturesSinceClose_('YM=F') };
+  var futInfo = pmFuturesAll_();
+  var fut = { NQ: futInfo.NQ.delta, ES: futInfo.ES.delta, YM: futInfo.YM.delta };
   var fx = pmFxSinceKrClose_();
+  var vix = pmVix_();
   var etfClose = pmEtfCloses_(etfs, master);
 
   var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
@@ -105,13 +130,145 @@ function runPremarket_(dryRun) {
       ' [' + r.signal + '] (미국 ' + pmPct_(r.usRet) + ' × 비중 ' + r.usShare.toFixed(0) + '% · ' + r.futKey + ' 선물 ' + pmPct_(r.fut) + ' · β' + r.beta +
       (r.missing > 0.5 ? ' · 가격없음 ' + r.missing.toFixed(1) + '%' : '') + ')');
   });
-  var msgs = pmKakaoMessages_(rows, fut, fx, today, usNote);
-  Logger.log('카톡 ' + msgs.length + '건:\n' + msgs.join('\n---\n'));
+  Logger.log('VIX ' + (vix ? vix.toFixed(1) : '?') + (vix >= 20 ? ' ⚠️ 변동성 경계' : ''));
+  var weekly = pmWeeklyAccuracy_(ss);
+  if (weekly) Logger.log('📏 ' + weekly);
+  var payload = pmImagePayload_(rows, fut, fx, vix, usNote);
+  var summary = pmSummaryText_(rows, fut, fx, vix, usNote, weekly);
+  Logger.log('이미지 데이터: ' + payload.rows.length + '개 ETF · 국내 제외 ' + payload.domestic + '개');
+  Logger.log('카톡 요약:\n' + summary);
   if (dryRun) { Logger.log('[미리보기] 카톡·시트에 쓰지 않았어요.'); return; }
 
+  pmUpdateFuturesRows_(futInfo);
   pmWriteLog_(ss, rows, fut, fx);
-  msgs.forEach(function (m) { kakaoSendToMe_(m); Utilities.sleep(400); });
-  Logger.log('✅ 카톡 발송 완료');
+
+  // 이미지: GitHub Actions 에 그려달라고 요청 → 올라오면 카톡 사진 메시지 2건, 실패하면 글자 메시지로 대신
+  var sentImages = false;
+  var token = PropertiesService.getScriptProperties().getProperty('GH_DISPATCH_TOKEN');
+  if (token) {
+    try {
+      var urls = pmRequestImages_(token, payload);
+      if (urls) {
+        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상 등락률', summary, urls.A);
+        Utilities.sleep(400);
+        kakaoSendFeed_(payload.titleShort + ' 개장 전 예상가', '종목명 · 등락률 · 전일종가 · 오늘 예상가', urls.B);
+        sentImages = true;
+      }
+    } catch (e) { Logger.log('⚠️ 이미지 발송 실패 → 글자 메시지로 대신: ' + e); }
+  } else {
+    Logger.log('ℹ️ GH_DISPATCH_TOKEN 이 없어 이미지 없이 글자 메시지로 보냅니다.');
+  }
+  if (!sentImages) {
+    pmKakaoMessages_(rows, fut, fx, today, usNote).forEach(function (m) { kakaoSendToMe_(m); Utilities.sleep(400); });
+  }
+  Logger.log('✅ 카톡 발송 완료' + (sentImages ? ' (이미지 A·B)' : ' (글자)'));
+}
+
+// 이미지 그리기에 넘길 데이터
+function pmImagePayload_(rows, fut, fx, vix, usNote) {
+  var now = new Date();
+  var md = Utilities.formatDate(now, 'Asia/Seoul', 'M/d') + '(' + '월화수목금토일'.charAt(Number(Utilities.formatDate(now, 'Asia/Seoul', 'u')) - 1) + ')';
+  var show = rows.filter(function (r) { return r.hasPdf && !r.domestic; }).sort(function (a, b) { return b.pct - a.pct; });
+  return {
+    date: Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd'),
+    stamp: Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd_HHmm'),
+    title: md + ' ' + Utilities.formatDate(now, 'Asia/Seoul', 'HH:mm') + ' 기준',
+    titleShort: md,
+    chips: [['나스닥 선물', r2_(fut.NQ * 100)], ['S&P 선물', r2_(fut.ES * 100)], ['원/달러', r2_(fx * 100)]],
+    vix: vix ? Math.round(vix * 10) / 10 : 0,
+    note: usNote || '',
+    domestic: rows.length - show.length,
+    rows: show.map(function (r) { return [r.name, Math.round(r.close), r2_(r.pct), r.price, r.signal === 'BUY' || r.signal === 'SELL' ? r.signal : '']; })
+  };
+}
+function r2_(v) { return Math.round(v * 100) / 100; }
+
+// 사진 메시지 설명(요약)
+function pmSummaryText_(rows, fut, fx, vix, usNote, weekly) {
+  var sig = rows.filter(function (r) { return r.signal === 'BUY' || r.signal === 'SELL'; });
+  return ('선물(마감후) 나스닥 ' + pmPct_(fut.NQ * 100) + ' · 원/달러 ' + pmPct_(fx * 100) +
+    (vix >= 20 ? ' · ⚠️VIX ' + vix.toFixed(1) : '') + (usNote ? ' · ' + usNote : '') + '\n' +
+    (sig.length ? '신호: ' + sig.map(function (r) { return (r.signal === 'BUY' ? '🔵' : '🔴') + pmShort_(r.name); }).join(', ') : '신호: 모두 HOLD') +
+    (weekly ? '\n' + weekly : '')).slice(0, 190);
+}
+
+// GitHub Actions 에 이미지 요청 → GitHub Pages 에 올라올 때까지 기다림 (최대 약 5분)
+function pmRequestImages_(token, payload) {
+  var res = UrlFetchApp.fetch('https://api.github.com/repos/' + PM_REPO + '/dispatches', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+    payload: JSON.stringify({ event_type: 'premarket-image', client_payload: { data: JSON.stringify(payload) } })
+  });
+  if (res.getResponseCode() !== 204) throw new Error('GitHub 요청 실패 ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  var urls = { A: PM_IMAGE_BASE + payload.stamp + '_A.png', B: PM_IMAGE_BASE + payload.stamp + '_B.png' };
+  for (var i = 0; i < 20; i++) {
+    Utilities.sleep(15000);
+    var a = UrlFetchApp.fetch(urls.A, { muteHttpExceptions: true, followRedirects: true }).getResponseCode();
+    var b = UrlFetchApp.fetch(urls.B, { muteHttpExceptions: true, followRedirects: true }).getResponseCode();
+    if (a === 200 && b === 200) { Logger.log('🖼 이미지 준비 완료 (' + ((i + 1) * 15) + '초)'); return urls; }
+  }
+  Logger.log('⚠️ 5분 안에 이미지가 올라오지 않았어요 (GitHub Actions 실행 기록 확인)');
+  return null;
+}
+
+// =========================================================
+// 정확도: 실제 시가·종가 기록 (평일 16:10) · 주간 요약
+// =========================================================
+var PM_LOG_HEADER = ['날짜', 'ETF', '코드', '대분류', '전일종가', '예상등락(%)', '예상가', '신호', '미국종목등락(%)', '미국비중(%)', '선물', '선물변동(%)', '환율변동(%)', '해외비중(%)', '베타', '기준(매수/매도)',
+  '실제시가', '시가등락(%)', '오차(%p)', '실제종가', '종가등락(%)'];
+
+function recordActuals() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(PM_TAB_LOG);
+  if (!sh || sh.getLastRow() < 2) return;
+  if (sh.getLastColumn() < PM_LOG_HEADER.length) sh.getRange(1, 1, 1, PM_LOG_HEADER.length).setValues([PM_LOG_HEADER]);
+  var n = sh.getLastRow() - 1;
+  var v = sh.getRange(2, 1, n, PM_LOG_HEADER.length).getDisplayValues();
+  var since = Utilities.formatDate(new Date(Date.now() - 7 * 864e5), 'Asia/Seoul', 'yyyy-MM-dd');
+  var todo = [];
+  v.forEach(function (r, i) { if (r[0] >= since && r[16] === '' && Number(String(r[4]).replace(/,/g, '')) > 0) todo.push(i); });
+  if (!todo.length) { Logger.log('기록할 실제값 없음'); return; }
+  var codes = {};
+  todo.forEach(function (i) { codes[v[i][2]] = true; });
+  var list = Object.keys(codes);
+  var res = hsFetchAll_(list.map(function (c) { return { url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + c + '.KS?range=1mo&interval=1d', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true }; }));
+  var bars = {};
+  list.forEach(function (c, k) {
+    try {
+      var r = JSON.parse(res[k].getContentText()).chart.result[0], q = r.indicators.quote[0];
+      bars[c] = {};
+      r.timestamp.forEach(function (t, j) {
+        if (q.open[j] && q.close[j]) bars[c][Utilities.formatDate(new Date(t * 1000), 'Asia/Seoul', 'yyyy-MM-dd')] = { o: q.open[j], c: q.close[j] };
+      });
+    } catch (e) { }
+  });
+  var done = 0;
+  todo.forEach(function (i) {
+    var r = v[i], b = bars[r[2]] && bars[r[2]][r[0]];
+    if (!b) return;
+    var prev = Number(String(r[4]).replace(/,/g, '')), pred = Number(r[5]);
+    var openPct = (b.o / prev - 1) * 100, closePct = (b.c / prev - 1) * 100;
+    sh.getRange(i + 2, 17, 1, 5).setValues([[Math.round(b.o), r2_(openPct), r2_(pred - openPct), Math.round(b.c), r2_(closePct)]]);
+    done++;
+  });
+  Logger.log('✅ 실제 시가·종가 ' + done + '건 기록');
+}
+
+// 월요일 알림에 붙일 지난주 요약 (해외 ETF, 오차 = 예상 − 실제 시가 등락)
+function pmWeeklyAccuracy_(ss) {
+  if (Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u')) !== 1) return '';
+  var sh = ss.getSheetByName(PM_TAB_LOG);
+  if (!sh || sh.getLastRow() < 2 || sh.getLastColumn() < 19) return '';
+  var since = Utilities.formatDate(new Date(Date.now() - 7 * 864e5), 'Asia/Seoul', 'yyyy-MM-dd');
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 19).getDisplayValues().filter(function (r) { return r[0] >= since && r[18] !== '' && Number(r[9]) > 0; });
+  if (!v.length) return '';
+  var absErr = 0, hit = 0, cnt = 0;
+  v.forEach(function (r) {
+    var pred = Number(r[5]), act = Number(r[17]);
+    absErr += Math.abs(Number(r[18]));
+    if (Math.abs(act) >= 0.05) { cnt++; if ((pred >= 0) === (act >= 0)) hit++; }
+  });
+  return '지난주 정확도: 평균 오차 ' + (absErr / v.length).toFixed(2) + '%p · 방향 적중 ' + (cnt ? Math.round(hit / cnt * 100) : 0) + '% (' + v.length + '건)';
 }
 
 // 본체ETF 목록 (MasterData A='본체ETF', H=대분류)
@@ -164,7 +321,7 @@ function pmDailyMoves_(tickers) {
 }
 
 // 선물: 미국 정규장 마감(뉴욕 16:00) 시점 대비 지금
-function pmFuturesSinceClose_(sym) {
+function pmFuturesInfo_(sym) {
   try {
     var r = pmChart_(sym, '5d', '5m');
     var ts = r.timestamp, c = r.indicators.quote[0].close;
@@ -175,8 +332,39 @@ function pmFuturesSinceClose_(sym) {
       var hm = Utilities.formatDate(new Date(ts[i] * 1000), 'America/New_York', 'HH:mm');
       if (hm >= '15:50' && hm <= '15:55') ref = c[i]; // 15:55 봉의 종가 ≈ 16:00
     }
-    return ref && now ? now / ref - 1 : 0;
-  } catch (e) { Logger.log('⚠️ 선물 ' + sym + ' 조회 실패: ' + e); return 0; }
+    return { ref: ref, now: now, delta: ref && now ? now / ref - 1 : 0 };
+  } catch (e) { Logger.log('⚠️ 선물 ' + sym + ' 조회 실패: ' + e); return { ref: null, now: null, delta: 0 }; }
+}
+
+function pmFuturesAll_() {
+  var out = {};
+  PM_FUT_ROWS.forEach(function (f) { out[f.key] = pmFuturesInfo_(f.sym); });
+  return out;
+}
+
+// 대시보드용: Characteristic 의 선물 행 전일지수(D)에 '미국장 마감 시점 가격'을 값으로 기록 (없으면 행 추가)
+function pmUpdateFuturesRows_(info) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PM_TAB_MACRO);
+  if (!sh) return;
+  var last = sh.getLastRow();
+  var v = sh.getRange(1, 1, last, 3).getValues();
+  PM_FUT_ROWS.forEach(function (f) {
+    var ref = info[f.key] && info[f.key].ref;
+    if (!ref) return;
+    var row = 0;
+    for (var i = 0; i < v.length; i++) if (String(v[i][1]).trim() === f.ticker) { row = i + 1; break; }
+    if (!row) {
+      row = sh.getLastRow() + 1;
+      sh.getRange(row, 1, 1, 5).setValues([['지표', f.ticker, f.name, ref, '=IFERROR(GET_YAHOO_FUTURES("' + f.sym + '", "price"), D' + row + ')']]);
+      v.push(['지표', f.ticker, f.name]);
+    } else {
+      sh.getRange(row, 4).setValue(ref);
+    }
+  });
+}
+
+function pmVix_() {
+  try { return pmChart_('^VIX', '5d', '1d').meta.regularMarketPrice || 0; } catch (e) { return 0; }
 }
 
 // 원/달러: 어제(마지막 국내 영업일) 15:30 대비 지금
@@ -252,7 +440,7 @@ function pmWriteLog_(ss, rows, fut, fx) {
   var sh = ss.getSheetByName(PM_TAB_LOG);
   if (!sh) {
     sh = ss.insertSheet(PM_TAB_LOG);
-    sh.getRange(1, 1, 1, 16).setValues([['날짜', 'ETF', '코드', '대분류', '전일종가', '예상등락(%)', '예상가', '신호', '미국종목등락(%)', '미국비중(%)', '선물', '선물변동(%)', '환율변동(%)', '해외비중(%)', '베타', '기준(매수/매도)']]);
+    sh.getRange(1, 1, 1, PM_LOG_HEADER.length).setValues([PM_LOG_HEADER]);
     sh.setFrozenRows(1);
   }
   var out = rows.map(function (r) {
@@ -260,6 +448,7 @@ function pmWriteLog_(ss, rows, fut, fx) {
       Math.round(r.usShare), r.futKey, Math.round(r.fut * 100) / 100, Math.round(r.fx * 100) / 100, Math.round(r.foreignShare), r.beta, r.buy + ' / ' + r.sell];
   });
   var start = sh.getLastRow() + 1;
+  sh.getRange(start, 1, out.length, 1).setNumberFormat('@'); // 날짜는 글자로 (비교·조회용)
   sh.getRange(start, 3, out.length, 1).setNumberFormat('@');
   sh.getRange(start, 1, out.length, 16).setValues(out);
 }
@@ -335,6 +524,21 @@ function kakaoAccessToken_() {
   if (j.refresh_token) p.setProperty('KAKAO_REFRESH_TOKEN', j.refresh_token); // 만료 1개월 전부터 새 토큰이 옴
   PM_KAKAO_TOKEN_CACHE = j.access_token;
   return j.access_token;
+}
+
+// 사진 메시지 (이미지는 GitHub Pages 주소 — 카카오 앱 플랫폼에 djseok.github.io 등록 필요)
+function kakaoSendFeed_(title, desc, imageUrl) {
+  var link = { web_url: imageUrl, mobile_web_url: imageUrl };
+  var tpl = {
+    object_type: 'feed',
+    content: { title: String(title).slice(0, 60), description: String(desc).slice(0, 190), image_url: imageUrl, link: link },
+    buttons: [{ title: '원본 보기', link: link }, { title: '대시보드', link: { web_url: PM_DASHBOARD_URL, mobile_web_url: PM_DASHBOARD_URL } }]
+  };
+  var res = UrlFetchApp.fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
+    method: 'post', headers: { Authorization: 'Bearer ' + kakaoAccessToken_() },
+    payload: { template_object: JSON.stringify(tpl) }, muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) throw new Error('카톡 사진 메시지 실패: ' + res.getContentText());
 }
 
 function kakaoSendToMe_(text) {

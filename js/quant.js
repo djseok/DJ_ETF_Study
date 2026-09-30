@@ -5,7 +5,8 @@
 let currentMainFilter = 'all';
 let currentSubFilter = 'all';
 let currentSearchText = '';
-let globalFuturesDelta = 0; // 🌟 선물 변동률 저장 변수
+let globalFuturesDelta = 0; // 🌟 나스닥 선물: 미국장 마감(뉴욕 16:00) 이후 변동률
+let globalFutures = { NQ: 0, ES: 0, YM: 0 }; // 나스닥 · S&P · 다우 선물 (마감 이후 변동률)
 
 function extractGlobalMacroVariables() {
     if (!macroData || macroData.length === 0) return;
@@ -30,9 +31,13 @@ function extractGlobalMacroVariables() {
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
-        // 🌟 선물 데이터 캐치 (시트 '나스닥선물지수' 또는 '크롤링' 행)
-        if (ticker === '나스닥선물지수' || name === '크롤링' || combinedText.includes('크롤링')) {
+        // 🌟 선물 (Characteristic: 전일지수 = 미국장 마감 시점 가격, 현재지수 = 지금) → 마감 이후 변동률
+        if (ticker === 'S&P선물지수' || ticker === '다우선물지수') {
+            globalFutures[ticker === 'S&P선물지수' ? 'ES' : 'YM'] = prev > 0 ? (live - prev) / prev : 0;
+        }
+        else if (ticker === '나스닥선물지수' || name === '크롤링') {
             globalFuturesDelta = prev > 0 ? (live - prev) / prev : 0;
+            globalFutures.NQ = globalFuturesDelta;
             if(document.getElementById('macro-futures')) {
                 document.getElementById('macro-futures').innerHTML = `
                     <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toLocaleString()}</div>
@@ -221,19 +226,22 @@ function renderTargetAssetDashboard(target) {
     if(document.getElementById('threshSellUI')) document.getElementById('threshSellUI').innerText = `+${tSell}%`;
 
     let rawDelta = 0, tableHtml = "";
-    // 비중 구분: 현금(티커 없음) · 가격 없음(계산 제외) · 국내 · 해외
+    // 비중 구분: 현금(티커 없음) · 가격 없음(계산 제외) · 국내 · 미국 · 그 밖의 해외(일본·중국 등)
     const isDomestic = (t) => /^(KRX:|KOSDAQ:)?(\d[0-9A-Z]{5}|\d{1,5})$/i.test(String(t || '').trim()); // 숫자로 저장돼 앞자리 0이 빠진 코드(88980)도 국내
-    let wTotal = 0, wMissing = 0, wForeign = 0, missingNames = [];
+    const isUs = (t) => { t = String(t || '').trim(); return t !== '' && !isDomestic(t) && !/^(TYO|TPE|HKG|SHE|SHA):|\.(T|TW|HK|SZ|SS)$/i.test(t); };
+    let wTotal = 0, wMissing = 0, wForeign = 0, wUs = 0, missingNames = [];
     comps.forEach(c => {
         const hasTicker = String(c.ticker || '').trim() !== '';
         wTotal += c.w;
         if (hasTicker && !(c.prev > 0)) { wMissing += c.w; missingNames.push(c.name); return; }
         if (hasTicker && !isDomestic(c.ticker)) wForeign += c.w;
+        if (isUs(c.ticker)) wUs += c.w;
     });
     // 가격 없는 종목은 빼고 나머지 비중으로 다시 맞춤 (예: 합계 100% 중 3%가 가격 없음 → 97% 기준으로 환산)
     const priced = wTotal - wMissing;
     const scale = priced > 0 ? 100 / priced : 1;
     const foreignShare = priced > 0 ? Math.min(1, wForeign / priced) : 1;
+    const usShare = priced > 0 ? Math.min(1, wUs / priced) : 0;
     
     comps.forEach(c => {
         let live = (isNaN(c.live) || c.live === 0) ? c.prev : c.live;
@@ -255,14 +263,15 @@ function renderTargetAssetDashboard(target) {
     });
     if(document.getElementById('componentTableBody')) document.getElementById('componentTableBody').innerHTML = tableHtml;
 
-    let vMult = (globalVixValue >= 25) ? 1.30 : (globalVixValue >= 20 ? 1.15 : 1.0);
-    
-    // 🌟 1. 본장 예측: 구성종목 변동 × 베타, 환율은 해외 비중만큼만 반영
-    let baseRet = ((1 + rawDelta * beta) * (1 + globalFxDelta * foreignShare) - 1) * 100 * vMult;
-    
-    // 🌟 2. 나스닥 선물 믹스 (해외 비중 부분만: 본장 90% + 선물 10%, 국내 비중은 본장 그대로)
-    const futMix = 0.1 * foreignShare;
-    let finalRet = (baseRet * (1 - futMix)) + ((globalFuturesDelta * 100) * futMix);
+    // 🌟 예측 공식 (개장 전 카톡 알림 premarket_alert.gs 와 동일)
+    //   예상 = (1 + 베타 × 구성종목 변동) × (1 + 베타 × 선물 마감후 변동 × 미국 비중) × (1 + 환율 변동 × 해외 비중) − 1
+    //   선물: 이름에 S&P → S&P 선물, 다우 → 다우 선물, 나머지는 나스닥 선물 / VIX 는 곱하지 않고 경고 배지로만 표시
+    const futKey = /S&P|S＆P/i.test(target) ? 'ES' : (/다우/.test(target) ? 'YM' : 'NQ');
+    const futDelta = globalFutures[futKey] || 0;
+    const futLabel = { NQ: '나스닥', ES: 'S&P', YM: '다우' }[futKey];
+    let baseRet = ((1 + rawDelta * beta) * (1 + globalFxDelta * foreignShare) - 1) * 100;
+    let finalRet = ((1 + rawDelta * beta) * (1 + beta * futDelta * usShare) * (1 + globalFxDelta * foreignShare) - 1) * 100;
+    const vixWarn = globalVixValue >= 20;
     
     // UI 업데이트
     if(document.getElementById('mathPure')) document.getElementById('mathPure').innerText = `${(rawDelta*100).toFixed(2)}%`;
@@ -274,12 +283,14 @@ function renderTargetAssetDashboard(target) {
             ? `⚠️ 가격 없는 ${missingNames.length}개 종목(비중 ${wMissing.toFixed(1)}%)을 빼고 나머지 비중으로 환산: ${missingNames.slice(0, 5).join(', ')}${missingNames.length > 5 ? ' 외' : ''}`
             : `구성종목 ${comps.length}개 · 비중 합계 ${wTotal.toFixed(1)}% · 해외 비중 ${(foreignShare*100).toFixed(0)}%`;
     }
-    if(document.getElementById('mathVix')) document.getElementById('mathVix').innerText = `${vMult}x`;
+    if(document.getElementById('mathVix')) {
+        const el = document.getElementById('mathVix');
+        el.innerText = vixWarn ? `${Number(globalVixValue).toFixed(1)} ⚠️ 변동성 경계` : `${Number(globalVixValue).toFixed(1)}`;
+    }
     
     if(document.getElementById('mathBase')) document.getElementById('mathBase').innerText = `${baseRet.toFixed(2)}%`;
-    if(document.getElementById('mathFutures')) document.getElementById('mathFutures').innerText = `${(globalFuturesDelta*100).toFixed(2)}%`;
-    if(document.getElementById('mathBaseMix')) document.getElementById('mathBaseMix').innerText = Math.round((1 - futMix) * 100);
-    if(document.getElementById('mathFutMix')) document.getElementById('mathFutMix').innerText = Math.round(futMix * 100);
+    if(document.getElementById('mathFutures')) document.getElementById('mathFutures').innerText = `${futLabel} ${(futDelta*100).toFixed(2)}%`;
+    if(document.getElementById('mathFutMix')) document.getElementById('mathFutMix').innerText = `β × 미국 ${(usShare*100).toFixed(0)}%`;
 
     if(document.getElementById('predictedChange')) {
         document.getElementById('predictedChange').innerText = `${finalRet>=0?'+':''}${finalRet.toFixed(2)}%`;
