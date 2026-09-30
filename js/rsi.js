@@ -119,19 +119,9 @@ async function fetchAndCalculateRSI() {
         const resultBox = document.getElementById('rsiResultBox');
         if (resultBox) resultBox.classList.add('hidden');
         
-        let queryTicker = ticker;
-        if (/^\d{6}$/.test(ticker)) queryTicker = ticker + ".KS";
-
-        // 동진님 전용 GAS 웹 앱 URL 적용
-        const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
-        const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}`;
-
-        const response = await fetch(targetUrl);
-        if (!response.ok) throw new Error(`서버 응답 오류: ${response.status}`);
-        
-        const data = await response.json(); 
-        if (data.error) throw new Error(`야후 파이낸스 데이터 호출 오류: ${data.error}`);
-        if (!data.chart || !data.chart.result || !data.chart.result[0].indicators.quote[0].close) {
+        // 6자리 코드는 .KS(코스피) → .KQ(코스닥) 순서로 자동 시도
+        const { data } = await fetchPriceChart(ticker);
+        if (!data.chart.result[0].indicators.quote[0].close) {
             throw new Error("유효한 주가 데이터를 반환하지 않았습니다.");
         }
 
@@ -141,7 +131,7 @@ async function fetchAndCalculateRSI() {
         
     } catch (err) {
         console.error("RSI Fetch Error:", err);
-        alert(`데이터를 가져올 수 없습니다. 티커(${ticker})가 정확한지 확인해 주세요.`);
+        alert(`데이터를 가져올 수 없습니다. 티커(${ticker})가 정확한지 확인해 주세요.\n${err.message}`);
     } finally {
         if (btn) {
             btn.disabled = false;

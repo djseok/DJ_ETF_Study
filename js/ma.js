@@ -32,35 +32,16 @@ async function runMACalculation() {
     try {
         let dates = [];
         let prices = [];
-        let fetchSuccess = false;
-        
-        let isKorean = /^\d{6}$/.test(tickerInput) || tickerInput.endsWith('.KS');
-        let queryTicker = /^\d{6}$/.test(tickerInput) ? tickerInput + ".KS" : tickerInput;
+        // 가격 서버(GAS → 야후 파이낸스)에서 2년치 조회. 6자리 코드는 .KS → .KQ 순서로 자동 시도
+        const { data } = await fetchPriceChart(tickerInput, { range: '2y' });
 
-        // 가격 서버(GAS → 야후 파이낸스)에서 2년치 조회 (FMP API는 키 노출 문제로 제거)
-        if (!fetchSuccess) {
-            // 💡 동진님이 과거에 배포하셨던 완벽한 GAS 프록시 URL 적용
-            const GAS_PROXY_URL = APP_CONFIG.PRICE_PROXY_URL;
-            const targetUrl = `${GAS_PROXY_URL}?ticker=${queryTicker}&range=2y`;
-
-            const response = await fetch(targetUrl);
-            if (!response.ok) throw new Error("서버 응답 실패");
-            
-            const data = await response.json();
-            
-            if (data.error) throw new Error(data.error);
-            if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("서버 혼잡. 잠시 후 다시 시도해주세요.");
-
-            const timestamps = data.chart.result[0].timestamp;
-            const quote = data.chart.result[0].indicators.quote[0];
-            const rawPrices = quote.close; 
-            
-            for(let i = 0; i < rawPrices.length; i++) {
-                if(rawPrices[i] !== null && rawPrices[i] !== undefined) {
-                    const d = new Date(timestamps[i] * 1000);
-                    dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
-                    prices.push(rawPrices[i]);
-                }
+        const timestamps = data.chart.result[0].timestamp;
+        const rawPrices = data.chart.result[0].indicators.quote[0].close;
+        for (let i = 0; i < rawPrices.length; i++) {
+            if (rawPrices[i] !== null && rawPrices[i] !== undefined) {
+                const d = new Date(timestamps[i] * 1000);
+                dates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+                prices.push(rawPrices[i]);
             }
         }
 

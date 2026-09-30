@@ -38,6 +38,60 @@ function priceProxyUrl(ticker, params) {
 }
 
 // ---------------------------------------------------------
+// 한국 종목 코스피(.KS)·코스닥(.KQ) 자동 판별
+//   '005930'    → ['005930.KS', '005930.KQ']   (6자리는 둘 다 시도)
+//   '247540.KS' → ['247540.KS', '247540.KQ']   (틀리게 적어도 반대쪽 재시도)
+//   'NVDA'      → ['NVDA']
+// ---------------------------------------------------------
+function priceTickerCandidates(input) {
+    var t = String(input || '').trim().toUpperCase().replace(/^KRX:/, '');
+    var m = t.match(/^(\d[0-9A-Z]{5})(?:\.(KS|KQ))?$/);
+    if (!m) return t ? [t] : [];
+    var code = m[1];
+    return m[2] === 'KQ' ? [code + '.KQ', code + '.KS'] : [code + '.KS', code + '.KQ'];
+}
+
+// 가격 서버 응답에 실제 가격이 들어 있는지
+function hasPriceChart(data) {
+    var r = data && !data.error && data.chart && data.chart.result && data.chart.result[0];
+    return !!(r && r.timestamp && r.timestamp.length);
+}
+
+// 가격 조회 (.KS에 없으면 .KQ로 자동 재시도)
+//   const { data, ticker } = await fetchPriceChart('247540', { range: '5y' }, { timeoutMs: 8000 });
+//   → ticker 는 실제로 데이터가 나온 티커 (예: '247540.KQ')
+async function fetchPriceChart(input, params, opts) {
+    var candidates = priceTickerCandidates(input);
+    if (!candidates.length) throw new Error('종목코드를 입력해 주세요.');
+    var timeoutMs = (opts && opts.timeoutMs) || 0;
+    var lastReason = '';
+
+    for (var i = 0; i < candidates.length; i++) {
+        var ticker = candidates[i];
+        var controller = timeoutMs ? new AbortController() : null;
+        var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+        try {
+            var res = await fetch(priceProxyUrl(ticker, params), controller ? { signal: controller.signal } : {});
+            if (!res.ok) { lastReason = '가격 서버 응답 실패 (' + res.status + ')'; continue; }
+            var data = await res.json();
+            if (hasPriceChart(data)) return { data: data, ticker: ticker };
+            lastReason = describePriceError(data) || '데이터 없음';
+        } catch (e) {
+            lastReason = e.name === 'AbortError' ? '가격 서버 응답 시간 초과' : e.message;
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
+    var tried = candidates.length > 1 ? ' (' + candidates.join(', ') + ' 모두 조회)' : '';
+    throw new Error(candidates[0].replace(/\.K[SQ]$/, '') + ' 가격 데이터를 찾지 못했어요' + tried + (lastReason ? ': ' + lastReason : ''));
+}
+
+// 화면 표시용: '247540.KQ' → '247540'
+function stripKrxSuffix(ticker) {
+    return String(ticker || '').replace(/\.K[SQ]$/, '');
+}
+
+// ---------------------------------------------------------
 // CSV 파서 (따옴표 안의 쉼표·줄바꿈, "" 이스케이프까지 처리)
 // options
 //   trim            : 칸 앞뒤 공백 제거 (기본 true)
