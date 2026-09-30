@@ -360,9 +360,13 @@ function hsAppendMaster_(master, rows) {
     var cur = { 대만: 'TWD', 홍콩: 'HKD', 중국: 'CNY' }[mk];
     var fx = mk === '한국' ? '' : (mk === '일본' ? '*Characteristic!$E$4' : (mk === '미국' ? '*Characteristic!$E$3' :
       '*GOOGLEFINANCE("CURRENCY:' + cur + 'KRW")'));
-    return [r[0], r[1], r[2],
-      '=IFERROR(GOOGLEFINANCE($B' + n + ',"closeyest"), 0)',
-      '=IFERROR(GOOGLEFINANCE($B' + n + ',"price"), 0)',
+    // 일본 종목은 GOOGLEFINANCE 가 값을 못 줘서 기존 키옥시아 줄처럼 야후 페이지(IMPORTXML)로 조회
+    var ysym = hsCodeKey_(r[1]);
+    var px = mk === '일본'
+      ? ['=IFERROR(VALUE(SUBSTITUTE(IMPORTXML("https://finance.yahoo.com/quote/' + ysym + '","//fin-streamer[@data-field=\'regularMarketPreviousClose\']"),",","")), 0)',
+         '=IFERROR(VALUE(SUBSTITUTE(IMPORTXML("https://finance.yahoo.com/quote/' + ysym + '","//*[@data-testid=\'qsp-price\']"),",","")), 0)']
+      : ['=IFERROR(GOOGLEFINANCE($B' + n + ',"closeyest"), 0)', '=IFERROR(GOOGLEFINANCE($B' + n + ',"price"), 0)'];
+    return [r[0], r[1], r[2], px[0], px[1],
       mk === '한국' ? '=D' + n : '=ROUND($D' + n + fx + ')',
       mk === '한국' ? '=E' + n : '=ROUND($E' + n + fx + ')'];
   });
