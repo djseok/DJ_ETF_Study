@@ -30,7 +30,7 @@ function doPost(e) {
     var member = String(req.member || '').trim();
     huCheckPin_(member, String(req.pin || ''));
     if (req.action === 'parse') return huJson_(huParse_(member, req.images || []));
-    if (req.action === 'apply') return huJson_(huApply_(member, req.token, req.pick || null, !!req.removeMissing));
+    if (req.action === 'apply') return huJson_(huApply_(member, req.token, req.pick || null, !!req.removeMissing, req.edits || {}));
     if (req.action === 'current') return huJson_({ ok: true, holdings: huCurrent_(member).rows });
     throw new Error('알 수 없는 요청');
   } catch (err) {
@@ -129,7 +129,7 @@ function huGemini_(images, knownNames) {
 // ---------------------------------------------------------
 // ② 반영
 // ---------------------------------------------------------
-function huApply_(member, token, pick, removeMissing) {
+function huApply_(member, token, pick, removeMissing, edits) {
   var cache = CacheService.getScriptCache();
   var saved = JSON.parse(cache.get('HU_' + token) || 'null');
   if (!saved || saved.member !== member) throw new Error('확인 시간이 지났어요. 다시 올려 주세요 (15분)');
@@ -137,6 +137,14 @@ function huApply_(member, token, pick, removeMissing) {
   if (!lock.tryLock(20000)) throw new Error('다른 반영이 진행 중이에요. 잠시 뒤 다시 시도해 주세요');
   try {
     var cur = huCurrent_(member), sh = cur.sheet, log = [];
+    // 확인 화면에서 고친 수량·평단 반영 (숫자일 때만)
+    saved.rows.forEach(function (r) {
+      var e = edits[r.key];
+      if (!e) return;
+      if (isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty);
+      if (isFinite(e.avg) && e.avg > 0) r.newAvg = Math.round(e.avg);
+      if (r.status === 'same' && (r.newQty !== r.oldQty || r.newAvg !== r.oldAvg)) r.status = 'change';
+    });
     var chosen = saved.rows.filter(function (r) { return (r.status === 'change' || r.status === 'new') && (!pick || pick.indexOf(r.key) >= 0); });
     chosen.forEach(function (r) {
       var c = cur.byKey[r.key];
