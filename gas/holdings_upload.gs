@@ -80,6 +80,8 @@ function huParse_(member, images) {
   Object.keys(parsed).forEach(function (k) {
     var p = parsed[k], c = p.matched ? cur.byKey[k] : null;
     seen[k] = true;
+    // 계산으로 구한 평단은 반올림 오차(±0.1%)가 생기므로, 그 안이면 지금 평단을 그대로 둠
+    if (c && p.how && c.avg > 0 && Math.abs(p.avg - c.avg) / c.avg < 0.001) { p.avg = c.avg; p.how = ''; }
     var status = !p.matched ? 'unknown' : (!c ? 'new' : ((c.qty !== p.qty || Math.round(c.avg) !== Math.round(p.avg)) ? 'change' : 'same'));
     rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status,
       oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? Math.round(c.avg) : null, newAvg: Math.round(p.avg), avgHow: p.how });
