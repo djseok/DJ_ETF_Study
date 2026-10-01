@@ -169,3 +169,13 @@ GitHub Actions `Tests` 가 PR 마다 `tests/parity.test.js` 로 확인하니, �
 ## ✅ 자동화 실행 기록
 
 각 자동 실행이 끝나면 `wrMarkRun_` 이 스크립트 속성 `RUNLOG` 에 날짜를 남기고, 금요일 주간 리포트 맨 아래에 '07:30 알림 5/5 · …' 한 줄로 보여줍니다 (따로 알림은 보내지 않음).
+
+## 📸 잔고 캡처 입력 — `holdings_upload.gs` (**새 독립 Apps Script 프로젝트**) + `upload.html`
+
+멤버가 증권사 앱 잔고 화면을 캡처해 올리면 Gemini 가 종목·수량·평단을 읽고, 바뀔 내용을 확인한 뒤 개인일기장 `{이름}포토폴리오` 탭 D·E열(평단·수량)을 고치거나 새 줄을 추가합니다. 이미지는 저장하지 않고, 반영 기록만 관리시트 `잔고_업로드_기록` 탭에 남습니다.
+
+1. script.google.com → 새 프로젝트 → `holdings_upload.gs` 붙여넣기
+2. 스크립트 속성: `GEMINI_API_KEY`(새로 발급) · `MEMBER_PINS` = `{"D":"…","S":"…","J":"…"}` · (선택) `GEMINI_MODEL`
+3. `testSetup` 실행 → 권한 허용, 로그 확인
+4. 배포 → 새 배포 → 웹 앱 · 실행: 나 · 액세스: 모든 사용자 → URL 을 `js/common.js` 의 `APP_CONFIG.UPLOAD_URL` 에 입력
+5. 멤버에게 `https://djseok.github.io/DJ_ETF_Study/upload.html` 과 각자 비밀번호 전달
