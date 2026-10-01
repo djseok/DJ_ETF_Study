@@ -52,11 +52,12 @@ function installPremarketTrigger() {
   Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 06:20 선물·EWY 기준값 갱신');
 }
 
-function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmEwyInfo_(); pmUpdateFuturesRows_(info); }
+function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmEwyInfo_(); pmUpdateFuturesRows_(info); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
 function recordActualsDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
   if (dow >= 6 || pmKrHoliday_()) return;
   recordActuals();
+  if (typeof wrMarkRun_ === 'function') wrMarkRun_('actuals');
 }
 
 function premarketDaily_() {
@@ -64,6 +65,7 @@ function premarketDaily_() {
   if (dow >= 6) return;
   if (pmKrHoliday_()) { Logger.log('ℹ️ 오늘은 국내 증시 휴장일이라 알림을 보내지 않아요.'); return; }
   runPremarket_(false);
+  if (typeof wrMarkRun_ === 'function') wrMarkRun_('premarket');
 }
 
 // 국내 증시(KRX) 평일 휴장일 — 해마다 12월에 다음 해 날짜 추가 (스크립트 속성 PM_KR_HOLIDAYS 에 'yyyy-MM-dd,…' 로 더할 수도 있음)

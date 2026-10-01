@@ -36,7 +36,7 @@ var HS_CASH_RE = /(현금|예금|증거금|미수|미지급|원천세|분배금|
 var HS_DERIV_RE = /(선물|옵션|위클리|FUTURE|\bFUT\b|E-?MINI|\bCALL\b|\bPUT\b|\bINDEX$|\s[CP]\s\d{3,}|\d{2}\/\d{2}\/\d{2,4})/i;
 
 function previewHoldings() { runHoldings_(true); }
-function syncHoldings() { runHoldings_(false); }
+function syncHoldings() { runHoldings_(false); if (typeof wrMarkRun_ === 'function') wrMarkRun_('holdings'); }
 
 function installHoldingsTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {

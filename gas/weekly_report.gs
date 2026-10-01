@@ -69,6 +69,7 @@ function runWeekly_(dryRun) {
 
   // 4) 예측 · 신호
   var acc = wrAccuracy_(ss, monS, friS);
+  var status = wrRunStatus_(mon);
   var signals = wrSignals_(ss, monS, friS);
 
   var payload = {
@@ -77,7 +78,7 @@ function runWeekly_(dryRun) {
     chips: chips, vix: 0, note: '',
     etfs: etfRows, members: members, divWeek: Math.round(divWeek),
     divNext: next.items.slice(0, 5), divNextTotal: Math.round(next.total),
-    acc: acc, signals: signals
+    acc: acc, signals: signals, status: status
   };
   Logger.log(JSON.stringify(payload));
   if (dryRun) { Logger.log('[미리보기] 카톡·기록 안 함'); return; }
@@ -101,6 +102,40 @@ function runWeekly_(dryRun) {
   }
   if (!ok) kakaoSendToMe_('📅 ' + payload.title + '\n' + summary);
   Logger.log('✅ 주간 리포트 발송' + (ok ? ' (이미지)' : ' (글자)'));
+}
+
+// ── 자동화 실행 기록 (각 스크립트가 끝날 때 wrMarkRun_ 호출 → 스크립트 속성 RUNLOG) ──
+function wrMarkRun_(key) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var log = JSON.parse(props.getProperty('RUNLOG') || '{}');
+    var d = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+    var list = (log[key] || []).filter(function (x) { return x !== d; });
+    list.push(d);
+    log[key] = list.slice(-15);
+    props.setProperty('RUNLOG', JSON.stringify(log));
+  } catch (e) { }
+}
+
+// 이번 주 평일(국내 휴장일 제외) 중 며칠 돌았는지 → '07:30 알림 5/5 · …'
+function wrRunStatus_(mon) {
+  var log = JSON.parse(PropertiesService.getScriptProperties().getProperty('RUNLOG') || '{}');
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd'), days = [];
+  for (var i = 0; i < 5; i++) {
+    var d = Utilities.formatDate(new Date(mon.getTime() + i * 864e5), 'Asia/Seoul', 'yyyy-MM-dd');
+    if (d > today) break;
+    if (typeof PM_KR_HOLIDAYS !== 'undefined' && PM_KR_HOLIDAYS.indexOf(d) >= 0) continue;
+    days.push(d);
+  }
+  var items = [['premarket', '07:30 알림'], ['actuals', '16:10 기록'], ['intraday', '장중 신호'], ['holdings', '보유종목'], ['dividend', '배당주기']];
+  var bad = 0;
+  var parts = items.map(function (it) {
+    var n = days.filter(function (d) { return (log[it[0]] || []).indexOf(d) >= 0; }).length;
+    // 오늘 16:10 기록·장중 신호는 리포트(17:10) 전에 끝나므로 오늘 포함
+    if (n < days.length) bad++;
+    return it[1] + ' ' + n + '/' + days.length;
+  });
+  return { text: '자동화 이번 주: ' + parts.join(' · '), ok: bad === 0 };
 }
 
 // 이번 주 월요일 00:00 (KST)

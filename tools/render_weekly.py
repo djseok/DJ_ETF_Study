@@ -19,6 +19,7 @@ SAMPLE = {
     "members": [["D", 12450000, 8.42, 0.61, 86350, 11.9], ["S", 5320000, 3.1, -0.2, 0, 4.2], ["J", 2110000, 11.8, 1.05, 924, 12.4]],
     "divWeek": 87274, "divNext": [["10/6(화)", "KODEX 미국배당커버드콜액티브", 9900], ["10/8(목)", "TIGER 리츠부동산인프라", 3300]], "divNextTotal": 13200,
     "acc": {"days": 5, "mae": 0.34, "hit": 78}, "signals": {"count": 3, "items": [["9/30", "KODEX 미국반도체", "BUY", -1.62]]},
+    "status": {"text": "자동화 이번 주: 07:30 알림 5/5 · 16:10 기록 5/5 · 장중 신호 5/5 · 보유종목 5/5 · 배당주기 4/5", "ok": False},
 }
 
 
@@ -44,7 +45,8 @@ def draw(d, path):
     h_etf = 0.55 + rh * max(len(etfs), 1) + 0.2
     h_mem = 0.55 + rh * (len(members) + 1) + 0.25 if members else 0
     h_bottom = 0.55 + max(2.0, 0.9 + rh * max(len(div_next), len(sig_items) + 2)) + 0.2
-    H = HEAD + 0.25 + h_etf + h_mem + h_bottom + FOOT + 0.2
+    status = d.get("status") or {}
+    H = HEAD + 0.25 + h_etf + h_mem + h_bottom + FOOT + 0.2 + (0.45 if status.get("text") else 0)
     fig = frame(H, d, "주간 리포트")
 
     # 1) 관리 ETF 주간 등락
@@ -122,6 +124,11 @@ def draw(d, path):
         fig.text(x0, 1 - yy / H, f"{dt}  {short}", fontsize=10.5, color=INK, va="center")
         fig.text(0.965, 1 - yy / H, f"{'매수' if side == 'BUY' else '매도'} {pct:+.2f}%", fontsize=10.5, va="center", ha="right",
                  fontweight="bold", color=DN if side == "BUY" else UP)
+
+    if status.get("text"):
+        ok = status.get("ok", True)
+        fig.text(0.035, (FOOT + 0.3) / H, ("✓ " if ok else "⚠ ") + status["text"], fontsize=10.5,
+                 color=MUTE if ok else "#b45309", fontweight="normal" if ok else "bold", va="center")
 
     fig.savefig(path, facecolor=BG)
     plt.close(fig)

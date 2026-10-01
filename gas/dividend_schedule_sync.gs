@@ -28,7 +28,7 @@ var DS_LOCK_MARK = '✅ 지급월 고정';
 var DS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 function previewDividendSchedule() { runDividendSchedule_(true); }
-function syncDividendSchedule() { runDividendSchedule_(false); }
+function syncDividendSchedule() { runDividendSchedule_(false); if (typeof wrMarkRun_ === 'function') wrMarkRun_('dividend'); }
 
 function installDividendScheduleTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {

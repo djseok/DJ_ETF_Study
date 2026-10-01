@@ -153,3 +153,19 @@ GitHub Actions(`premarket_image.yml` → `tools/render_premarket.py`)가 그린 
 
 `premarket_alert.gs` 의 `predictRet_ · futKeyFor_ · signalFor_` 는 대시보드 `js/quant_core.js` 와 본문이 같아야 합니다.
 GitHub Actions `Tests` 가 PR 마다 `tests/parity.test.js` 로 확인하니, 공식을 바꿀 땐 두 파일을 같이 고치세요.
+
+## 🧾 과세표준 · 세금 점검 (2026-10 추가)
+
+- `dividend_schedule_sync.gs` 가 'ETF들 배당이력' **E열 = 1주당 과세표준**을 함께 채웁니다 (마스터시트 DB_ 탭·TIGER 공식은 확실, 다른 운용사는 응답에 과세표준 칸이 있을 때). `debugTaxFields` 로 운용사별 응답 칸을 확인할 수 있어요.
+- 대시보드: 배당&총알 세후 · 랭킹 '배당 포함' 수익률 · 🧾 세금 점검 탭이 이 값을 씁니다 (없으면 전액 과세로 보수적 계산).
+- 세금 점검 탭의 연봉 등 입력값은 브라우저(localStorage)에만 저장되고 어디에도 전송되지 않습니다.
+
+## 🇰🇷 국내 ETF 개장 전 예측 (EWY)
+
+- 07:30 알림·대시보드 모두 국내 구성종목은 **EWY(미국 상장 한국 ETF) 지난밤 미국장 시가→종가 변동**으로 추정합니다.
+- `futuresRefDaily_` (06:20) 와 07:30 실행이 Characteristic 에 `EWY` 행(D 시가 · E 종가 · C 갱신 날짜)을 씁니다. 대시보드는 오늘 날짜일 때만, 국내장 개장 전에만 사용.
+- 트리거 시각이 05:40 → 06:20 으로 바뀌었으니 `installPremarketTrigger` 를 한 번 다시 실행하세요 (겨울철 미국장 마감 06:00 대응).
+
+## ✅ 자동화 실행 기록
+
+각 자동 실행이 끝나면 `wrMarkRun_` 이 스크립트 속성 `RUNLOG` 에 날짜를 남기고, 금요일 주간 리포트 맨 아래에 '07:30 알림 5/5 · …' 한 줄로 보여줍니다 (따로 알림은 보내지 않음).
