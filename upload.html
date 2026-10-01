@@ -81,7 +81,7 @@
       <label style="font-weight:700;color:var(--warn)"><input type="checkbox" id="removeMissing" style="width:auto"> 캡처에 없는 종목은 모두 판 것으로 (0주)</label>
       <div class="note" id="missingList"></div>
     </div>
-    <p class="note">체크된 줄만 반영돼요. 이름이 빨간 '모름'인 종목은 관리시트 MasterData 에 없어서 반영되지 않아요 (먼저 ETF 추가).</p>
+    <p class="note">체크된 줄만 반영돼요. ETF 가 아닌 개별 종목(국내·미국)도 티커로 들어가요 — '티커 필요'면 티커를 적어 주세요(예: 플래닛 랩스 → PL). 금액은 모두 원화 기준이에요.</p>
     <button class="primary" id="btnApply">반영하기</button>
     <button class="ghost" id="btnBack">다시 올리기</button>
     <div class="msg" id="msg3"></div>
@@ -150,7 +150,7 @@
     return a;
   }
   var fmt = function (v) { return v === null || v === undefined ? '–' : Math.round(v).toLocaleString(); };
-  var TAG = { 'new': ['새 종목', 't-new'], change: ['변경', 't-change'], same: ['같음', 't-same'], unknown: ['모름', 't-unknown'] };
+  var TAG = { 'new': ['새 종목', 't-new'], change: ['변경', 't-change'], same: ['같음', 't-same'], unknown: ['모름', 't-unknown'], needTicker: ['티커 필요', 't-unknown'] };
 
   $('btnParse').addEventListener('click', function () {
     var a = auth();
@@ -166,14 +166,16 @@
     next().then(function (j) {
       token = j.token;
       $('diff').innerHTML = j.rows.map(function (r) {
-        var t = TAG[r.status], can = r.status === 'new' || r.status === 'change';
+        var t = TAG[r.status], can = r.status === 'new' || r.status === 'change' || r.status === 'needTicker';
         // 새 값은 고칠 수 있게 입력칸으로 (여러 증권사 합산 등)
-        var inp = function (cls, v) { return '<input type="text" inputmode="numeric" class="' + cls + '" data-key="' + r.key + '" value="' + (v === null || v === undefined ? '' : Math.round(v)) + '" style="width:84px;padding:6px;font-size:14px;text-align:right"' + (can ? '' : ' disabled') + '>'; };
+        var inp = function (cls, v) { return '<input type="text" inputmode="decimal" class="' + cls + '" data-key="' + r.key + '" value="' + (v === null || v === undefined ? '' : (cls === 'eqty' ? +(+v).toFixed(6) : Math.round(v))) + '" style="width:84px;padding:6px;font-size:14px;text-align:right"' + (can ? '' : ' disabled') + '>'; };
+        // 개별 종목: 티커 표시 (새 종목이면 고칠 수 있게)
+        var tick = r.stock ? '<div class="raw">' + (r.curKey ? '개별 종목' + (r.code ? ' · ' + r.code : '') : '티커 <input type="text" class="eticker" data-key="' + r.key + '" value="' + (r.code || '') + '" placeholder="예: PL · 005930" style="width:96px;padding:4px;font-size:12px;text-transform:uppercase">') + (r.usd ? ' · 달러 평단 확인' : '') + '</div>' : '';
         var q = (r.oldQty === null ? '' : '<div class="raw">지금 ' + fmt(r.oldQty) + '</div>') + inp('eqty', r.newQty);
         var p = (r.oldAvg === null ? '' : '<div class="raw">지금 ' + fmt(r.oldAvg) + '</div>') + inp('eavg', r.newAvg)
           + (r.avgHow ? '<div class="raw" style="color:var(--warn)">계산: ' + r.avgHow + '</div>' : (r.newAvg ? '' : '<div class="raw" style="color:var(--up)">평단 못 읽음 → 입력</div>'));
         return '<tr><td><input type="checkbox" class="pick" value="' + r.key + '"' + (can ? ' checked' : ' disabled') + '></td>'
-          + '<td>' + r.name + '<span class="tag ' + t[1] + '">' + t[0] + '</span>' + (r.raw !== r.name ? '<div class="raw">화면: ' + r.raw + '</div>' : '') + '</td>'
+          + '<td>' + r.name + '<span class="tag ' + t[1] + '">' + t[0] + '</span>' + (r.raw !== r.name ? '<div class="raw">화면: ' + r.raw + '</div>' : '') + tick + '</td>'
           + '<td class="num">' + q + '</td><td class="num">' + p + '</td></tr>';
       }).join('') || '<tr><td colspan="4" class="note">읽은 종목이 없어요. 잔고 화면이 맞는지 확인해 주세요.</td></tr>';
       $('missingBox').classList.toggle('hidden', !j.missing.length);
@@ -191,6 +193,7 @@
     var edits = {};
     document.querySelectorAll('.eqty').forEach(function (x) { (edits[x.dataset.key] = edits[x.dataset.key] || {}).qty = Number(String(x.value).replace(/[^0-9.]/g, '')); });
     document.querySelectorAll('.eavg').forEach(function (x) { (edits[x.dataset.key] = edits[x.dataset.key] || {}).avg = Number(String(x.value).replace(/[^0-9.]/g, '')); });
+    document.querySelectorAll('.eticker').forEach(function (x) { if (x.value.trim()) (edits[x.dataset.key] = edits[x.dataset.key] || {}).ticker = x.value.trim(); });
     call({ action: 'apply', member: a.member, pin: a.pin, token: token, pick: pick, edits: edits, removeMissing: $('removeMissing').checked }).then(function (j) {
       $('s3').classList.add('hidden'); $('s2').classList.add('hidden'); $('s4').classList.remove('hidden');
       $('msg4').innerHTML = j.changed ? j.log.join('<br>') + '<br><span class="note">대시보드에는 1~5분 뒤 반영돼요 (시트 게시 갱신)</span>' : '바뀐 내용이 없어요';

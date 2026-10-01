@@ -87,17 +87,25 @@ function huCompare_(member, read, known) {
       else if (ev > 0 && pl !== 0) { avg = (ev - pl) / qty; how = '(평가금액 − 손익) ÷ 수량'; }
     }
     var m = huMatch_(x.name, known);
-    parsed[m ? m.key : 'X_' + x.name] = { raw: x.name, name: m ? m.name : x.name, code: m ? m.code : '', matched: !!m, qty: qty, avg: avg, how: how };
+    if (m) { parsed[m.key] = { raw: x.name, name: m.name, code: m.code, matched: true, qty: qty, avg: avg, how: how }; return; }
+    // ETF 목록에 없으면 개별 종목: 티커(한국 6자리 코드 · 미국 티커)로 관리
+    var t = huTicker_(x.ticker) || huTickerByName_(x.name);
+    var usd = String(x.currency || '').toUpperCase() === 'USD';
+    if (usd && avg > 0) { avg = avg * huUsdKrw_(); how = (how ? how + ' · ' : '') + '달러 × 오늘 환율'; } // 포트폴리오는 원화 기준
+    parsed[t ? 'T_' + t : 'X_' + x.name] = { raw: x.name, name: String(x.name).trim(), code: t, matched: false, stock: true, qty: qty, avg: avg, how: how, usd: usd };
   });
 
   var rows = [], seen = {};
   Object.keys(parsed).forEach(function (k) {
-    var p = parsed[k], c = p.matched ? cur.byKey[k] : null;
+    var p = parsed[k];
+    var c = p.matched ? cur.byKey[k] : (p.stock ? (cur.byTicker[p.code] || cur.byKey[huNorm_(p.name)] || null) : null);
+    if (c && p.stock) p.name = c.name; // 이미 있는 줄이면 시트의 이름 그대로
     seen[k] = true;
     // 계산으로 구한 평단은 반올림 오차(±0.1%)가 생기므로, 그 안이면 지금 평단을 그대로 둠
     if (c && p.how && c.avg > 0 && Math.abs(p.avg - c.avg) / c.avg < 0.001) { p.avg = c.avg; p.how = ''; }
-    var status = !p.matched ? 'unknown' : (!c ? 'new' : ((c.qty !== p.qty || Math.round(c.avg) !== Math.round(p.avg)) ? 'change' : 'same'));
-    rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status,
+    var status = (!p.matched && !p.stock) ? 'unknown' : (!c ? (p.stock && !p.code ? 'needTicker' : 'new') : ((Math.abs(c.qty - p.qty) > 1e-6 || Math.round(c.avg) !== Math.round(p.avg)) ? 'change' : 'same'));
+    if (c) seen[c.key] = true;
+    rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status, stock: !!p.stock, usd: !!p.usd, curKey: c ? c.key : null,
       oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? Math.round(c.avg) : null, newAvg: Math.round(p.avg), avgHow: p.how });
   });
   var missing = cur.rows.filter(function (c) { return c.qty > 0 && !seen[c.key]; })
@@ -120,6 +128,9 @@ function huGemini_(images, knownNames) {
     '- name 종목명, quantity 보유수량(주), avg_price 평균단가(매입단가·매입가)\n' +
     '- buy_amount 매입금액(투자원금·매수금액), eval_amount 평가금액, profit 평가손익(손실이면 음수)\n' +
     '- 화면에 없는 값은 0. 수익률(%)·현재가는 넣지 않기\n- 숫자는 쉼표 없이 숫자로\n- 잘려서 일부만 보이는 줄은 빼기\n' +
+    '- ticker: 한국 종목은 6자리 종목코드(예 005930, 0210A0), 미국 종목은 티커(예 PL, PYPL, MSTY). 확실하지 않으면 빈칸\n' +
+    '- 금액은 원화(원)로 보이면 원화 값을 그대로 쓰기 (달러만 보이면 달러 값과 currency=USD)\n' +
+    '- 수량은 소수점(소수점 주식)도 그대로\n' +
     '- 종목명은 화면 그대로 쓰되, 아래 목록에 같은 종목이 있으면 목록의 이름으로:\n' + knownNames.join(', ') }];
   images.forEach(function (b64) {
     var m = String(b64).match(/^data:(image\/[a-z]+);base64,(.*)$/);
@@ -131,7 +142,8 @@ function huGemini_(images, knownNames) {
       temperature: 0, responseMimeType: 'application/json',
       responseSchema: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
         name: { type: 'STRING' }, quantity: { type: 'NUMBER' }, avg_price: { type: 'NUMBER' },
-        buy_amount: { type: 'NUMBER' }, eval_amount: { type: 'NUMBER' }, profit: { type: 'NUMBER' } }, required: ['name', 'quantity'] } }
+        buy_amount: { type: 'NUMBER' }, eval_amount: { type: 'NUMBER' }, profit: { type: 'NUMBER' },
+        ticker: { type: 'STRING' }, currency: { type: 'STRING' } }, required: ['name', 'quantity'] } }
     }
   };
   // 404(모델 없음)·503(사용량 몰림)·429(잠깐 한도)·500 이면 잠시 쉬었다 다시, 그래도 안 되면 다음 모델로
@@ -175,21 +187,22 @@ function huApply_(member, token, pick, removeMissing, edits) {
     saved.rows.forEach(function (r) {
       var e = edits[r.key];
       if (!e) return;
-      if (isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty);
+      if (isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty * 1e6) / 1e6; // 소수점 주식 허용
+      if (e.ticker && r.stock && !r.curKey) { var tk = huTicker_(e.ticker); if (tk) { r.code = tk; if (r.status === 'needTicker') r.status = 'new'; } }
       if (isFinite(e.avg) && e.avg > 0) r.newAvg = Math.round(e.avg);
       if (r.status === 'same' && (r.newQty !== r.oldQty || r.newAvg !== r.oldAvg)) r.status = 'change';
     });
     var chosen = saved.rows.filter(function (r) { return (r.status === 'change' || r.status === 'new') && (!pick || pick.indexOf(r.key) >= 0); });
     chosen.forEach(function (r) {
-      var c = cur.byKey[r.key];
+      var c = cur.byKey[r.curKey || r.key];
       if (c) {
         sh.getRange(c.row, 4, 1, 2).setValues([[r.newAvg || c.avg, r.newQty]]);
         log.push(r.name + ' ' + c.qty + '→' + r.newQty + '주');
       } else {
         var row = cur.lastRow + 1; cur.lastRow = row;
         var code = String(r.code || '').replace(/^KRX:/i, '');
-        sh.getRange(row, 1, 1, 6).setValues([[member, r.name, 0, r.newAvg, r.newQty, code ? '=IFERROR(GOOGLEFINANCE("KRX:' + code + '","price"), IFERROR(GOOGLEFINANCE("' + code + '","price"), 0))' : '']]);
-        log.push('+ ' + r.name + ' ' + r.newQty + '주');
+        sh.getRange(row, 1, 1, 6).setValues([[member, r.name, 0, r.newAvg, r.newQty, huPriceFormula_(code)]]);
+        log.push('+ ' + r.name + (r.stock ? ' (' + code + ')' : '') + ' ' + r.newQty + '주');
       }
     });
     if (removeMissing) {
@@ -219,14 +232,17 @@ function huCurrent_(member) {
   var sh = SpreadsheetApp.openById(HU_DIARY_ID).getSheetByName(member + '포토폴리오');
   if (!sh) throw new Error(member + '포토폴리오 탭이 없어요');
   var v = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 6).getValues();
-  var rows = [], byKey = {}, lastRow = 1;
+  var f = sh.getRange(1, 6, Math.max(sh.getLastRow(), 1), 1).getFormulas();
+  var rows = [], byKey = {}, byTicker = {}, lastRow = 1;
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][0]).trim()) lastRow = i + 1;
     if (String(v[i][0]).trim() !== member || !String(v[i][1]).trim()) continue;
     var r = { row: i + 1, name: String(v[i][1]).trim(), key: huNorm_(v[i][1]), avg: huNum_(v[i][3]), qty: huNum_(v[i][4]) };
+    var fm = String(f[i][0] || '').match(/GOOGLEFINANCE\("(?:KRX:|KOSDAQ:|NASDAQ:|NYSE:|NYSEARCA:)?([0-9A-Z.]+)"/i);
+    if (fm) { r.ticker = fm[1].toUpperCase(); byTicker[r.ticker] = r; }
     rows.push(r); byKey[r.key] = r;
   }
-  return { sheet: sh, rows: rows, byKey: byKey, lastRow: lastRow };
+  return { sheet: sh, rows: rows, byKey: byKey, byTicker: byTicker, lastRow: lastRow };
 }
 
 // 정식 이름 목록 → { 정규화이름: {name, code} }
@@ -264,6 +280,42 @@ function huDice_(a, b) {
   Object.keys(A).forEach(function (g) { na += A[g]; if (B[g]) inter += Math.min(A[g], B[g]); });
   Object.keys(B).forEach(function (g) { nb += B[g]; });
   return na + nb ? 2 * inter / (na + nb) : 0;
+}
+// 티커 정리: 한국 6자리 코드(영문 섞인 새 코드 포함) 또는 미국 티커(영문 1~5자, . 허용)
+function huTicker_(t) {
+  t = String(t || '').trim().toUpperCase().replace(/^(KRX|KOSDAQ|NASDAQ|NYSE|NYSEARCA|AMEX):/, '').replace(/\.(KS|KQ)$/, '');
+  if (/^\d{6}$/.test(t) || /^\d[0-9A-Z]{5}$/.test(t)) return t;
+  if (/^[A-Z][A-Z.]{0,5}$/.test(t)) return t;
+  return '';
+}
+// 이름으로 관리시트 MasterData(전체 줄)에서 티커 찾기
+function huTickerByName_(name) {
+  var cache = CacheService.getScriptCache(), k = 'HU_MD_NAMES', map = JSON.parse(cache.get(k) || 'null');
+  if (!map) {
+    map = {};
+    var md = SpreadsheetApp.openById(HU_MANAGE_ID).getSheetByName('MasterData');
+    md.getRange(3, 2, md.getLastRow() - 2, 2).getDisplayValues().forEach(function (r) { if (r[0] && r[1]) map[huNorm_(r[1])] = r[0]; });
+    try { cache.put(k, JSON.stringify(map), 3600); } catch (e) { }
+  }
+  return huTicker_(map[huNorm_(name)] || '');
+}
+// 원/달러 (야후, 1시간 저장)
+function huUsdKrw_() {
+  var c = CacheService.getScriptCache(), v = Number(c.get('HU_FX'));
+  if (v > 0) return v;
+  try {
+    var j = JSON.parse(UrlFetchApp.fetch('https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?range=1d&interval=1h', { muteHttpExceptions: true }).getContentText());
+    v = j.chart.result[0].meta.regularMarketPrice;
+  } catch (e) { v = 0; }
+  if (!(v > 0)) v = 1400;
+  c.put('HU_FX', String(v), 3600);
+  return v;
+}
+// 현재가 수식: 한국 = 원, 미국 = 달러 × 원/달러 (포트폴리오는 모두 원화)
+function huPriceFormula_(code) {
+  if (!code) return '';
+  if (/^\d[0-9A-Z]{5}$/.test(code)) return '=IFERROR(GOOGLEFINANCE("KRX:' + code + '","price"), IFERROR(GOOGLEFINANCE("' + code + '","price"), 0))';
+  return '=IFERROR(GOOGLEFINANCE("' + code + '","price")*GOOGLEFINANCE("CURRENCY:USDKRW"), 0)';
 }
 function huNorm_(s) { return String(s || '').replace(/\s+/g, '').toUpperCase().replace(/커브드/g, '커버드').replace(/[()（）]/g, ''); }
 function huNum_(v) { var n = Number(String(v === null || v === undefined ? '' : v).replace(/[^0-9.-]/g, '')); return isFinite(n) ? n : 0; }
