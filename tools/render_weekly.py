@@ -69,7 +69,7 @@ def draw(d, path):
 
     # 2) 멤버 현황
     if members:
-        y = section(fig, H, y, "멤버 현황", "수익률 변화 = 지난주 리포트 대비 (%p)")
+        y = section(fig, H, y, "멤버 현황", "수익률 = 평단 대비 현재가 (배당 제외) · 변화 = 지난주 대비 %p")
         cols = [("멤버", 0.035, "left"), ("평가액", 0.42, "right"), ("수익률", 0.6, "right"), ("변화", 0.76, "right"), ("이번 주 배당", 0.965, "right")]
         yy = y + rh / 2
         for t, x, ha in cols:

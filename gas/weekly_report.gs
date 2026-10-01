@@ -138,7 +138,7 @@ function wrDiary_(monS, friS) {
   for (var i = 1; i < v.length; i++) {
     var r = v[i], name = String(r[0] || '').trim(), stock = String(r[1] || '').trim();
     if (name && stock) {
-      var qty = num(r[4]), avg = num(r[3]), cur = num(r[5]);
+      var qty = num(r[4]), avg = num(r[3]), cur = num(r[5]) || avg; // 현재가가 비면 평단가 (대시보드와 같은 방식)
       if (!by[name]) { by[name] = { name: name, invest: 0, current: 0, weekDiv: 0 }; order.push(name); }
       if (qty > 0) {
         by[name].invest += avg * qty; by[name].current += cur * qty;
@@ -153,8 +153,11 @@ function wrDiary_(monS, friS) {
       by[dn].weekDiv += amt;
     }
   }
+  // 리포트에서 뺄 멤버: 이름이 Test 로 시작 + 스크립트 속성 WR_EXCLUDE (쉼표로 구분, 예: JBF)
+  var excl = (PropertiesService.getScriptProperties().getProperty('WR_EXCLUDE') || '').split(',')
+    .map(function (x) { return x.trim().toUpperCase(); }).filter(String);
   var members = order.map(function (n) { var m = by[n]; m.ret = m.invest > 0 ? (m.current / m.invest - 1) * 100 : 0; return m; })
-    .filter(function (m) { return m.invest > 0 || m.weekDiv > 0; });
+    .filter(function (m) { return (m.invest > 0 || m.weekDiv > 0) && !/^test/i.test(m.name) && excl.indexOf(m.name.toUpperCase()) < 0; });
   return { members: members, holdings: holdings };
 }
 
