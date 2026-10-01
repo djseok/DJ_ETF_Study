@@ -86,7 +86,7 @@ function huCompare_(member, read, known) {
       if (buy > 0) { avg = buy / qty; how = '매입금액 ÷ 수량'; }
       else if (ev > 0 && pl !== 0) { avg = (ev - pl) / qty; how = '(평가금액 − 손익) ÷ 수량'; }
     }
-    var m = huMatch_(x.name, known);
+    var m = huMatch_(x.name, known, cur.byKey);
     if (m) { parsed[m.key] = { raw: x.name, name: m.name, code: m.code, matched: true, qty: qty, avg: avg, how: how }; return; }
     // ETF 목록에 없으면 개별 종목: 티커(한국 6자리 코드 · 미국 티커)로 관리
     var t = huTicker_(x.ticker) || huTickerByName_(x.name);
@@ -131,6 +131,7 @@ function huGemini_(images, knownNames) {
     '- ticker: 한국 종목은 6자리 종목코드(예 005930, 0210A0), 미국 종목은 티커(예 PL, PYPL, MSTY). 확실하지 않으면 빈칸\n' +
     '- 금액은 원화(원)로 보이면 원화 값을 그대로 쓰기 (달러만 보이면 달러 값과 currency=USD)\n' +
     '- 수량은 소수점(소수점 주식)도 그대로\n' +
+    '- 종목명이 …로 잘려 보이면, 아래 목록에서 앞부분이 같은 종목의 전체 이름으로 채우기\n' +
     '- 종목명은 화면 그대로 쓰되, 아래 목록에 같은 종목이 있으면 목록의 이름으로:\n' + knownNames.join(', ') }];
   images.forEach(function (b64) {
     var m = String(b64).match(/^data:(image\/[a-z]+);base64,(.*)$/);
@@ -264,9 +265,20 @@ function huKnownEtfs_() {
 }
 
 // 화면 이름 → 정식 이름 (같으면 그대로, 아니면 글자 2개 묶음 유사도 0.6 이상 중 가장 높은 것)
-function huMatch_(raw, known) {
-  var k = huNorm_(raw);
-  if (known[k]) return { key: k, name: known[k].name, code: known[k].code };
+function huMatch_(raw, known, holdKeys) {
+  var cut = /(…|\.\.\.)\s*$/.test(String(raw || ''));
+  var k = huNorm_(String(raw || '').replace(/(…|\.\.\.)\s*$/, ''));
+  var hit = function (kk) { return { key: kk, name: known[kk].name, code: known[kk].code }; };
+  // 화면에서 이름이 잘린 경우 (예: 'KODEX 미국나스닥100…'): 앞부분이 같은 ETF 중
+  //   지금 갖고 있는 종목 → 하나뿐인 종목 순서로 고름 (여러 개면 확정하지 않음)
+  if (cut && k.length >= 6) {
+    var pre = Object.keys(known).filter(function (kk) { return kk.indexOf(k) === 0; });
+    var held = pre.filter(function (kk) { return holdKeys && holdKeys[kk]; });
+    if (held.length === 1) return hit(held[0]);
+    if (pre.length === 1) return hit(pre[0]);
+    if (pre.length > 1) return null;
+  }
+  if (known[k]) return hit(k);
   var best = null, bestS = 0;
   Object.keys(known).forEach(function (kk) {
     var s = huDice_(k, kk);
