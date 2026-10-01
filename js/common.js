@@ -6,7 +6,7 @@
 var APP_CONFIG = {
     // 가격 조회 서버 (Apps Script → 야후 파이낸스). MDD·RSI·이평선·개별주식분석·포트폴리오 백테스트가 사용
     // 잔고 캡처 입력(upload.html) 서버: 독립 Apps Script 웹 앱 (gas/holdings_upload.gs) — 배포 후 주소 입력
-    UPLOAD_URL: "",
+    UPLOAD_URL: "https://script.google.com/macros/s/AKfycbz2S8KVI_FN7dmvxCrJV0GQC5y3KrbKqyQX3zGRGUYPA92EZ7xd_0in5998lmMdhh1_/exec",
 
     PRICE_PROXY_URL: "https://script.google.com/macros/s/AKfycbwClCZ-kZi1Ztcy4YRvVyY3TV7mzpImg4isvPBUqX4nI2lYjGFE8ecp52j-nMKf2XXR/exec",
 
