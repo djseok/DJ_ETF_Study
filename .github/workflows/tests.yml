@@ -1,0 +1,33 @@
+name: Tests
+
+# 코드가 바뀔 때마다 자동 확인
+#  · 대시보드(js/quant_core.js)와 카톡 알림(gas/premarket_alert.gs)의 예측 공식이 같은지
+#  · js · gas 파일 문법 오류
+#  · 개장 전·주간 리포트 이미지가 그려지는지 (예시 데이터)
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths: ['js/**', 'gas/**', 'tools/**', 'tests/**', 'sw.js', '.github/workflows/tests.yml']
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 🧮 예측 공식 일치
+        run: node tests/parity.test.js
+      - name: 🔎 문법 확인
+        run: node tests/syntax.test.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 🖼 이미지 그리기 확인
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk > /dev/null
+          pip install -q matplotlib pillow
+          cd tools && python render_premarket.py --sample && python render_weekly.py --sample

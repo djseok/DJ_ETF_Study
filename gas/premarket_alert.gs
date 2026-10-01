@@ -129,13 +129,13 @@ function runPremarket_(dryRun) {
     var usShare = base > 0 ? wUsPriced / base : 0;
     var foreignShare = base > 0 ? wForeign / base : 0;
     var usRet = wUsPriced > 0 ? usDelta / wUsPriced : 0;          // 미국 부분의 평균 등락
-    var futKey = /S&P|S＆P/i.test(e.name) ? 'ES' : (/다우/.test(e.name) ? 'YM' : 'NQ');
+    var futKey = futKeyFor_(e.name);
     var f = fut[futKey] || 0;
-    var ret = (1 + p.beta * usRet * usShare) * (1 + p.beta * f * usShare) * (1 + fx * foreignShare) - 1;
+    var ret = predictRet_(usRet * usShare, p.beta, f, usShare, fx, foreignShare);
     var close = etfClose[e.code] || 0;
     var price = close ? Math.round(close * (1 + ret)) : 0;
     var pct = ret * 100;
-    var signal = hs.length === 0 ? '-' : (pct <= p.buy ? 'BUY' : (pct >= p.sell ? 'SELL' : 'HOLD'));
+    var signal = hs.length === 0 ? '-' : signalFor_(pct, p.buy, p.sell);
     rows.push({
       date: today, name: e.name, code: e.code, group: e.group, close: close, pct: pct, price: price, signal: signal,
       usRet: usRet * 100, usShare: usShare * 100, fut: f * 100, futKey: futKey, fx: fx * 100, foreignShare: foreignShare * 100,
@@ -205,6 +205,17 @@ function pmImagePayload_(rows, fut, fx, vix, usNote) {
   };
 }
 function r2_(v) { return Math.round(v * 100) / 100; }
+
+// ── 예측 공식: 대시보드 js/quant_core.js 와 본문이 같아야 함 (tests/parity.test.js 가 자동 확인) ──
+function predictRet_(rawDelta, beta, futDelta, usShare, fxDelta, foreignShare) {
+  return (1 + beta * rawDelta) * (1 + beta * futDelta * usShare) * (1 + fxDelta * foreignShare) - 1;
+}
+function futKeyFor_(name) {
+  return /S&P|S＆P/i.test(String(name || '')) ? 'ES' : (/다우/.test(String(name || '')) ? 'YM' : 'NQ');
+}
+function signalFor_(pct, buy, sell) {
+  return pct <= buy ? 'BUY' : (pct >= sell ? 'SELL' : 'HOLD');
+}
 
 // 사진 메시지 설명(요약)
 function pmSummaryText_(rows, fut, fx, vix, usNote, weekly) {

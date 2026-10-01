@@ -6,6 +6,18 @@
 // =====================================================
 
 var myDivChart = null;
+var DIV_ALL = '__ALL__';
+var DIV_TAX = 0.154;          // 배당소득세 15.4% (단순 적용)
+var divAfterTax = false;      // 세후 보기
+
+function setDividendTaxMode(afterTax) {
+    divAfterTax = !!afterTax;
+    ['pre', 'post'].forEach(function (k) {
+        var b = document.getElementById('divTaxBtn_' + k);
+        if (b) b.className = 'px-3 py-1.5 rounded-full text-xs font-bold ' + ((k === 'post') === divAfterTax ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-700 border border-emerald-200');
+    });
+    calculateAndDrawDividends();
+}
 var dividendRulesLoadPromise = null;
 
 var CHART_COLORS = [
@@ -62,7 +74,8 @@ function loadDynamicDividendRules() {
                 rulesObj[normalizeStockName(rawStockName)] = {
                     name: rawStockName,
                     payMonths: payMonthsArray,
-                    expectedAmount: parseFloat(String(row[2] || "").replace(/[^0-9.]/g, '')) || 0
+                    expectedAmount: parseFloat(String(row[2] || "").replace(/[^0-9.]/g, '')) || 0,
+                    lastPayDay: (function (m) { return m ? parseInt(m[1], 10) : 0; })(String(row[4] || "").match(/^\d{4}-\d{2}-(\d{2})/))
                 };
             }
             globalDividendRulesMatrix = rulesObj;
@@ -99,8 +112,9 @@ function initDividendUserSelector() {
 
     var names = globalParsedUsers ? Object.keys(globalParsedUsers) : [];
 
-    if (selector.options.length !== names.length && names.length > 0) {
-        selector.innerHTML = names.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
+    if (selector.options.length !== names.length + 1 && names.length > 0) {
+        selector.innerHTML = names.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('')
+            + '<option value="' + DIV_ALL + '">👥 클럽 전체</option>';
         selector.removeEventListener('change', calculateAndDrawDividends);
         selector.addEventListener('change', calculateAndDrawDividends);
     }
@@ -117,15 +131,30 @@ function calculateAndDrawDividends() {
     var now = new Date();
     var currentYear = now.getFullYear();
     var currentMonth = now.getMonth() + 1;
+    var isAll = targetUser === DIV_ALL;
     var targetKey = targetUser.trim().toUpperCase();
+    var memberKeys = names.map(function (n) { return n.trim().toUpperCase(); });
+    var taxK = divAfterTax ? (1 - DIV_TAX) : 1;
 
-    // 이 멤버의 수령 기록만 (이름 정확히 일치)
+    // 이 멤버의 수령 기록만 (이름 정확히 일치) · 클럽 전체면 멤버 모두
     var myLogs = (globalActualDividendLogs || []).filter(function (log) {
-        return String(log.userName || '').trim().toUpperCase() === targetKey;
+        var k = String(log.userName || '').trim().toUpperCase();
+        return isAll ? memberKeys.indexOf(k) >= 0 : k === targetKey;
+    }).map(function (log) {
+        return Object.assign({}, log, { amount: log.amount * taxK });
     }).sort(function (a, b) { return b.jsDate.getTime() - a.jsDate.getTime(); });
 
-    var userObj = globalParsedUsers ? globalParsedUsers[targetUser] : null;
-    var holdings = (userObj && userObj.items) ? userObj.items.filter(function (it) { return it.qty > 0; }) : [];
+    // 보유 종목 (클럽 전체면 종목별 수량 합산)
+    var holdings = [];
+    (isAll ? names : [targetUser]).forEach(function (n) {
+        var u = globalParsedUsers ? globalParsedUsers[n] : null;
+        (u && u.items ? u.items : []).forEach(function (it) {
+            if (!(it.qty > 0)) return;
+            var ex = holdings.filter(function (h) { return normalizeStockName(h.stock) === normalizeStockName(it.stock); })[0];
+            if (ex) ex.qty += it.qty; else holdings.push({ stock: it.stock, qty: it.qty });
+        });
+    });
+    var targetLabel = isAll ? '클럽 전체' : targetUser;
 
     // 기록에 적힌 종목명을 보유 종목명으로 맞춰서 차트 범례가 흩어지지 않게 함
     var holdingNameByKey = {};
@@ -144,7 +173,7 @@ function calculateAndDrawDividends() {
         var qtyText = log.qty ? ' <span class="text-xs text-slate-400 font-normal">(' + log.qty.toLocaleString() + '주)</span>' : '';
         actualLogsHtml += '<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">'
             + '<td class="py-3 px-4 text-slate-500 font-mono text-sm">' + log.date + '</td>'
-            + '<td class="py-3 px-4 text-slate-800 font-bold">' + log.stockName + qtyText + '</td>'
+            + '<td class="py-3 px-4 text-slate-800 font-bold">' + (isAll ? '<span class="text-xs text-slate-400 mr-1">' + log.userName + '</span>' : '') + log.stockName + qtyText + '</td>'
             + '<td class="py-3 px-4 text-emerald-600 font-bold text-right font-mono">+ ₩' + Math.round(log.amount).toLocaleString() + '</td>'
             + '</tr>';
 
@@ -163,7 +192,7 @@ function calculateAndDrawDividends() {
         var rule = findDividendRule(item.stock);
         if (!rule) { missingRules.push(item.stock); return; }
         if (!rule.payMonths.length || rule.expectedAmount <= 0) return;
-        var perPayment = rule.expectedAmount * item.qty;
+        var perPayment = rule.expectedAmount * item.qty * taxK;
 
         rule.payMonths.forEach(function (month) {
             if (month < currentMonth) return;
@@ -177,9 +206,9 @@ function calculateAndDrawDividends() {
     var yearActual = actualByMonth.reduce(function (a, b) { return a + b; }, 0);
     var yearExpected = expectedByMonth.reduce(function (a, b) { return a + b; }, 0);
 
-    setText("actual-received-name-label", "[" + targetUser + "]님의 배당금 현황");
+    setText("actual-received-name-label", "[" + targetLabel + "] 배당금 현황" + (divAfterTax ? " · 세후" : " · 세전"));
     setText("actual-received-dividend", "₩" + Math.round(totalReceivedAllTime).toLocaleString());
-    setText("actual-table-title-name", targetUser + " · " + myLogs.length + "건");
+    setText("actual-table-title-name", targetLabel + " · " + myLogs.length + "건");
     setText("annual-dividend-pure", "₩" + Math.round(yearActual + yearExpected).toLocaleString());
 
     var tableBody = document.getElementById("actual-dividend-table-body");
@@ -235,6 +264,44 @@ function calculateAndDrawDividends() {
     }
 
     renderStackedDividendChart(actualByStock, expectedByStock);
+    renderUpcomingDividends(holdings, receivedThisMonthKeys, taxK);
+}
+
+// 다가오는 배당 (오늘부터 60일): 지급 예정일 = 지급월 + 최근 지급일의 '일(day)' (주말이면 다음 월요일)
+function renderUpcomingDividends(holdings, receivedThisMonthKeys, taxK) {
+    var box = document.getElementById('dividend-upcoming');
+    if (!box) return;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var until = new Date(today.getTime() + 60 * 864e5);
+    var list = [];
+    holdings.forEach(function (item) {
+        var rule = findDividendRule(item.stock);
+        if (!rule || !rule.payMonths.length || rule.expectedAmount <= 0) return;
+        var day = rule.lastPayDay || 0;
+        for (var add = 0; add < 3; add++) {
+            var y = today.getFullYear(), m = today.getMonth() + add; // 0-based
+            y += Math.floor(m / 12); m = m % 12;
+            if (rule.payMonths.indexOf(m + 1) < 0) continue;
+            if (add === 0 && receivedThisMonthKeys[normalizeStockName(item.stock)]) continue;
+            var d = new Date(y, m, day || 1);
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+            if (d < today && add === 0 && day) continue; // 이번 달 지급일이 이미 지남 (기록이 아직 없을 수 있음)
+            if (d > until) continue;
+            list.push({ date: d, approx: !day, stock: item.stock, qty: item.qty, per: rule.expectedAmount, amt: rule.expectedAmount * item.qty * taxK });
+        }
+    });
+    list.sort(function (a, b) { return a.date - b.date; });
+    var total = list.reduce(function (s, x) { return s + x.amt; }, 0);
+    var dn = ['일', '월', '화', '수', '목', '금', '토'];
+    box.innerHTML = list.length ? list.map(function (x) {
+        var dd = Math.round((x.date - today) / 864e5);
+        var when = (x.date.getMonth() + 1) + '/' + (x.approx ? '?' : x.date.getDate()) + (x.approx ? '' : '(' + dn[x.date.getDay()] + ')');
+        return '<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">'
+            + '<div class="flex items-center gap-3 min-w-0"><div class="w-16 shrink-0 text-center"><div class="font-black text-slate-800 mono text-sm">' + when + '</div><div class="text-[10px] text-slate-400">' + (dd === 0 ? '오늘' : 'D-' + dd) + '</div></div>'
+            + '<div class="min-w-0"><div class="font-bold text-slate-700 truncate">' + x.stock + '</div><div class="text-xs text-slate-400 mono">' + x.qty.toLocaleString() + '주 × ₩' + Math.round(x.per).toLocaleString() + '</div></div></div>'
+            + '<div class="font-black text-emerald-600 mono whitespace-nowrap">₩' + Math.round(x.amt).toLocaleString() + '</div></div>';
+    }).join('') + '<div class="flex justify-between pt-3 text-sm font-black text-emerald-800"><span>60일 합계</span><span class="mono">₩' + Math.round(total).toLocaleString() + '</span></div>'
+        : '<div class="py-6 text-center text-slate-400 text-sm">60일 안에 예정된 배당이 없어요.</div>';
 }
 
 function setText(id, text) {

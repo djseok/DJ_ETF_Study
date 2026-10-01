@@ -3,6 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 📱 휴대폰 홈 화면에 앱처럼 추가 (PWA) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#1c1d20">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="투자 공부실">
     <title>동진 투자 공부실 - 퀀트 대시보드 v12 (선물 연동 엔진)</title>
     
     <!-- 💡 프리텐다드 웹 폰트 로드 -->
@@ -67,6 +75,9 @@
                 <div class="space-y-1.5 flex flex-col">
                     <button id="btnTabQuant" onclick="switchTab('quant')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-chart-bar text-blue-500 w-5"></i> 예측 엔진
+                    </button>
+                    <button id="btnTabAcc" onclick="switchTab('acc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-amber-700 rounded-xl font-bold transition-all border border-transparent">
+                        <i class="fas fa-bullseye text-amber-500 w-5"></i> 예측 적중률
                     </button>
                     <button id="btnTabCalc" onclick="switchTab('calc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-calculator text-orange-500 w-5"></i> 구매 계산기
@@ -242,6 +253,41 @@
         </div>
 
         <!-- 3. 구매 계산기 -->
+        <!-- 예측 적중률 -->
+        <div id="viewAcc" class="view-section hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
+                <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1 flex items-center">🎯 예측 적중률</h2>
+                        <p class="text-sm text-gray-500">평일 07:30 카톡 예측이 실제 <span id="accKpiLabel">시가</span>와 얼마나 맞았는지 · <span id="accStatus">불러오는 중…</span></p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="accBtn_open" onclick="accSetMetric('open')" class="px-4 py-2 rounded-full text-sm font-bold bg-slate-800 text-white">시가 기준</button>
+                        <button id="accBtn_close" onclick="accSetMetric('close')" class="px-4 py-2 rounded-full text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">종가 기준</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-100"><div class="text-xs font-bold text-slate-500">평균 오차 (절대값)</div><div id="accKpiMae" class="text-3xl font-black mono text-slate-800 mt-1">–</div><div class="text-xs text-slate-400 mt-1">작을수록 정확</div></div>
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-100"><div class="text-xs font-bold text-slate-500">방향 적중률</div><div id="accKpiHit" class="text-3xl font-black mono text-slate-800 mt-1">–</div><div class="text-xs text-slate-400 mt-1">오를지 내릴지 맞춘 비율 (해외 ETF)</div></div>
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-100"><div class="text-xs font-bold text-slate-500">치우침 (예상 − 실제)</div><div id="accKpiBias" class="text-3xl font-black mono text-slate-800 mt-1">–</div><div id="accKpiBiasNote" class="text-xs text-slate-400 mt-1"></div></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div><h4 class="font-black text-slate-700 mb-2">날짜별 예상 vs 실제</h4><div class="h-64 relative"><canvas id="accLineChart"></canvas></div></div>
+                    <div><h4 class="font-black text-slate-700 mb-2">예상 vs 실제 (점선에 가까울수록 정확)</h4><div class="h-64 relative"><canvas id="accScatterChart"></canvas></div></div>
+                </div>
+                <h4 class="font-black text-slate-700 mb-2">ETF별 성적 <span class="text-xs font-bold text-slate-400 ml-1">오차 큰 순 · 추천 베타는 해외 ETF 기록 5일 이상부터</span></h4>
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-sm whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 text-xs font-black">
+                            <tr><th class="px-4 py-3 text-left">ETF</th><th class="px-4 py-3 text-right">기록</th><th class="px-4 py-3 text-right">평균 오차(%p)</th><th class="px-4 py-3 text-right">치우침(%p)</th><th class="px-4 py-3 text-right">방향 적중</th><th class="px-4 py-3 text-right">현재 베타</th><th class="px-4 py-3 text-right">추천 베타</th></tr>
+                        </thead>
+                        <tbody id="accTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-slate-400 mt-3">추천 베타 = 현재 베타 × (실제 등락 ÷ 예상 등락의 기울기), 0.5~1.5 범위. 바꾸려면 관리시트 ETF_Quant_Signals 의 베타 줄 C열을 고치면 돼요.</p>
+            </div>
+        </div>
+
         <div id="viewCalc" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-calculator text-orange-500 mr-2"></i> 스마트 매수 시뮬레이터</h2>
@@ -377,9 +423,22 @@
             </div>
 
             <div class="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl shadow-sm">
-                <div class="mb-6">
-                    <label class="block text-xs font-bold text-emerald-800 mb-1">👨‍💻 향후 배당 예측 멤버 선택</label>
-                    <select id="divUserSelector" class="px-4 py-2 rounded-xl border border-emerald-200 bg-white font-bold text-slate-700 min-w-[150px] shadow-sm"></select>
+                <div class="mb-6 flex flex-wrap items-end gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-emerald-800 mb-1">👨‍💻 향후 배당 예측 멤버 선택</label>
+                        <select id="divUserSelector" class="px-4 py-2 rounded-xl border border-emerald-200 bg-white font-bold text-slate-700 min-w-[150px] shadow-sm"></select>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <button id="divTaxBtn_pre" onclick="setDividendTaxMode(false)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-700 text-white">세전</button>
+                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후 (15.4%)</button>
+                    </div>
+                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후는 금액 전체에 15.4%를 단순 적용한 값이에요.<br>해외주식형 ETF는 과세표준 기준이라 실제 세금은 더 적을 수 있어요.</div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
+                    <h4 class="font-black text-lg text-slate-800 mb-1"><i class="fas fa-calendar-day text-emerald-500 mr-2"></i>다가오는 배당 (60일)</h4>
+                    <p class="text-xs text-slate-400 mb-3">지급 예정일은 최근 지급일 기준 추정 · 분배금을 받으려면 기준일 전에 매수해 보유하고 있어야 해요</p>
+                    <div id="dividend-upcoming"></div>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
@@ -1172,6 +1231,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/common.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/quant_core.js"></script>
     <script src="js/quant.js"></script>
     <script src="js/port.js"></script>
     <script src="js/calc.js"></script>
@@ -1183,5 +1243,10 @@
     <script src="js/ma.js"></script>
     <script src="js/single_stock_analysis.js"></script>
     <script src="js/portfolio_backtest.js"></script>
+    <script src="js/accuracy.js"></script>
+    <script>
+        // 📱 오프라인에서도 마지막 데이터로 열리도록 서비스워커 등록
+        if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    </script>
 </body>
 </html>
