@@ -7,6 +7,14 @@ let currentSubFilter = 'all';
 let currentSearchText = '';
 let globalFuturesDelta = 0; // 🌟 나스닥 선물: 미국장 마감(뉴욕 16:00) 이후 변동률
 let globalFutures = { NQ: 0, ES: 0, YM: 0 }; // 나스닥 · S&P · 다우 선물 (마감 이후 변동률)
+let globalEwyDelta = 0; // 🇰🇷 EWY(미국 상장 한국 ETF) 지난밤 미국장 시가→종가 — 개장 전 국내 구성종목 추정용 (오늘 갱신된 값만)
+
+// 국내장 개장 전인지 (평일 09:00 전 · 주말)
+function krPreOpen() {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', weekday: 'short', hour: '2-digit', hour12: false }).formatToParts(new Date());
+    const wd = p.find(x => x.type === 'weekday').value, hr = parseInt(p.find(x => x.type === 'hour').value, 10) % 24;
+    return wd === 'Sat' || wd === 'Sun' || hr < 9;
+}
 
 function extractGlobalMacroVariables() {
     if (!macroData || macroData.length === 0) return;
@@ -31,6 +39,11 @@ function extractGlobalMacroVariables() {
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
+        if (ticker === 'EWY') {
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+            globalEwyDelta = (name.indexOf(today) >= 0 && prev > 0) ? (live - prev) / prev : 0;
+            return;
+        }
         // 🌟 선물 (Characteristic: 전일지수 = 미국장 마감 시점 가격, 현재지수 = 지금) → 마감 이후 변동률
         if (ticker === 'S&P선물지수' || ticker === '다우선물지수') {
             globalFutures[ticker === 'S&P선물지수' ? 'ES' : 'YM'] = prev > 0 ? (live - prev) / prev : 0;
@@ -246,6 +259,8 @@ function renderTargetAssetDashboard(target) {
     comps.forEach(c => {
         let live = (isNaN(c.live) || c.live === 0) ? c.prev : c.live;
         let d = c.prev > 0 ? (live - c.prev) / c.prev : 0;
+        // 국내장 개장 전이고 아직 가격 변화가 없으면 EWY 지난밤 변동으로 추정 (카톡 07:30 알림과 같은 방식)
+        if (isDomestic(c.ticker) && d === 0 && globalEwyDelta && krPreOpen()) d = globalEwyDelta;
         let cont = d * (c.w / 100) * scale;
         rawDelta += cont;
         
