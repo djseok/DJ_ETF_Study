@@ -48,15 +48,16 @@ function installPremarketTrigger() {
   });
   ScriptApp.newTrigger('premarketDaily_').timeBased().everyDays(1).atHour(7).nearMinute(30).create();
   ScriptApp.newTrigger('recordActualsDaily_').timeBased().everyDays(1).atHour(16).nearMinute(10).create();
-  ScriptApp.newTrigger('futuresRefDaily_').timeBased().everyDays(1).atHour(5).nearMinute(40).create();
-  Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 05:40 선물 기준가 갱신');
+  ScriptApp.newTrigger('futuresRefDaily_').timeBased().everyDays(1).atHour(6).nearMinute(20).create(); // 미국장 마감: 여름 05:00 · 겨울 06:00 (KST)
+  Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 06:20 선물·EWY 기준값 갱신');
 }
 
-function futuresRefDaily_() { pmUpdateFuturesRows_(pmFuturesAll_()); }
+function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmUsSessionFresh_() ? pmEwyInfo_() : { open: 0, close: 0, delta: 0 }; pmUpdateFuturesRows_(info); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
 function recordActualsDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
   if (dow >= 6 || pmKrHoliday_()) return;
   recordActuals();
+  if (typeof wrMarkRun_ === 'function') wrMarkRun_('actuals');
 }
 
 function premarketDaily_() {
@@ -64,6 +65,7 @@ function premarketDaily_() {
   if (dow >= 6) return;
   if (pmKrHoliday_()) { Logger.log('ℹ️ 오늘은 국내 증시 휴장일이라 알림을 보내지 않아요.'); return; }
   runPremarket_(false);
+  if (typeof wrMarkRun_ === 'function') wrMarkRun_('premarket');
 }
 
 // 국내 증시(KRX) 평일 휴장일 — 해마다 12월에 다음 해 날짜 추가 (스크립트 속성 PM_KR_HOLIDAYS 에 'yyyy-MM-dd,…' 로 더할 수도 있음)
@@ -72,8 +74,8 @@ var PM_KR_HOLIDAYS = [
   '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-01', '2027-05-05', '2027-05-13', '2027-08-16',
   '2027-09-14', '2027-09-15', '2027-09-16', '2027-10-04', '2027-10-11', '2027-12-27', '2027-12-31'
 ];
-function pmKrHoliday_() {
-  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+function pmKrHoliday_(ymd) {
+  var today = ymd || Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
   var extra = (PropertiesService.getScriptProperties().getProperty('PM_KR_HOLIDAYS') || '').split(',').map(function (x) { return x.trim(); });
   return PM_KR_HOLIDAYS.indexOf(today) >= 0 || extra.indexOf(today) >= 0;
 }
@@ -105,6 +107,9 @@ function runPremarket_(dryRun) {
 
   // 선물 · 환율 · ETF 전일 종가
   var futInfo = pmFuturesAll_();
+  // 국내 구성종목: 미국에 상장된 한국 ETF(EWY)의 지난밤 미국장 시가→종가 변동으로 추정 (국내장 마감 이후의 움직임)
+  futInfo.EWY = usNote ? { open: 0, close: 0, delta: 0 } : pmEwyInfo_();
+  var krMove = futInfo.EWY.delta || 0;
   var fut = { NQ: futInfo.NQ.delta, ES: futInfo.ES.delta, YM: futInfo.YM.delta };
   var fx = pmFxSinceKrClose_();
   var vix = pmVix_();
@@ -116,9 +121,10 @@ function runPremarket_(dryRun) {
   etfs.forEach(function (e) {
     var hs = holdings[hsNormName_(e.name)] || [];
     var p = params[hsNormName_(e.name)] || { buy: HS_DEFAULT_PARAMS.buy, sell: HS_DEFAULT_PARAMS.sell, beta: HS_DEFAULT_PARAMS.beta };
-    var wAll = 0, wUsPriced = 0, wForeign = 0, usDelta = 0, wMissing = 0;
+    var wAll = 0, wUsPriced = 0, wForeign = 0, usDelta = 0, wMissing = 0, wKr = 0;
     hs.forEach(function (h) {
       wAll += h.w;
+      if (h.market === '한국') wKr += h.w;
       if (h.market === '미국') {
         var d = usMove[h.ticker];
         if (d === undefined) { wMissing += h.w; return; }
@@ -129,9 +135,10 @@ function runPremarket_(dryRun) {
     var usShare = base > 0 ? wUsPriced / base : 0;
     var foreignShare = base > 0 ? wForeign / base : 0;
     var usRet = wUsPriced > 0 ? usDelta / wUsPriced : 0;          // 미국 부분의 평균 등락
+    var krShare = base > 0 ? wKr / base : 0;
     var futKey = futKeyFor_(e.name);
     var f = fut[futKey] || 0;
-    var ret = predictRet_(usRet * usShare, p.beta, f, usShare, fx, foreignShare);
+    var ret = predictRet_(usRet * usShare + krMove * krShare, p.beta, f, usShare, fx, foreignShare);
     var close = etfClose[e.code] || 0;
     var price = close ? Math.round(close * (1 + ret)) : 0;
     var pct = ret * 100;
@@ -139,7 +146,8 @@ function runPremarket_(dryRun) {
     rows.push({
       date: today, name: e.name, code: e.code, group: e.group, close: close, pct: pct, price: price, signal: signal,
       usRet: usRet * 100, usShare: usShare * 100, fut: f * 100, futKey: futKey, fx: fx * 100, foreignShare: foreignShare * 100,
-      beta: p.beta, buy: p.buy, sell: p.sell, domestic: usShare === 0, hasPdf: hs.length > 0, missing: wMissing
+      beta: p.beta, buy: p.buy, sell: p.sell, domestic: usShare === 0 && !(krShare > 0 && krMove !== 0), hasPdf: hs.length > 0, missing: wMissing,
+      krShare: krShare * 100, krMove: krMove * 100
     });
   });
 
@@ -147,13 +155,13 @@ function runPremarket_(dryRun) {
   Logger.log('선물(마감 후) NQ ' + pmPct_(fut.NQ * 100) + ' · ES ' + pmPct_(fut.ES * 100) + ' · YM ' + pmPct_(fut.YM * 100) + ' | 원/달러 ' + pmPct_(fx * 100));
   rows.forEach(function (r) {
     Logger.log((r.signal === 'BUY' ? '🔵' : r.signal === 'SELL' ? '🔴' : '⚪') + ' ' + r.name + ' ' + pmPct_(r.pct) + ' → ' + (r.price ? r.price.toLocaleString() + '원' : '종가?') +
-      ' [' + r.signal + '] (미국 ' + pmPct_(r.usRet) + ' × 비중 ' + r.usShare.toFixed(0) + '% · ' + r.futKey + ' 선물 ' + pmPct_(r.fut) + ' · β' + r.beta +
+      ' [' + r.signal + '] (미국 ' + pmPct_(r.usRet) + ' × 비중 ' + r.usShare.toFixed(0) + '%' + (r.krShare > 0 ? ' · 국내(EWY) ' + pmPct_(r.krMove) + ' × 비중 ' + r.krShare.toFixed(0) + '%' : '') + ' · ' + r.futKey + ' 선물 ' + pmPct_(r.fut) + ' · β' + r.beta +
       (r.missing > 0.5 ? ' · 가격없음 ' + r.missing.toFixed(1) + '%' : '') + ')');
   });
   Logger.log('VIX ' + (vix ? vix.toFixed(1) : '?') + (vix >= 20 ? ' ⚠️ 변동성 경계' : ''));
   var weekly = pmWeeklyAccuracy_(ss);
   if (weekly) Logger.log('📏 ' + weekly);
-  var payload = pmImagePayload_(rows, fut, fx, vix, usNote);
+  var payload = pmImagePayload_(rows, fut, fx, vix, usNote, krMove);
   var summary = pmSummaryText_(rows, fut, fx, vix, usNote, weekly);
   Logger.log('이미지 데이터: ' + payload.rows.length + '개 ETF · 국내 제외 ' + payload.domestic + '개');
   Logger.log('카톡 요약:\n' + summary);
@@ -188,7 +196,7 @@ function runPremarket_(dryRun) {
 }
 
 // 이미지 그리기에 넘길 데이터
-function pmImagePayload_(rows, fut, fx, vix, usNote) {
+function pmImagePayload_(rows, fut, fx, vix, usNote, krMove) {
   var now = new Date();
   var md = Utilities.formatDate(now, 'Asia/Seoul', 'M/d') + '(' + '월화수목금토일'.charAt(Number(Utilities.formatDate(now, 'Asia/Seoul', 'u')) - 1) + ')';
   var show = rows.filter(function (r) { return r.hasPdf && !r.domestic; }).sort(function (a, b) { return b.pct - a.pct; });
@@ -197,7 +205,7 @@ function pmImagePayload_(rows, fut, fx, vix, usNote) {
     stamp: Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd_HHmm'),
     title: md + ' ' + Utilities.formatDate(now, 'Asia/Seoul', 'HH:mm') + ' 기준',
     titleShort: md,
-    chips: [['나스닥 선물', r2_(fut.NQ * 100)], ['S&P 선물', r2_(fut.ES * 100)], ['원/달러', r2_(fx * 100)]],
+    chips: [['나스닥 선물', r2_(fut.NQ * 100)], ['S&P 선물', r2_(fut.ES * 100)], ['원/달러', r2_(fx * 100)]].concat(krMove ? [['한국 EWY', r2_(krMove * 100)]] : []),
     vix: vix ? Math.round(vix * 10) / 10 : 0,
     note: usNote || '',
     domestic: rows.length - show.length,
@@ -428,6 +436,25 @@ function pmUpdateFuturesRows_(info) {
       sh.getRange(row, 4).setValue(ref);
     }
   });
+  // EWY 행: D=미국장 시가 · E=종가 · C=갱신 날짜 (대시보드가 오늘 날짜일 때만 개장 전 국내 종목에 반영)
+  var ewy = info.EWY;
+  if (ewy && ewy.open > 0) {
+    var erow = 0;
+    for (var j = 0; j < v.length; j++) if (String(v[j][1]).trim() === 'EWY') { erow = j + 1; break; }
+    if (!erow) erow = sh.getLastRow() + 1;
+    sh.getRange(erow, 1, 1, 5).setValues([['지표', 'EWY', '한국ETF 미국장 ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd'), ewy.open, ewy.close]]);
+  }
+}
+
+// EWY(미국 상장 한국 ETF) 가장 최근 미국장 시가 → 종가
+function pmEwyInfo_() {
+  try {
+    var r = pmChart_('EWY', '5d', '1d'), q = r.indicators.quote[0];
+    for (var i = r.timestamp.length - 1; i >= 0; i--) {
+      if (q.open[i] > 0 && q.close[i] > 0) return { open: q.open[i], close: q.close[i], delta: q.close[i] / q.open[i] - 1 };
+    }
+  } catch (e) { Logger.log('⚠️ EWY 조회 실패: ' + e); }
+  return { open: 0, close: 0, delta: 0 };
 }
 
 function pmVix_() {

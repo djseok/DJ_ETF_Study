@@ -37,6 +37,7 @@ function intradayCheck_() {
   if (dow >= 6 || hm < '0905' || hm > '1525') return;
   if (typeof pmKrHoliday_ === 'function' && pmKrHoliday_()) return;
   runIntraday_(false);
+  if (typeof wrMarkRun_ === 'function' && hm >= '1500') wrMarkRun_('intraday'); // 장 끝날 무렵까지 돌았으면 그날 정상
 }
 
 function runIntraday_(dryRun) {

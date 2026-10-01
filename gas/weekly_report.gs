@@ -56,18 +56,20 @@ function runWeekly_(dryRun) {
   });
 
   // 3) 멤버 · 배당
-  var diary = wrDiary_(monS, friS);
+  var diary = wrDiary_(monS, friS, wrTaxRatios_(ss));
   var props = PropertiesService.getScriptProperties();
   var snap = JSON.parse(props.getProperty('WR_SNAP') || '{}');
   var members = diary.members.map(function (m) {
     var prev = snap[m.name];
-    return [m.name, Math.round(m.current), r2_(m.ret), prev === undefined ? null : r2_(m.ret - prev), Math.round(m.weekDiv)];
+    var withDiv = m.invest > 0 ? (m.current + m.divNet - m.invest) / m.invest * 100 : 0;
+    return [m.name, Math.round(m.current), r2_(m.ret), prev === undefined ? null : r2_(m.ret - prev), Math.round(m.weekDiv), r2_(withDiv)];
   });
   var divWeek = diary.members.reduce(function (s, m) { return s + m.weekDiv; }, 0);
   var next = wrNextDividends_(ss, diary.holdings, fri);
 
   // 4) 예측 · 신호
   var acc = wrAccuracy_(ss, monS, friS);
+  var status = wrRunStatus_(mon);
   var signals = wrSignals_(ss, monS, friS);
 
   var payload = {
@@ -76,7 +78,7 @@ function runWeekly_(dryRun) {
     chips: chips, vix: 0, note: '',
     etfs: etfRows, members: members, divWeek: Math.round(divWeek),
     divNext: next.items.slice(0, 5), divNextTotal: Math.round(next.total),
-    acc: acc, signals: signals
+    acc: acc, signals: signals, status: status
   };
   Logger.log(JSON.stringify(payload));
   if (dryRun) { Logger.log('[미리보기] 카톡·기록 안 함'); return; }
@@ -100,6 +102,42 @@ function runWeekly_(dryRun) {
   }
   if (!ok) kakaoSendToMe_('📅 ' + payload.title + '\n' + summary);
   Logger.log('✅ 주간 리포트 발송' + (ok ? ' (이미지)' : ' (글자)'));
+}
+
+// ── 자동화 실행 기록 (각 스크립트가 끝날 때 wrMarkRun_ 호출 → 스크립트 속성 RUNLOG) ──
+function wrMarkRun_(key) {
+  var lock = LockService.getScriptLock();
+  try {
+    if (!lock.tryLock(10000)) return;
+    var props = PropertiesService.getScriptProperties();
+    var log = JSON.parse(props.getProperty('RUNLOG') || '{}');
+    var d = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+    var list = (log[key] || []).filter(function (x) { return x !== d; });
+    list.push(d);
+    log[key] = list.slice(-15);
+    props.setProperty('RUNLOG', JSON.stringify(log));
+  } catch (e) { } finally { try { lock.releaseLock(); } catch (e2) { } }
+}
+
+// 이번 주 평일(국내 휴장일 제외) 중 며칠 돌았는지 → '07:30 알림 5/5 · …'
+function wrRunStatus_(mon) {
+  var log = JSON.parse(PropertiesService.getScriptProperties().getProperty('RUNLOG') || '{}');
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd'), days = [];
+  for (var i = 0; i < 5; i++) {
+    var d = Utilities.formatDate(new Date(mon.getTime() + i * 864e5), 'Asia/Seoul', 'yyyy-MM-dd');
+    if (d > today) break;
+    if (typeof pmKrHoliday_ === 'function' && pmKrHoliday_(d)) continue;
+    days.push(d);
+  }
+  var items = [['premarket', '07:30 알림'], ['actuals', '16:10 기록'], ['intraday', '장중 신호'], ['holdings', '보유종목'], ['dividend', '배당주기']];
+  var bad = 0;
+  var parts = items.map(function (it) {
+    var n = days.filter(function (d) { return (log[it[0]] || []).indexOf(d) >= 0; }).length;
+    // 오늘 16:10 기록·장중 신호는 리포트(17:10) 전에 끝나므로 오늘 포함
+    if (n < days.length) bad++;
+    return it[1] + ' ' + n + '/' + days.length;
+  });
+  return { text: '자동화 이번 주: ' + parts.join(' · '), ok: bad === 0 };
 }
 
 // 이번 주 월요일 00:00 (KST)
@@ -131,7 +169,7 @@ function wrNaverWeekly_(codes, monS) {
 }
 
 // 개인일기장 '마스터 포토폴리오' (A 이름 · B 종목 · D 평단 · E 수량 · F 현재가 · H 이름 · I 날짜 · J 종목 · K 수량 · L 금액)
-function wrDiary_(monS, friS) {
+function wrDiary_(monS, friS, taxOf) {
   var v = SpreadsheetApp.openById(WR_DIARY_ID).getSheetByName(WR_DIARY_TAB).getDataRange().getValues();
   var num = function (x) { return Number(String(x).replace(/[^0-9.-]/g, '')) || 0; };
   var by = {}, order = [], holdings = {};
@@ -139,7 +177,7 @@ function wrDiary_(monS, friS) {
     var r = v[i], name = String(r[0] || '').trim(), stock = String(r[1] || '').trim();
     if (name && stock) {
       var qty = num(r[4]), avg = num(r[3]), cur = num(r[5]) || avg; // 현재가가 비면 평단가 (대시보드와 같은 방식)
-      if (!by[name]) { by[name] = { name: name, invest: 0, current: 0, weekDiv: 0 }; order.push(name); }
+      if (!by[name]) { by[name] = { name: name, invest: 0, current: 0, weekDiv: 0, divNet: 0 }; order.push(name); }
       if (qty > 0) {
         by[name].invest += avg * qty; by[name].current += cur * qty;
         var k = hsNormName_(stock);
@@ -148,9 +186,10 @@ function wrDiary_(monS, friS) {
       }
     }
     var dn = String(r[7] || '').trim(), dd = wrDate_(r[8]), amt = num(r[11]);
-    if (dn && dd && dd >= monS && dd <= friS && amt > 0) {
-      if (!by[dn]) { by[dn] = { name: dn, invest: 0, current: 0, weekDiv: 0 }; order.push(dn); }
-      by[dn].weekDiv += amt;
+    if (dn && dd && amt > 0) {
+      if (!by[dn]) { by[dn] = { name: dn, invest: 0, current: 0, weekDiv: 0, divNet: 0 }; order.push(dn); }
+      by[dn].divNet += amt * (1 - 0.154 * taxOf(String(r[9] || ''), dd)); // 지금까지 받은 배당 (세후, 과세표준 기준)
+      if (dd >= monS && dd <= friS) by[dn].weekDiv += amt;
     }
   }
   // 리포트에서 뺄 멤버: 이름이 Test 로 시작 + 스크립트 속성 WR_EXCLUDE (쉼표로 구분, 예: JBF)
@@ -159,6 +198,31 @@ function wrDiary_(monS, friS) {
   var members = order.map(function (n) { var m = by[n]; m.ret = m.invest > 0 ? (m.current / m.invest - 1) * 100 : 0; return m; })
     .filter(function (m) { return (m.invest > 0 || m.weekDiv > 0) && !/^test/i.test(m.name) && excl.indexOf(m.name.toUpperCase()) < 0; });
   return { members: members, holdings: holdings };
+}
+
+function wrNorm_(s) { return String(s || '').replace(/\s+/g, '').toUpperCase().replace(/커브드/g, '커버드'); } // 대시보드 taxNorm 과 같게
+
+// 'ETF들 배당이력' E열(1주당 과세표준)로 회차별 과세 비율 → function(종목, 'yyyy-MM-dd') → 0~1
+//   가까운 회차(±6일) → 같은 ETF 평균 → 없으면 1 (전액 과세)
+function wrTaxRatios_(ss) {
+  var sh = ss.getSheetByName('ETF들 배당이력'), map = {};
+  if (sh && sh.getLastRow() > 0) {
+    sh.getRange(1, 1, sh.getLastRow(), 5).getValues().forEach(function (r) {
+      var amt = Number(r[2]), d = r[1] instanceof Date ? r[1].getTime() : NaN;
+      if (!r[0] || !(amt > 0) || isNaN(d)) return;
+      var k = wrNorm_(r[0]);
+      (map[k] = map[k] || []).push({ t: d, amt: amt, tax: r[4] === '' || r[4] === null ? null : Number(r[4]) });
+    });
+  }
+  return function (stock, ymd) {
+    var list = map[wrNorm_(stock)] || [], t = new Date(ymd + 'T00:00:00+09:00').getTime(), best = null;
+    list.forEach(function (h) { if (h.tax !== null && Math.abs(h.t - t) <= 6 * 864e5 && (!best || Math.abs(h.t - t) < Math.abs(best.t - t))) best = h; });
+    if (best) return Math.min(1, best.tax / best.amt);
+    var known = list.filter(function (h) { return h.tax !== null; });
+    if (!known.length) return 1;
+    var a = 0, x = 0; known.forEach(function (h) { a += h.amt; x += h.tax; });
+    return a > 0 ? Math.min(1, x / a) : 1;
+  };
 }
 
 function wrDate_(x) {

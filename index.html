@@ -79,6 +79,9 @@
                     <button id="btnTabAcc" onclick="switchTab('acc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-amber-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-bullseye text-amber-500 w-5"></i> 예측 적중률
                     </button>
+                    <button id="btnTabTax" onclick="switchTab('tax')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-700 rounded-xl font-bold transition-all border border-transparent">
+                        <i class="fas fa-file-invoice-dollar text-rose-500 w-5"></i> 세금 점검
+                    </button>
                     <button id="btnTabCalc" onclick="switchTab('calc')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-calculator text-orange-500 w-5"></i> 구매 계산기
                     </button>
@@ -288,6 +291,62 @@
             </div>
         </div>
 
+        <!-- 세금 점검 (금융소득종합과세) -->
+        <div id="viewTax" class="view-section hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
+                <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">🧾 금융소득종합과세 사전 점검</h2>
+                        <p class="text-sm text-gray-500">올해 금융소득이 <b>2,000만원</b>을 넘는지 미리 확인 · 2026년 세법 기준 추정치 (세무 상담을 대신하지 않아요)</p>
+                    </div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">멤버</label>
+                        <select id="taxMember" class="px-4 py-2 rounded-xl border border-slate-300 bg-white font-bold text-slate-700 min-w-[120px]"></select></div>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-rose-50 border border-rose-100 mb-6">
+                    <div class="flex items-end justify-between mb-2">
+                        <div><div class="text-xs font-bold text-rose-700">올해 금융소득 (예상 포함, 과세표준 기준)</div><div id="taxFinTotal" class="text-4xl font-black mono text-slate-800">₩0</div></div>
+                        <div class="text-right text-xs font-bold text-slate-500">기준 ₩20,000,000</div>
+                    </div>
+                    <div id="taxBar" class="relative h-4 bg-white rounded-full overflow-hidden border border-rose-100"></div>
+                    <div class="flex justify-between text-[10px] text-slate-400 mt-1"><span>0</span><span>1,000만 (건보 집계)</span><span>2,000만 (종합과세)</span></div>
+                    <div id="taxRoom" class="mt-2 text-sm font-bold text-slate-700"></div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-3">
+                        <h4 class="font-black text-slate-700">내 정보 입력 <span class="text-xs font-bold text-slate-400">🔒 이 기기 브라우저에만 저장 · 서버로 보내지 않아요</span></h4>
+                        <label class="block"><span class="text-xs font-bold text-slate-600">세전 연봉 (원)</span>
+                            <input id="tax_salary" inputmode="numeric" placeholder="예: 60000000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <span class="text-[11px] text-slate-400">종합과세 시 추가 세금 계산에만 써요</span></label>
+                        <label class="block"><span class="text-xs font-bold text-slate-600">근로소득 과세표준 (선택)</span>
+                            <input id="tax_baseOverride" inputmode="numeric" placeholder="원천징수영수증 값" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <span class="text-[11px] text-slate-400">있으면 연봉 추정 대신 이 값을 써서 더 정확해요</span></label>
+                        <label class="block"><span class="text-xs font-bold text-slate-600">해외주식형 ETF 매도 차익 (올해, 과세분)</span>
+                            <input id="tax_etfGain" inputmode="numeric" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <span class="text-[11px] text-slate-400">증권사 앱의 배당소득 과세분 · 국내주식형 ETF 차익은 비과세</span></label>
+                        <label class="block"><span class="text-xs font-bold text-slate-600">예금이자 · 다른 배당 (올해 예상)</span>
+                            <input id="tax_otherFin" inputmode="numeric" placeholder="예: 500000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <span class="text-[11px] text-slate-400">예금·적금 이자, 개별주식 배당 등</span></label>
+                        <label class="block"><span class="text-xs font-bold text-slate-600">ISA · 연금계좌에서 받은 분배금 (제외)</span>
+                            <input id="tax_isa" inputmode="numeric" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <span class="text-[11px] text-slate-400">이 계좌 안의 분배금은 종합과세 집계에서 빠져요</span></label>
+                        <button onclick="taxClearInputs()" class="text-xs font-bold text-slate-400 hover:text-red-500">입력값 지우기</button>
+                    </div>
+                    <div class="space-y-4">
+                        <table class="w-full text-sm"><tbody id="taxBreakdown" class="divide-y divide-slate-100"></tbody></table>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100"><div class="text-xs font-bold text-slate-500">종합과세 추가 세금 (추정)</div><div id="taxExtraTax" class="text-2xl font-black mono text-slate-800 mt-1">₩0</div><div id="taxExtraTaxNote" class="text-[11px] text-slate-400 mt-1"></div></div>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100"><div class="text-xs font-bold text-slate-500">건강보험료 추가 (직장가입자)</div><div id="taxExtraHi" class="text-2xl font-black mono text-slate-800 mt-1">₩0</div><div id="taxExtraHiNote" class="text-[11px] text-slate-400 mt-1"></div></div>
+                        </div>
+                        <div id="taxWageNote" class="text-xs text-slate-500"></div>
+                        <ul id="taxTips" class="list-disc pl-5 space-y-1 text-xs text-slate-600"></ul>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-5 leading-relaxed">계산 방식: 금융소득(이자+배당) 2,000만원 초과 시 초과분을 근로소득과 합산해 누진세율(6~45%) 적용, 단 원천징수 14% 이상은 보장되는 비교과세. ETF 분배금은 배당가산(Gross-up) 대상이 아님. 근로소득 과세표준은 근로소득공제·본인공제·4대보험만 반영한 대략치라 실제(부양가족·카드·보험 공제 등)보다 높게 잡혀요. 건강보험은 2026년 요율(7.19% + 장기요양 0.9448%) 기준. 실제 신고는 홈택스·세무사와 확인하세요.</p>
+            </div>
+        </div>
+
         <div id="viewCalc" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-calculator text-orange-500 mr-2"></i> 스마트 매수 시뮬레이터</h2>
@@ -430,9 +489,9 @@
                     </div>
                     <div class="flex gap-1.5">
                         <button id="divTaxBtn_pre" onclick="setDividendTaxMode(false)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-700 text-white">세전</button>
-                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후 (15.4%)</button>
+                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후</button>
                     </div>
-                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후는 금액 전체에 15.4%를 단순 적용한 값이에요.<br>해외주식형 ETF는 과세표준 기준이라 실제 세금은 더 적을 수 있어요.</div>
+                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후 = 분배금 − 과세표준 × 15.4% (운용사 공시 과세표준 기준).<br>과세표준 기록이 없는 종목은 전액 과세로 보수적으로 계산해요.</div>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
@@ -1232,6 +1291,7 @@
     <script src="js/common.js"></script>
     <script src="js/main.js"></script>
     <script src="js/quant_core.js"></script>
+    <script src="js/tax_core.js"></script>
     <script src="js/quant.js"></script>
     <script src="js/port.js"></script>
     <script src="js/calc.js"></script>
@@ -1244,6 +1304,7 @@
     <script src="js/single_stock_analysis.js"></script>
     <script src="js/portfolio_backtest.js"></script>
     <script src="js/accuracy.js"></script>
+    <script src="js/tax.js"></script>
     <script>
         // 📱 오프라인에서도 마지막 데이터로 열리도록 서비스워커 등록
         if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

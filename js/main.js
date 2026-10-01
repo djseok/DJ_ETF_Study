@@ -29,7 +29,7 @@ function switchTab(tabName) {
     const allButtons = [
         'btnTabPort', 'btnTabQuant', 'btnTabCalc', 'btnTabDiv', 
         'btnTabSingle', 'btnTabMdd', 'btnTabRsi', 'btnTabMa', 
-        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc'
+        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc', 'btnTabTax'
     ];
     allButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
@@ -59,6 +59,7 @@ function switchTab(tabName) {
     if(tabName === 'div' && typeof window.renderActualDividendView === 'function') window.renderActualDividendView();
     if(tabName === 'oneDollar' && typeof loadDollarData === 'function') loadDollarData();
     if(tabName === 'backtestDiv' && typeof fetchBacktestMasterData === 'function') fetchBacktestMasterData();
+    if(tabName === 'tax' && typeof loadTaxView === 'function') loadTaxView();
     if(tabName === 'acc' && typeof loadAccuracyView === 'function') loadAccuracyView();
     if(tabName === 'portBt' && typeof initPortfolioBacktestView === 'function') initPortfolioBacktestView();
 }

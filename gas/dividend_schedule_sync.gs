@@ -2,7 +2,8 @@
  * 📅 ETF 배당주기 자동 갱신 — 관리시트 Apps Script
  *
  * 'ETF 배당주기' 탭의 종목마다 최근 12개월 지급 기록을 모아
- *   ① 'ETF들 배당이력' 탭(종목명 · 지급일 · 분배금 · 기준일)을 새 기록으로 바꾸고  → C열 수식(평균)이 자동으로 최신화
+ *   ① 'ETF들 배당이력' 탭(종목명 · 지급일 · 분배금 · 기준일 · 1주당 과세표준)을 새 기록으로 바꾸고  → C열 수식(평균)이 자동으로 최신화
+ *      E열 과세표준: 마스터시트 DB_ 탭·TIGER 공식은 확실히, 다른 운용사는 응답에 과세표준 칸이 있을 때만 (없으면 빈칸 → 대시보드는 분배금 전액을 과세로 봄)
  *   ② 'ETF 배당주기' B열(지급월)과 D·E열(출처, 최근 지급일)을 갱신합니다.
  *
  * 출처 우선순위
@@ -27,7 +28,7 @@ var DS_LOCK_MARK = '✅ 지급월 고정';
 var DS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 function previewDividendSchedule() { runDividendSchedule_(true); }
-function syncDividendSchedule() { runDividendSchedule_(false); }
+function syncDividendSchedule() { runDividendSchedule_(false); if (typeof wrMarkRun_ === 'function') wrMarkRun_('dividend'); }
 
 function installDividendScheduleTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
@@ -96,16 +97,16 @@ function runDividendSchedule_(dryRun) {
 
   // ① 배당이력: 자동 갱신 종목의 옛 기록은 지우고 최근 12개월로 교체, 나머지 종목 기록은 그대로
   var hLast = historySheet.getLastRow();
-  var old = hLast ? historySheet.getRange(1, 1, hLast, 4).getValues() : [];
+  var old = hLast ? historySheet.getRange(1, 1, hLast, 5).getValues() : [];
   var keep = old.filter(function (r) { return r[0] && !updated[dsNorm_(r[0])]; });
   var fresh = [];
   Object.keys(updated).forEach(function (k) {
-    updated[k].rows.forEach(function (x) { fresh.push([updated[k].name, dsDate_(x.pay), x.amt, x.rec ? dsDate_(x.rec) : '']); });
+    updated[k].rows.forEach(function (x) { fresh.push([updated[k].name, dsDate_(x.pay), x.amt, x.rec ? dsDate_(x.rec) : '', x.tax === undefined || x.tax === null ? '' : x.tax]); });
   });
   var all = keep.concat(fresh);
-  historySheet.getRange(1, 1, Math.max(hLast, all.length), 4).clearContent();
+  historySheet.getRange(1, 1, Math.max(hLast, all.length), 5).clearContent();
   if (all.length) {
-    historySheet.getRange(1, 1, all.length, 4).setValues(all);
+    historySheet.getRange(1, 1, all.length, 5).setValues(all);
     historySheet.getRange(1, 2, all.length, 1).setNumberFormat('yyyy-mm-dd');
     historySheet.getRange(1, 4, all.length, 1).setNumberFormat('yyyy-mm-dd'); // D열: 지급기준일 (실수령 자동 기록에서 사용)
   }
@@ -137,8 +138,8 @@ function getHistory_(name, ctx) {
   // 1) 마스터시트 DB_ 탭 (커버드콜)
   var db = ctx.master.getSheetByName('DB_' + name) || findSheetByNorm_(ctx.master, 'DB_' + name);
   if (db && db.getLastRow() >= 2) {
-    var v = db.getRange(2, 1, db.getLastRow() - 1, 4).getDisplayValues();
-    return { source: '마스터시트', rows: v.map(function (r) { return { rec: dsIso_(r[0]), pay: dsIso_(r[1]), amt: dsNum_(r[3]) }; }).filter(function (x) { return x.pay; }) };
+    var v = db.getRange(2, 1, db.getLastRow() - 1, 5).getDisplayValues();
+    return { source: '마스터시트', rows: v.map(function (r) { return { rec: dsIso_(r[0]), pay: dsIso_(r[1]), amt: dsNum_(r[3]), tax: r[4] === '' ? null : dsNum_(r[4]) }; }).filter(function (x) { return x.pay; }) };
   }
   var brand = name.toUpperCase().split(' ')[0];
   switch (brand) {
@@ -167,7 +168,7 @@ function kodexHistory_(name, ctx) {
   var id = ctx.cache.kodex[dsNorm_(name)];
   if (!id) throw new Error('KODEX 목록에서 이름을 못 찾음');
   var d = dsJson_('https://m.samsungfund.com/api/v1/kodex/divid-info.do?id=' + id);
-  return (d.dividList || []).map(function (x) { return { rec: dsIso_(x.basicD), pay: dsIso_(x.payD), amt: dsNum_(x.dividA) }; });
+  return (d.dividList || []).map(function (x) { return { rec: dsIso_(x.basicD), pay: dsIso_(x.payD), amt: dsNum_(x.dividA), tax: dsTaxField_(x) }; });
 }
 
 function riseHistory_(name, ctx) {
@@ -183,7 +184,7 @@ function riseHistory_(name, ctx) {
   var id = ctx.cache.rise[dsNorm_(name)];
   if (!id) throw new Error('RISE 목록에서 이름을 못 찾음');
   var d = dsJson_('https://kbam.co.kr/api/products/etfs/' + id + '/dividend');
-  return (d.history || []).map(function (x) { return { rec: dsIso_(x.base_date), pay: dsIso_(x.payment_date), amt: dsNum_(x.amount) }; });
+  return (d.history || []).map(function (x) { return { rec: dsIso_(x.base_date), pay: dsIso_(x.payment_date), amt: dsNum_(x.amount), tax: dsTaxField_(x) }; });
 }
 
 function aceHistory_(name, ctx) {
@@ -197,7 +198,7 @@ function aceHistory_(name, ctx) {
   var id = ctx.cache.ace[dsNorm_(name)];
   if (!id) throw new Error('ACE 목록에서 이름을 못 찾음');
   var d = dsJson_('https://papi.aceetf.co.kr/api/funds/' + id + '/dividend?page=1');
-  return (d.dividendList || []).map(function (x) { return { rec: dsIso_(x.std_DT), pay: dsIso_(x.dividend_DT), amt: dsNum_(x.dividend_PRI) }; });
+  return (d.dividendList || []).map(function (x) { return { rec: dsIso_(x.std_DT), pay: dsIso_(x.dividend_DT), amt: dsNum_(x.dividend_PRI), tax: dsTaxField_(x) }; });
 }
 
 function solHistory_(name, ctx) {
@@ -216,7 +217,7 @@ function solHistory_(name, ctx) {
   var id = ctx.cache.sol[dsNorm_(name)];
   if (!id) throw new Error('SOL 목록에서 이름을 못 찾음');
   var d = dsJson_('https://www.soletf.com/api/etf/pds/dividend/' + id);
-  return (d.items || []).map(function (x) { return { rec: dsIso_(x.WORK_DT), pay: dsIso_(x.DIVIDEND_DT), amt: dsNum_(x.DIVIDEND_PRI) }; });
+  return (d.items || []).map(function (x) { return { rec: dsIso_(x.WORK_DT), pay: dsIso_(x.DIVIDEND_DT), amt: dsNum_(x.DIVIDEND_PRI), tax: dsTaxField_(x) }; });
 }
 
 // TIGER: 미래에셋 분배 내역(list.ajax)을 종목명으로 13개월 조회
@@ -244,7 +245,7 @@ function tigerHistory_(name) {
       if (dsNorm_(cells[0].replace(/\([0-9A-Z]{6}\)\s*$/, '')) !== key) return;
       if (seen[cells[2]]) return;
       seen[cells[2]] = true;
-      out.push({ rec: dsIso_(cells[2]), pay: dsIso_(cells[3]), amt: dsNum_(cells[4]) });
+      out.push({ rec: dsIso_(cells[2]), pay: dsIso_(cells[3]), amt: dsNum_(cells[4]), tax: /\d/.test(cells[5] || '') ? dsNum_(cells[5]) : null });
     });
   });
   return out;
@@ -260,9 +261,11 @@ function kiwoomHistory_(name, ctx) {
   for (var t = 0; t < tables.length; t++) {
     if (tables[t].replace(/\s/g, '').indexOf('주당분배금') === -1) continue;
     var rows = tables[t].match(/<tr[\s\S]*?<\/tr>/g) || [];
+    var head = (tables[t].match(/<th[\s\S]*?<\/th>/g) || []).map(function (th) { return th.replace(/<[^>]+>/g, '').replace(/\s/g, ''); });
+    var taxIdx = head.findIndex(function (h) { return h.indexOf('과세표준') >= 0; });
     return rows.map(function (tr) {
       var c = (tr.match(/<td[\s\S]*?<\/td>/g) || []).map(function (td) { return td.replace(/<[^>]+>/g, '').trim(); });
-      return c.length >= 3 ? { rec: dsIso_(c[0]), pay: dsIso_(c[1]), amt: dsNum_(c[2]) } : null; // 기준일 | 지급일 | 주당분배금 | ...
+      return c.length >= 3 ? { rec: dsIso_(c[0]), pay: dsIso_(c[1]), amt: dsNum_(c[2]), tax: taxIdx >= 0 && c[taxIdx] !== undefined && c[taxIdx] !== '' ? dsNum_(c[taxIdx]) : null } : null; // 기준일 | 지급일 | 주당분배금 | ...
     }).filter(function (x) { return x && x.pay; });
   }
   return [];
@@ -288,6 +291,41 @@ function dsJson_(url) {
   if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode() + ' ' + url);
   return JSON.parse(res.getContentText());
 }
+// 운용사 응답에서 '1주당 과세표준' 칸 찾기: 이름이 과세표준을 뜻하는(tax base·std·txbs·과세표준) 숫자 칸만. 없으면 null
+//   (세액·과세여부·세율 같은 칸은 제외 — 잘못 잡으면 세금이 작게 계산되므로 확실한 것만)
+function dsTaxField_(x) {
+  var keys = Object.keys(x || {});
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (!/tax_?base|taxstd|tax_?std|txbs|txstd|txbase|과세표준/i.test(k)) continue;
+    if (/rate|rt$|yn$|gb$|type|percent|여부/i.test(k)) continue;
+    var v = x[k];
+    if (v === null || v === undefined || !/\d/.test(String(v))) continue;
+    var n = Number(String(v).replace(/[^0-9.-]/g, ''));
+    if (isFinite(n)) return n;
+  }
+  return null;
+}
+
+// 운용사별 응답 칸 이름 확인용 (과세표준 칸 찾기) — 실행하면 로그에 첫 기록의 칸 이름이 나옴
+function debugTaxFields() {
+  var ctx = { cache: {}, master: SpreadsheetApp.openById(DS_MASTER_SHEET_ID), local: SpreadsheetApp.getActiveSpreadsheet() };
+  [['KODEX', 'KODEX 미국S&P500'], ['RISE', 'RISE 미국나스닥100'], ['ACE', 'ACE 미국배당다우존스'], ['KIWOOM', 'KIWOOM 미국S&P500모멘텀'], ['TIGER', 'TIGER 미국배당다우존스']].forEach(function (p) {
+    try {
+      var r = getHistory_(p[1], ctx).rows || [];
+      Logger.log(p[0] + ' ' + p[1] + ' → ' + r.length + '건, 첫 기록: ' + JSON.stringify(r[0]));
+    } catch (e) { Logger.log(p[0] + ' 실패: ' + e); }
+  });
+  try {
+    var id = ctx.cache.kodex && ctx.cache.kodex[dsNorm_('KODEX 미국S&P500')];
+    if (id) Logger.log('KODEX 원본 칸: ' + Object.keys((dsJson_('https://m.samsungfund.com/api/v1/kodex/divid-info.do?id=' + id).dividList || [{}])[0]).join(', '));
+    var rid = ctx.cache.rise && ctx.cache.rise[dsNorm_('RISE 미국나스닥100')];
+    if (rid) Logger.log('RISE 원본 칸: ' + Object.keys((dsJson_('https://kbam.co.kr/api/products/etfs/' + rid + '/dividend').history || [{}])[0]).join(', '));
+    var aid = ctx.cache.ace && ctx.cache.ace[dsNorm_('ACE 미국배당다우존스')];
+    if (aid) Logger.log('ACE 원본 칸: ' + Object.keys((dsJson_('https://papi.aceetf.co.kr/api/funds/' + aid + '/dividend?page=1').dividendList || [{}])[0]).join(', '));
+  } catch (e) { Logger.log('원본 칸 확인 실패: ' + e); }
+}
+
 function dsNorm_(s) { return String(s || '').replace(/\s+/g, '').toUpperCase().replace(/커브드/g, '커버드'); }
 function dsNum_(s) { return Number(String(s == null ? '' : s).replace(/[^0-9.-]/g, '')) || 0; }
 function dsIso_(s) {
