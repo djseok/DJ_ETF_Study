@@ -56,12 +56,13 @@ function runWeekly_(dryRun) {
   });
 
   // 3) 멤버 · 배당
-  var diary = wrDiary_(monS, friS);
+  var diary = wrDiary_(monS, friS, wrTaxRatios_(ss));
   var props = PropertiesService.getScriptProperties();
   var snap = JSON.parse(props.getProperty('WR_SNAP') || '{}');
   var members = diary.members.map(function (m) {
     var prev = snap[m.name];
-    return [m.name, Math.round(m.current), r2_(m.ret), prev === undefined ? null : r2_(m.ret - prev), Math.round(m.weekDiv)];
+    var withDiv = m.invest > 0 ? (m.current + m.divNet - m.invest) / m.invest * 100 : 0;
+    return [m.name, Math.round(m.current), r2_(m.ret), prev === undefined ? null : r2_(m.ret - prev), Math.round(m.weekDiv), r2_(withDiv)];
   });
   var divWeek = diary.members.reduce(function (s, m) { return s + m.weekDiv; }, 0);
   var next = wrNextDividends_(ss, diary.holdings, fri);
@@ -131,7 +132,7 @@ function wrNaverWeekly_(codes, monS) {
 }
 
 // 개인일기장 '마스터 포토폴리오' (A 이름 · B 종목 · D 평단 · E 수량 · F 현재가 · H 이름 · I 날짜 · J 종목 · K 수량 · L 금액)
-function wrDiary_(monS, friS) {
+function wrDiary_(monS, friS, taxOf) {
   var v = SpreadsheetApp.openById(WR_DIARY_ID).getSheetByName(WR_DIARY_TAB).getDataRange().getValues();
   var num = function (x) { return Number(String(x).replace(/[^0-9.-]/g, '')) || 0; };
   var by = {}, order = [], holdings = {};
@@ -139,7 +140,7 @@ function wrDiary_(monS, friS) {
     var r = v[i], name = String(r[0] || '').trim(), stock = String(r[1] || '').trim();
     if (name && stock) {
       var qty = num(r[4]), avg = num(r[3]), cur = num(r[5]) || avg; // 현재가가 비면 평단가 (대시보드와 같은 방식)
-      if (!by[name]) { by[name] = { name: name, invest: 0, current: 0, weekDiv: 0 }; order.push(name); }
+      if (!by[name]) { by[name] = { name: name, invest: 0, current: 0, weekDiv: 0, divNet: 0 }; order.push(name); }
       if (qty > 0) {
         by[name].invest += avg * qty; by[name].current += cur * qty;
         var k = hsNormName_(stock);
@@ -148,9 +149,10 @@ function wrDiary_(monS, friS) {
       }
     }
     var dn = String(r[7] || '').trim(), dd = wrDate_(r[8]), amt = num(r[11]);
-    if (dn && dd && dd >= monS && dd <= friS && amt > 0) {
-      if (!by[dn]) { by[dn] = { name: dn, invest: 0, current: 0, weekDiv: 0 }; order.push(dn); }
-      by[dn].weekDiv += amt;
+    if (dn && dd && amt > 0) {
+      if (!by[dn]) { by[dn] = { name: dn, invest: 0, current: 0, weekDiv: 0, divNet: 0 }; order.push(dn); }
+      by[dn].divNet += amt * (1 - 0.154 * taxOf(String(r[9] || ''), dd)); // 지금까지 받은 배당 (세후, 과세표준 기준)
+      if (dd >= monS && dd <= friS) by[dn].weekDiv += amt;
     }
   }
   // 리포트에서 뺄 멤버: 이름이 Test 로 시작 + 스크립트 속성 WR_EXCLUDE (쉼표로 구분, 예: JBF)
@@ -159,6 +161,29 @@ function wrDiary_(monS, friS) {
   var members = order.map(function (n) { var m = by[n]; m.ret = m.invest > 0 ? (m.current / m.invest - 1) * 100 : 0; return m; })
     .filter(function (m) { return (m.invest > 0 || m.weekDiv > 0) && !/^test/i.test(m.name) && excl.indexOf(m.name.toUpperCase()) < 0; });
   return { members: members, holdings: holdings };
+}
+
+// 'ETF들 배당이력' E열(1주당 과세표준)로 회차별 과세 비율 → function(종목, 'yyyy-MM-dd') → 0~1
+//   가까운 회차(±6일) → 같은 ETF 평균 → 없으면 1 (전액 과세)
+function wrTaxRatios_(ss) {
+  var sh = ss.getSheetByName('ETF들 배당이력'), map = {};
+  if (sh && sh.getLastRow() > 0) {
+    sh.getRange(1, 1, sh.getLastRow(), 5).getValues().forEach(function (r) {
+      var amt = Number(r[2]), d = r[1] instanceof Date ? r[1].getTime() : NaN;
+      if (!r[0] || !(amt > 0) || isNaN(d)) return;
+      var k = hsNormName_(r[0]);
+      (map[k] = map[k] || []).push({ t: d, amt: amt, tax: r[4] === '' || r[4] === null ? null : Number(r[4]) });
+    });
+  }
+  return function (stock, ymd) {
+    var list = map[hsNormName_(stock)] || [], t = new Date(ymd + 'T00:00:00+09:00').getTime(), best = null;
+    list.forEach(function (h) { if (h.tax !== null && Math.abs(h.t - t) <= 6 * 864e5 && (!best || Math.abs(h.t - t) < Math.abs(best.t - t))) best = h; });
+    if (best) return Math.min(1, best.tax / best.amt);
+    var known = list.filter(function (h) { return h.tax !== null; });
+    if (!known.length) return 1;
+    var a = 0, x = 0; known.forEach(function (h) { a += h.amt; x += h.tax; });
+    return a > 0 ? Math.min(1, x / a) : 1;
+  };
 }
 
 function wrDate_(x) {
