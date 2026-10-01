@@ -47,7 +47,7 @@ function accSetMetric(k) {
     ACC_STATE.metric = k;
     ['open', 'close'].forEach(function (x) {
         var b = document.getElementById('accBtn_' + x);
-        if (b) b.className = 'px-4 py-2 rounded-full text-sm font-bold transition-colors ' + (x === k ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200');
+        if (b) b.className = 'whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-colors ' + (x === k ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200');
     });
     renderAccuracy();
 }
