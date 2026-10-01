@@ -64,10 +64,16 @@ function huParse_(member, images) {
   // 같은 종목이 여러 장에 나오면 마지막 값
   var parsed = {};
   read.forEach(function (x) {
-    var qty = huNum_(x.quantity), avg = huNum_(x.avg_price);
+    var qty = huNum_(x.quantity), avg = huNum_(x.avg_price), how = '';
     if (!x.name || !(qty >= 0)) return;
+    // 평균단가가 안 보이면: 매입금액 ÷ 수량 → (평가금액 − 평가손익) ÷ 수량 순서로 계산
+    if (!(avg > 0) && qty > 0) {
+      var buy = huNum_(x.buy_amount), ev = huNum_(x.eval_amount), pl = huNum_(x.profit);
+      if (buy > 0) { avg = buy / qty; how = '매입금액 ÷ 수량'; }
+      else if (ev > 0 && pl !== 0) { avg = (ev - pl) / qty; how = '(평가금액 − 손익) ÷ 수량'; }
+    }
     var m = huMatch_(x.name, known);
-    parsed[m ? m.key : 'X_' + x.name] = { raw: x.name, name: m ? m.name : x.name, code: m ? m.code : '', matched: !!m, qty: qty, avg: avg };
+    parsed[m ? m.key : 'X_' + x.name] = { raw: x.name, name: m ? m.name : x.name, code: m ? m.code : '', matched: !!m, qty: qty, avg: avg, how: how };
   });
 
   var rows = [], seen = {};
@@ -76,7 +82,7 @@ function huParse_(member, images) {
     seen[k] = true;
     var status = !p.matched ? 'unknown' : (!c ? 'new' : ((c.qty !== p.qty || Math.round(c.avg) !== Math.round(p.avg)) ? 'change' : 'same'));
     rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status,
-      oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? Math.round(c.avg) : null, newAvg: Math.round(p.avg) });
+      oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? Math.round(c.avg) : null, newAvg: Math.round(p.avg), avgHow: p.how });
   });
   var missing = cur.rows.filter(function (c) { return c.qty > 0 && !seen[c.key]; })
     .map(function (c) { return { key: c.key, name: c.name, qty: c.qty }; });
@@ -94,8 +100,10 @@ function huGemini_(images, knownNames) {
   // 모델 이름이 바뀌어도 동작하도록: 속성 값 → 최신 별칭 → 알려진 이름 순서로 시도 (404 면 다음)
   var models = [props.getProperty('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash'].filter(Boolean);
   var parts = [{ text:
-    '한국 증권사 앱의 주식/ETF 잔고 화면 캡처입니다. 화면에 보이는 보유 종목마다 종목명, 보유수량(주), 평균단가(매입단가, 원)를 읽어 주세요.\n' +
-    '- 평가금액·손익·수익률·현재가는 무시\n- 숫자는 쉼표 없이 숫자로\n- 평균단가가 안 보이면 0\n- 잘려서 일부만 보이는 줄은 빼기\n' +
+    '한국 증권사 앱의 주식/ETF 잔고 화면 캡처입니다. 화면에 보이는 보유 종목마다 아래 값을 읽어 주세요 (원 단위).\n' +
+    '- name 종목명, quantity 보유수량(주), avg_price 평균단가(매입단가·매입가)\n' +
+    '- buy_amount 매입금액(투자원금·매수금액), eval_amount 평가금액, profit 평가손익(손실이면 음수)\n' +
+    '- 화면에 없는 값은 0. 수익률(%)·현재가는 넣지 않기\n- 숫자는 쉼표 없이 숫자로\n- 잘려서 일부만 보이는 줄은 빼기\n' +
     '- 종목명은 화면 그대로 쓰되, 아래 목록에 같은 종목이 있으면 목록의 이름으로:\n' + knownNames.join(', ') }];
   images.forEach(function (b64) {
     var m = String(b64).match(/^data:(image\/[a-z]+);base64,(.*)$/);
@@ -106,7 +114,8 @@ function huGemini_(images, knownNames) {
     generationConfig: {
       temperature: 0, responseMimeType: 'application/json',
       responseSchema: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-        name: { type: 'STRING' }, quantity: { type: 'NUMBER' }, avg_price: { type: 'NUMBER' } }, required: ['name', 'quantity'] } }
+        name: { type: 'STRING' }, quantity: { type: 'NUMBER' }, avg_price: { type: 'NUMBER' },
+        buy_amount: { type: 'NUMBER' }, eval_amount: { type: 'NUMBER' }, profit: { type: 'NUMBER' } }, required: ['name', 'quantity'] } }
     }
   };
   var res = null;
