@@ -29,7 +29,7 @@ function switchTab(tabName) {
     const allButtons = [
         'btnTabPort', 'btnTabQuant', 'btnTabCalc', 'btnTabDiv', 
         'btnTabSingle', 'btnTabMdd', 'btnTabRsi', 'btnTabMa', 
-        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc', 'btnTabTax'
+        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc', 'btnTabTax', 'btnTabUpload'
     ];
     allButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
@@ -63,6 +63,26 @@ function switchTab(tabName) {
     if(tabName === 'acc' && typeof loadAccuracyView === 'function') loadAccuracyView();
     if(tabName === 'portBt' && typeof initPortfolioBacktestView === 'function') initPortfolioBacktestView();
 }
+
+// 📸 잔고 캡처 입력: 대시보드 안에서 upload.html 을 띄움 (member 를 주면 그 멤버로 미리 선택)
+function openUpload(member) {
+    switchTab('upload');
+    var f = document.getElementById('uploadFrame');
+    var src = 'upload.html?embed=1' + (member ? '&m=' + encodeURIComponent(member) : '');
+    if (f && f.getAttribute('src') !== src) f.setAttribute('src', src);
+    window.scrollTo({ top: document.getElementById('viewUpload').offsetTop - 12, behavior: 'smooth' });
+}
+// upload.html 이 보내는 신호: 높이 맞추기 · 반영 완료
+window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin || !e.data) return;
+    var f = document.getElementById('uploadFrame');
+    if (e.data.type === 'upload-height' && f) f.style.height = Math.max(400, e.data.height + 20) + 'px';
+    if (e.data.type === 'upload-done') {
+        // 시트 웹 게시가 갱신되는 데 1~5분 → 2분 뒤 포트폴리오 다시 받기
+        setTimeout(function () { if (typeof loadPortfolioData === 'function') loadPortfolioData('port', true); }, 120000);
+    }
+    if (e.data.type === 'upload-home') switchTab('port');
+});
 
 // parseCsvToMatrix 는 js/common.js 로 이동
 

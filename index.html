@@ -62,7 +62,7 @@
             <button id="btnTabPort" onclick="switchTab('port')" class="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-black text-lg shadow-md transition-all flex items-center justify-center border border-slate-700">
                 <i class="fas fa-crown text-yellow-400 mr-2 text-xl"></i> 내 대시보드 메인 (클럽 현황)
             </button>
-            <a href="upload.html" class="mt-2 w-full py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl font-bold text-sm shadow-sm border border-slate-200 flex items-center justify-center"><i class="fas fa-camera text-slate-500 mr-2"></i> 잔고 캡처로 보유 종목 입력</a>
+            <button id="btnTabUpload" onclick="openUpload()" class="mt-2 w-full py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl font-bold text-sm shadow-sm border border-slate-200 flex items-center justify-center"><i class="fas fa-camera text-slate-500 mr-2"></i> 📸 잔고 캡처로 내 보유 종목 업데이트</button>
         </div>
 
         <!-- 📂 3단 카테고리 묶음 -->
@@ -345,6 +345,13 @@
                     </div>
                 </div>
                 <p class="text-[11px] text-slate-400 mt-5 leading-relaxed">계산 방식: 금융소득(이자+배당) 2,000만원 초과 시 초과분을 근로소득과 합산해 누진세율(6~45%) 적용, 단 원천징수 14% 이상은 보장되는 비교과세. ETF 분배금은 배당가산(Gross-up) 대상이 아님. 근로소득 과세표준은 근로소득공제·본인공제·4대보험만 반영한 대략치라 실제(부양가족·카드·보험 공제 등)보다 높게 잡혀요. 건강보험은 2026년 요율(7.19% + 장기요양 0.9448%) 기준. 실제 신고는 홈택스·세무사와 확인하세요.</p>
+            </div>
+        </div>
+
+        <!-- 잔고 캡처 입력 (upload.html 을 대시보드 안에 그대로 띄움) -->
+        <div id="viewUpload" class="view-section hidden space-y-6">
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                <iframe id="uploadFrame" title="잔고 캡처 입력" class="w-full block border-0" style="height:900px" src="about:blank"></iframe>
             </div>
         </div>
 

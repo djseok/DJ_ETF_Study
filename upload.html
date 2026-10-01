@@ -44,6 +44,8 @@
   .hidden { display:none; }
   .done { text-align:center; padding:26px 10px; }
   .done b { font-size:20px; color:var(--ok); }
+  body.embed header { display:none; } body.embed { background:#fff; } body.embed main { padding:12px; max-width:none; }
+  body.embed .card { border-color:#eef0f3; }
 </style>
 </head>
 <body>
@@ -88,7 +90,7 @@
   <section class="card hidden done" id="s4">
     <b>✅ 반영했어요</b>
     <div class="msg" id="msg4"></div>
-    <button class="ghost" onclick="location.href='./'">대시보드 보기</button>
+    <button class="ghost" id="btnHome">대시보드 보기</button>
   </section>
 </main>
 <script src="js/common.js"></script>
@@ -97,10 +99,18 @@
   var $ = function (id) { return document.getElementById(id); };
   var API = (window.APP_CONFIG && APP_CONFIG.UPLOAD_URL) || '';
   var images = [], token = null;
+  var qs = new URLSearchParams(location.search), embed = qs.get('embed') === '1';
+  if (embed) document.body.classList.add('embed');
+  // 대시보드 안에 있을 때: 높이를 부모에 알려 스크롤 없이 보이게
+  function tellHeight() { if (embed && parent !== window) parent.postMessage({ type: 'upload-height', height: document.documentElement.scrollHeight }, location.origin); }
+  if (window.ResizeObserver) new ResizeObserver(tellHeight).observe(document.body); else setInterval(tellHeight, 800);
   try {
     var saved = JSON.parse(localStorage.getItem('djUploadAuth') || 'null');
     if (saved) { $('member').value = saved.member; $('pin').value = saved.pin; $('remember').checked = true; }
   } catch (e) { }
+  if (qs.get('m') && Array.prototype.some.call($('member').options, function (o) { return o.value === qs.get('m'); })) {
+    if (!saved || saved.member !== qs.get('m')) { $('member').value = qs.get('m'); if (saved && saved.member !== qs.get('m')) $('pin').value = ''; }
+  }
   if (!API) $('msg2').innerHTML = '<span class="err">업로드 서버 주소가 아직 설정되지 않았어요 (동진님 설치 중)</span>';
 
   // 큰 캡처는 긴 변 1800px JPEG 로 줄여서 보냄
@@ -174,9 +184,11 @@
     call({ action: 'apply', member: a.member, pin: a.pin, token: token, pick: pick, edits: edits, removeMissing: $('removeMissing').checked }).then(function (j) {
       $('s3').classList.add('hidden'); $('s2').classList.add('hidden'); $('s4').classList.remove('hidden');
       $('msg4').innerHTML = j.changed ? j.log.join('<br>') + '<br><span class="note">대시보드에는 1~5분 뒤 반영돼요 (시트 게시 갱신)</span>' : '바뀐 내용이 없어요';
+      if (embed && parent !== window) parent.postMessage({ type: 'upload-done' }, location.origin);
     }).catch(function (e) { $('msg3').innerHTML = '<span class="err">' + e.message + '</span>'; $('btnApply').disabled = false; });
   });
 
+  $('btnHome').addEventListener('click', function () { if (embed && parent !== window) parent.postMessage({ type: 'upload-home' }, location.origin); else location.href = './'; });
   $('btnBack').addEventListener('click', function () { $('s3').classList.add('hidden'); $('files').value = ''; images = []; $('thumbs').innerHTML = ''; $('btnParse').disabled = true; });
 })();
 </script>
