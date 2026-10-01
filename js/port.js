@@ -126,31 +126,59 @@ function renderPortfolioView(rankArray) {
         loadDivHistory().then(function () { renderPortfolioView(rankArray); });
     }
 
+    // 보기 선택: 전체 또는 한 멤버 (이 기기에 기억)
+    let pick = 'ALL';
+    try { pick = localStorage.getItem('djPortMember') || 'ALL'; } catch (e) { }
+    if (pick !== 'ALL' && !rankArray.some(u => u.name === pick)) pick = 'ALL';
+    const filterBox = document.getElementById('portMemberFilter');
+    if (filterBox) {
+        filterBox.innerHTML = ['ALL'].concat(rankArray.map(u => u.name)).map(n =>
+            `<button onclick="setPortMember('${n}')" class="px-3 py-1.5 rounded-full text-xs font-bold ${n === pick ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${n === 'ALL' ? '전체' : n}</button>`).join('');
+    }
+    const won = v => (v < 0 ? '−' : '') + '₩' + Math.abs(Math.round(v)).toLocaleString();
+    const pct = v => (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+    const clr = v => v >= 0 ? 'text-red-500' : 'text-blue-500';
+
     rankArray.forEach((user, index) => {
         let medal = medals[index] || "🏅";
-        let color = user.totalReturnPct >= 0 ? "text-red-500" : "text-blue-500";
-        // 배당 포함 수익률 = (평가액 + 지금까지 받은 배당(세후) − 투자원금) ÷ 투자원금
-        let divLine = '';
-        if (typeof divTotalsFor === 'function') {
-            const dv = divTotalsFor(user.name);
-            if (dv.count > 0) {
-                const withDiv = (user.totalCurrent + dv.net - user.totalInvest) / user.totalInvest * 100;
-                user.totalReturnWithDivPct = withDiv;
-                divLine = `<div class="text-xs font-bold mono mt-0.5 ${withDiv >= 0 ? 'text-red-400' : 'text-blue-400'}" title="받은 배당 세후 ₩${Math.round(dv.net).toLocaleString()} 포함">배당 포함 ${withDiv > 0 ? '+' : ''}${withDiv.toFixed(2)}%</div>`;
-            }
-        }
-        rankHtml += `<div class="bg-white p-4 rounded-xl shadow-sm border ${index===0?'border-yellow-400 ring-2 ring-yellow-200':'border-orange-100'} flex items-center justify-between"><div class="flex items-center gap-3"><span class="text-3xl">${medal}</span><div><h3 class="font-extrabold text-slate-800">${user.name}</h3><p class="text-xs text-slate-400">실보유 자산 ₩${Math.round(user.totalCurrent).toLocaleString()}</p></div></div><div class="text-right"><div class="text-xl font-black mono ${color}">${user.totalReturnPct > 0 ? '+':''}${user.totalReturnPct.toFixed(2)}%</div>${divLine}</div></div>`;
+        // 배당 미포함(가격만) vs 배당 포함 — 둘 다 계산
+        const dv = (typeof divTotalsFor === 'function') ? divTotalsFor(user.name) : { net: 0, gross: 0, count: 0 };
+        const pricePL = user.totalCurrent - user.totalInvest;
+        const withDivPL = pricePL + dv.net;
+        const withDivPct = user.totalInvest > 0 ? withDivPL / user.totalInvest * 100 : 0;
+        user.totalReturnWithDivPct = withDivPct;
+        if (pick !== 'ALL' && user.name !== pick) return;
+
+        rankHtml += `<div class="bg-white p-4 rounded-xl shadow-sm border ${index===0?'border-yellow-400 ring-2 ring-yellow-200':'border-orange-100'}">
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="text-3xl">${medal}</span><div><h3 class="font-extrabold text-slate-800">${user.name}</h3><p class="text-xs text-slate-400">평가액 ${won(user.totalCurrent)}</p></div></div>
+            <div class="text-right"><div class="text-[10px] font-bold text-slate-400">배당 미포함</div><div class="text-xl font-black mono ${clr(user.totalReturnPct)}">${pct(user.totalReturnPct)}</div></div></div>
+            <div class="mt-2 pt-2 border-t border-orange-50 flex justify-between text-xs"><span class="text-slate-400 font-bold">배당 포함</span><span class="font-black mono ${clr(withDivPct)}">${pct(withDivPct)}</span></div></div>`;
 
         let rowsHtml = "";
         user.items.filter(item => item.qty > 0).forEach(item => {
             let returnPct = ((item.current - item.invest) / item.invest * 100) || 0;
             rowsHtml += `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${item.stock}</td><td class="py-3 text-right mono"><div class="text-[10px] text-slate-400">평단 ₩${Math.round(item.avgPrice).toLocaleString()}</div><div class="font-bold text-slate-700">현재 ₩${Math.round(item.currPrice).toLocaleString()}</div></td><td class="py-3 text-right mono text-slate-500">${item.qty}주</td><td class="py-3 text-right mono font-bold ${returnPct>=0?'text-red-500':'text-blue-500'}">${returnPct>0?'+':''}${returnPct.toFixed(2)}%</td><td class="py-3 text-right mono font-bold text-slate-800">₩${Math.round(item.current).toLocaleString()}</td></tr>`;
         });
-        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div><div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}</tbody></table></div></div>`;
+        // 요약: 투자원금 · 평가액 · 손익(배당 미포함) · 받은 배당(세후) · 손익(배당 포함)
+        const cell = (label, val, sub, cls) => `<div class="p-3 rounded-xl bg-white border border-slate-100"><div class="text-[11px] font-bold text-slate-400">${label}</div><div class="text-base font-black mono ${cls || 'text-slate-800'}">${val}</div>${sub ? `<div class="text-[11px] font-bold mono ${cls || 'text-slate-400'}">${sub}</div>` : ''}</div>`;
+        const summary = `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 p-4 bg-slate-50/60 border-b border-slate-100">
+            ${cell('투자원금', won(user.totalInvest))}
+            ${cell('평가액', won(user.totalCurrent))}
+            ${cell('손익 (배당 미포함)', won(pricePL), pct(user.totalReturnPct), clr(pricePL))}
+            ${cell('받은 배당 (세후)', won(dv.net), dv.count ? '세전 ' + won(dv.gross) + ' · ' + dv.count + '회' : '기록 없음', 'text-emerald-600')}
+            ${cell('손익 (배당 포함)', won(withDivPL), pct(withDivPct), clr(withDivPL))}
+        </div>`;
+        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div>${summary}<div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}</tbody></table></div></div>`;
     });
 
     const rankCont = document.getElementById('rankingContainer');
     const cardsCont = document.getElementById('personalCardsContainer');
     if(rankCont) rankCont.innerHTML = rankHtml;
     if(cardsCont) cardsCont.innerHTML = cardsHtml;
+}
+
+// 메인 화면 보기 선택 (전체 / 멤버 한 명)
+function setPortMember(name) {
+    try { localStorage.setItem('djPortMember', name); } catch (e) { }
+    renderPortfolioView(portfolioRankArray);
 }
