@@ -430,9 +430,9 @@
                     </div>
                     <div class="flex gap-1.5">
                         <button id="divTaxBtn_pre" onclick="setDividendTaxMode(false)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-700 text-white">세전</button>
-                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후 (15.4%)</button>
+                        <button id="divTaxBtn_post" onclick="setDividendTaxMode(true)" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-emerald-700 border border-emerald-200">세후</button>
                     </div>
-                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후는 금액 전체에 15.4%를 단순 적용한 값이에요.<br>해외주식형 ETF는 과세표준 기준이라 실제 세금은 더 적을 수 있어요.</div>
+                    <div class="text-[11px] text-emerald-700/70 leading-tight">세후 = 분배금 − 과세표준 × 15.4% (운용사 공시 과세표준 기준).<br>과세표준 기록이 없는 종목은 전액 과세로 보수적으로 계산해요.</div>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
@@ -1232,6 +1232,7 @@
     <script src="js/common.js"></script>
     <script src="js/main.js"></script>
     <script src="js/quant_core.js"></script>
+    <script src="js/tax_core.js"></script>
     <script src="js/quant.js"></script>
     <script src="js/port.js"></script>
     <script src="js/calc.js"></script>

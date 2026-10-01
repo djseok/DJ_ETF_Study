@@ -121,10 +121,25 @@ function renderPortfolioView(rankArray) {
         return;
     }
 
+    // 과세표준 기록이 아직 없으면 먼저 받아온 뒤 다시 그림 (배당 포함 수익률의 세금 계산용)
+    if (typeof loadDivHistory === 'function' && divHistoryByKey === null) {
+        loadDivHistory().then(function () { renderPortfolioView(rankArray); });
+    }
+
     rankArray.forEach((user, index) => {
         let medal = medals[index] || "🏅";
         let color = user.totalReturnPct >= 0 ? "text-red-500" : "text-blue-500";
-        rankHtml += `<div class="bg-white p-4 rounded-xl shadow-sm border ${index===0?'border-yellow-400 ring-2 ring-yellow-200':'border-orange-100'} flex items-center justify-between"><div class="flex items-center gap-3"><span class="text-3xl">${medal}</span><div><h3 class="font-extrabold text-slate-800">${user.name}</h3><p class="text-xs text-slate-400">실보유 자산 ₩${Math.round(user.totalCurrent).toLocaleString()}</p></div></div><div class="text-right"><div class="text-xl font-black mono ${color}">${user.totalReturnPct > 0 ? '+':''}${user.totalReturnPct.toFixed(2)}%</div></div></div>`;
+        // 배당 포함 수익률 = (평가액 + 지금까지 받은 배당(세후) − 투자원금) ÷ 투자원금
+        let divLine = '';
+        if (typeof divTotalsFor === 'function') {
+            const dv = divTotalsFor(user.name);
+            if (dv.count > 0) {
+                const withDiv = (user.totalCurrent + dv.net - user.totalInvest) / user.totalInvest * 100;
+                user.totalReturnWithDivPct = withDiv;
+                divLine = `<div class="text-xs font-bold mono mt-0.5 ${withDiv >= 0 ? 'text-red-400' : 'text-blue-400'}" title="받은 배당 세후 ₩${Math.round(dv.net).toLocaleString()} 포함">배당 포함 ${withDiv > 0 ? '+' : ''}${withDiv.toFixed(2)}%</div>`;
+            }
+        }
+        rankHtml += `<div class="bg-white p-4 rounded-xl shadow-sm border ${index===0?'border-yellow-400 ring-2 ring-yellow-200':'border-orange-100'} flex items-center justify-between"><div class="flex items-center gap-3"><span class="text-3xl">${medal}</span><div><h3 class="font-extrabold text-slate-800">${user.name}</h3><p class="text-xs text-slate-400">실보유 자산 ₩${Math.round(user.totalCurrent).toLocaleString()}</p></div></div><div class="text-right"><div class="text-xl font-black mono ${color}">${user.totalReturnPct > 0 ? '+':''}${user.totalReturnPct.toFixed(2)}%</div>${divLine}</div></div>`;
 
         let rowsHtml = "";
         user.items.filter(item => item.qty > 0).forEach(item => {

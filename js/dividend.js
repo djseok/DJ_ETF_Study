@@ -97,6 +97,7 @@ async function renderActualDividendView() {
     try {
         await Promise.all([
             loadDynamicDividendRules(),
+            (typeof loadDivHistory === 'function') ? loadDivHistory() : Promise.resolve(),
             (typeof loadPortfolioData === 'function') ? loadPortfolioData('div') : Promise.resolve()
         ]);
         initDividendUserSelector();
@@ -134,14 +135,19 @@ function calculateAndDrawDividends() {
     var isAll = targetUser === DIV_ALL;
     var targetKey = targetUser.trim().toUpperCase();
     var memberKeys = names.map(function (n) { return n.trim().toUpperCase(); });
-    var taxK = divAfterTax ? (1 - DIV_TAX) : 1;
+    // 세후: 과세표준 기록이 있으면 그 비율로, 없으면 전액 과세(15.4%)로 계산
+    function netK(stock, when) {
+        if (!divAfterTax) return 1;
+        if (typeof divTaxRatio !== 'function') return 1 - DIV_TAX;
+        return 1 - DIV_TAX * divTaxRatio(stock, when).ratio;
+    }
 
     // 이 멤버의 수령 기록만 (이름 정확히 일치) · 클럽 전체면 멤버 모두
     var myLogs = (globalActualDividendLogs || []).filter(function (log) {
         var k = String(log.userName || '').trim().toUpperCase();
         return isAll ? memberKeys.indexOf(k) >= 0 : k === targetKey;
     }).map(function (log) {
-        return Object.assign({}, log, { amount: log.amount * taxK });
+        return Object.assign({}, log, { amount: log.amount * netK(log.stockName, log.jsDate) });
     }).sort(function (a, b) { return b.jsDate.getTime() - a.jsDate.getTime(); });
 
     // 보유 종목 (클럽 전체면 종목별 수량 합산)
@@ -192,7 +198,7 @@ function calculateAndDrawDividends() {
         var rule = findDividendRule(item.stock);
         if (!rule) { missingRules.push(item.stock); return; }
         if (!rule.payMonths.length || rule.expectedAmount <= 0) return;
-        var perPayment = rule.expectedAmount * item.qty * taxK;
+        var perPayment = rule.expectedAmount * item.qty * netK(item.stock, null);
 
         rule.payMonths.forEach(function (month) {
             if (month < currentMonth) return;
@@ -264,11 +270,11 @@ function calculateAndDrawDividends() {
     }
 
     renderStackedDividendChart(actualByStock, expectedByStock);
-    renderUpcomingDividends(holdings, receivedThisMonthKeys, taxK);
+    renderUpcomingDividends(holdings, receivedThisMonthKeys, netK);
 }
 
 // 다가오는 배당 (오늘부터 60일): 지급 예정일 = 지급월 + 최근 지급일의 '일(day)' (주말이면 다음 월요일)
-function renderUpcomingDividends(holdings, receivedThisMonthKeys, taxK) {
+function renderUpcomingDividends(holdings, receivedThisMonthKeys, netK) {
     var box = document.getElementById('dividend-upcoming');
     if (!box) return;
     var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -287,7 +293,7 @@ function renderUpcomingDividends(holdings, receivedThisMonthKeys, taxK) {
             while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
             if (d < today && add === 0 && day) continue; // 이번 달 지급일이 이미 지남 (기록이 아직 없을 수 있음)
             if (d > until) continue;
-            list.push({ date: d, approx: !day, stock: item.stock, qty: item.qty, per: rule.expectedAmount, amt: rule.expectedAmount * item.qty * taxK });
+            list.push({ date: d, approx: !day, stock: item.stock, qty: item.qty, per: rule.expectedAmount, amt: rule.expectedAmount * item.qty * netK(item.stock, null) });
         }
     });
     list.sort(function (a, b) { return a.date - b.date; });
