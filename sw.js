@@ -3,7 +3,7 @@
 // - 구글 시트 CSV 는 주소 끝의 &t=시각 을 빼고 저장 → 오프라인이어도 마지막 데이터로 열림
 // - 디자인·차트 라이브러리(CDN)는 저장본을 먼저 쓰고 뒤에서 갱신
 // - 코드를 바꿔도 network-first 라 바로 반영됩니다 (버전 올릴 필요 없음)
-const CACHE = 'dj-etf-v1';
+const CACHE = 'dj-etf-v2';
 const SHELL = ['./', 'index.html', 'css/style.css', 'manifest.webmanifest', 'assets/icons/icon-192.png'];
 
 self.addEventListener('install', e => {
@@ -38,7 +38,8 @@ self.addEventListener('fetch', e => {
   e.respondWith((async () => {
     const key = cacheKey(req);
     try {
-      const res = await fetch(req);
+      // 같은 사이트 파일은 브라우저 캐시(최대 10분)를 건너뛰고 서버에 확인 → 고친 코드가 바로 반영
+      const res = sameOrigin ? await fetch(req, { cache: 'no-cache' }) : await fetch(req);
       if (res && (res.ok || res.type === 'opaque')) {
         const c = await caches.open(CACHE);
         c.put(key, res.clone());
