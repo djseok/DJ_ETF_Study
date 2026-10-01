@@ -91,7 +91,8 @@ function huGemini_(images, knownNames) {
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('GEMINI_API_KEY');
   if (!key) throw new Error('GEMINI_API_KEY 가 설정되지 않았어요');
-  var model = props.getProperty('GEMINI_MODEL') || 'gemini-flash-latest';
+  // 모델 이름이 바뀌어도 동작하도록: 속성 값 → 최신 별칭 → 알려진 이름 순서로 시도 (404 면 다음)
+  var models = [props.getProperty('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash'].filter(Boolean);
   var parts = [{ text:
     '한국 증권사 앱의 주식/ETF 잔고 화면 캡처입니다. 화면에 보이는 보유 종목마다 종목명, 보유수량(주), 평균단가(매입단가, 원)를 읽어 주세요.\n' +
     '- 평가금액·손익·수익률·현재가는 무시\n- 숫자는 쉼표 없이 숫자로\n- 평균단가가 안 보이면 0\n- 잘려서 일부만 보이는 줄은 빼기\n' +
@@ -108,10 +109,14 @@ function huGemini_(images, knownNames) {
         name: { type: 'STRING' }, quantity: { type: 'NUMBER' }, avg_price: { type: 'NUMBER' } }, required: ['name', 'quantity'] } }
     }
   };
-  var res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body)
-  });
+  var res = null;
+  for (var mi = 0; mi < models.length; mi++) {
+    res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[mi] + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body)
+    });
+    if (res.getResponseCode() !== 404) break;
+  }
   if (res.getResponseCode() !== 200) throw new Error('이미지 인식 실패 (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 200));
   var j = JSON.parse(res.getContentText());
   var text = (((j.candidates || [])[0] || {}).content || {}).parts;
@@ -141,7 +146,7 @@ function huApply_(member, token, pick, removeMissing) {
       } else {
         var row = cur.lastRow + 1; cur.lastRow = row;
         var code = String(r.code || '').replace(/^KRX:/i, '');
-        sh.getRange(row, 1, 1, 6).setValues([[member, r.name, 0, r.newAvg, r.newQty, code ? '=IFERROR(GOOGLEFINANCE("KRX:' + code + '","price"))' : '']]);
+        sh.getRange(row, 1, 1, 6).setValues([[member, r.name, 0, r.newAvg, r.newQty, code ? '=IFERROR(GOOGLEFINANCE("KRX:' + code + '","price"), IFERROR(GOOGLEFINANCE("' + code + '","price"), 0))' : '']]);
         log.push('+ ' + r.name + ' ' + r.newQty + '주');
       }
     });
@@ -232,5 +237,5 @@ function testSetup() {
     catch (e) { Logger.log('❌ ' + m + ': ' + e.message); }
   });
   Logger.log('관리시트 정식 이름 ' + Object.keys(huKnownEtfs_()).length + '개');
-  Logger.log('모델: ' + (p.getProperty('GEMINI_MODEL') || 'gemini-flash-latest'));
+  Logger.log('모델: ' + (p.getProperty('GEMINI_MODEL') || 'gemini-flash-latest (없으면 자동으로 다른 이름 시도)'));
 }
