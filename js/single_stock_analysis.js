@@ -27,6 +27,7 @@ async function runQuantAnalysis() {
             execThreshold: 0.01,      
             costRate: 0.0015,         
             midMA: 60, longMA: 200,
+            marketGateRatio: 0.5,     // 미국 양대 지수 동반 약세 시 신규 진입 비중 배수 (미정의 시 NaN → 체결 불가)
             exitType: "A"             
         };
 
@@ -503,9 +504,12 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
 function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
     if(endIdx - startIdx < 50) return null;
 
+    // 초기자본을 1.0으로 두면 주가가 1보다 큰 모든 종목에서 Math.floor(1.0 / 가격) = 0주가 되어
+    // 단 한 번도 체결되지 않는다. 충분히 큰 가상 자본으로 계산하고 곡선은 1.0 기준으로 정규화한다.
+    const INIT_CAP = 1e9;
     let res = { rebalanceLedger: [], positionCycles: [], eqGross: [1.0], eqNet: [1.0], bh: [1.0], cumCost: 0, turnAmt: 0, rets: [], days: endIdx - startIdx - 1 };
-    let st = { cash: 1.0, shares: 0, actualWeight: 0.0, avgCost: 0, cumCost: 0, prevEq: 1.0 };
-    let bhCash = 1.0, bhShares = 0;
+    let st = { cash: INIT_CAP, shares: 0, actualWeight: 0.0, avgCost: 0, cumCost: 0, prevEq: INIT_CAP };
+    let bhCash = INIT_CAP, bhShares = 0;
     let activeCycle = null;
 
     for (let i = startIdx; i < endIdx - 1; i++) { 
@@ -520,7 +524,7 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         let closeT1 = ind.prices[i+1];
 
         if (i === startIdx) { bhShares = Math.floor(bhCash / openT1); bhCash = bhCash - (bhShares * openT1); }
-        res.bh.push(bhCash + (bhShares * closeT1));
+        res.bh.push((bhCash + (bhShares * closeT1)) / INIT_CAP);
 
         let eqAtOpen = st.cash + (st.shares * openT1);
         let actWAtOpen = eqAtOpen === 0 ? 0 : (st.shares * openT1) / eqAtOpen;
@@ -576,8 +580,8 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
 
         if (isTrade) {
             st.cumCost += cost;
-            res.cumCost += cost;
-            res.turnAmt += actualExecAmt;
+            res.cumCost += cost / INIT_CAP;
+            res.turnAmt += actualExecAmt / INIT_CAP;
 
             let newEqOpen = st.cash + (st.shares * openT1);
             let actWAfter = newEqOpen === 0 ? 0 : (st.shares * openT1) / newEqOpen;
@@ -614,8 +618,8 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
         let netEquity = st.cash + (st.shares * closeT1);
         let grossEquity = netEquity + st.cumCost;
         
-        res.eqNet.push(netEquity);
-        res.eqGross.push(grossEquity);
+        res.eqNet.push(netEquity / INIT_CAP);
+        res.eqGross.push(grossEquity / INIT_CAP);
         res.rets.push((netEquity / st.prevEq) - 1);
         st.prevEq = netEquity;
 
@@ -660,7 +664,7 @@ function runBacktestSegment(startIdx, endIdx, ind, spy, qqq, cfg, isIsSegment) {
             cagr, bhCagr, mdd: maxDD*100, bhMdd: bhMaxDD*100, sharpe, sortino, calmar, 
             trd: totalT, winRate: winRate*100, pf, exp, avgWin, avgLoss, avgHold: totalT===0?0:hold/totalT, 
             turnCum, cumCost: r.cumCost, grossEnd: r.eqGross[r.eqGross.length-1], netEnd: r.eqNet[r.eqNet.length-1],
-            maxConsL
+            maxConsL, rebal: r.rebalanceLedger.length, openPos: activeCycle !== null
         };
     };
 
@@ -1011,7 +1015,7 @@ const safeCagr = (obj) => (obj && typeof obj.cagr === 'number') ? (obj.cagr * 10
 const safeMdd = (obj) => (obj && typeof obj.mdd === 'number') ? obj.mdd.toFixed(1) + '%' : 'N/A';
 const safeSharpe = (obj) => (obj && obj.sharpe !== "N/A" && typeof obj.sharpe === 'number') ? obj.sharpe.toFixed(2) : 'N/A';
 const safeSortino = (obj) => (obj && obj.sortino !== "N/A" && typeof obj.sortino === 'number') ? obj.sortino.toFixed(2) : 'N/A';
-const safeTrd = (obj) => (obj && typeof obj.trd === 'number') ? obj.trd + '회' : 'N/A';
+const safeTrd = (obj) => (obj && typeof obj.trd === 'number') ? obj.trd + '회' + (typeof obj.rebal === 'number' ? ` <span class="text-slate-400 text-[10px]">(체결 ${obj.rebal}건${obj.openPos ? ', 보유중' : ''})</span>` : '') : 'N/A';
 
 function renderEQDS_UI(ctx) {
     const { ticker, ev, dv, btIs, btOosA, btOosB, btOosC, conf, sensitivity, tests } = ctx;
