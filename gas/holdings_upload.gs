@@ -30,6 +30,9 @@ function doPost(e) {
     var member = String(req.member || '').trim();
     huCheckPin_(member, String(req.pin || ''));
     if (req.action === 'parse') return huJson_(huParse_(member, req.images || []));
+    // 휴대폰에서 끊기지 않게: 사진 1장씩 읽고(read) → 마지막에 모아서 비교(compare)
+    if (req.action === 'read') return huJson_({ ok: true, items: huRead_(req.image) });
+    if (req.action === 'compare') return huJson_(huCompare_(member, req.items || []));
     if (req.action === 'apply') return huJson_(huApply_(member, req.token, req.pick || null, !!req.removeMissing, req.edits || {}));
     if (req.action === 'current') return huJson_({ ok: true, holdings: huCurrent_(member).rows });
     throw new Error('알 수 없는 요청');
@@ -58,7 +61,18 @@ function huParse_(member, images) {
   if (!images.length) throw new Error('이미지를 올려 주세요');
   if (images.length > 4) throw new Error('한 번에 4장까지 올릴 수 있어요');
   var known = huKnownEtfs_();
-  var read = huGemini_(images, Object.keys(known).map(function (k) { return known[k].name; }));
+  return huCompare_(member, huGemini_(images, Object.keys(known).map(function (k) { return known[k].name; })), known);
+}
+
+function huRead_(image) {
+  if (!image) throw new Error('이미지를 올려 주세요');
+  var known = huKnownEtfs_();
+  return huGemini_([image], Object.keys(known).map(function (k) { return known[k].name; }));
+}
+
+function huCompare_(member, read, known) {
+  known = known || huKnownEtfs_();
+  read = (read || []).slice(0, 200);
   var cur = huCurrent_(member);
 
   // 같은 종목이 여러 장에 나오면 마지막 값
