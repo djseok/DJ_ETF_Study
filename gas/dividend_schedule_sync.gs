@@ -168,7 +168,7 @@ function kodexHistory_(name, ctx) {
   var id = ctx.cache.kodex[dsNorm_(name)];
   if (!id) throw new Error('KODEX 목록에서 이름을 못 찾음');
   var d = dsJson_('https://m.samsungfund.com/api/v1/kodex/divid-info.do?id=' + id);
-  return (d.dividList || []).map(function (x) { return { rec: dsIso_(x.basicD), pay: dsIso_(x.payD), amt: dsNum_(x.dividA), tax: dsTaxField_(x) }; });
+  return (d.dividList || []).map(function (x) { return { rec: dsIso_(x.basicD), pay: dsIso_(x.payD), amt: dsNum_(x.dividA), tax: dsTaxNum_(x.taxDividA) }; });
 }
 
 function riseHistory_(name, ctx) {
@@ -184,7 +184,7 @@ function riseHistory_(name, ctx) {
   var id = ctx.cache.rise[dsNorm_(name)];
   if (!id) throw new Error('RISE 목록에서 이름을 못 찾음');
   var d = dsJson_('https://kbam.co.kr/api/products/etfs/' + id + '/dividend');
-  return (d.history || []).map(function (x) { return { rec: dsIso_(x.base_date), pay: dsIso_(x.payment_date), amt: dsNum_(x.amount), tax: dsTaxField_(x) }; });
+  return (d.history || []).map(function (x) { return { rec: dsIso_(x.base_date), pay: dsIso_(x.payment_date), amt: dsNum_(x.amount), tax: dsTaxNum_(x.tax_standard_amount) }; });
 }
 
 function aceHistory_(name, ctx) {
@@ -198,7 +198,7 @@ function aceHistory_(name, ctx) {
   var id = ctx.cache.ace[dsNorm_(name)];
   if (!id) throw new Error('ACE 목록에서 이름을 못 찾음');
   var d = dsJson_('https://papi.aceetf.co.kr/api/funds/' + id + '/dividend?page=1');
-  return (d.dividendList || []).map(function (x) { return { rec: dsIso_(x.std_DT), pay: dsIso_(x.dividend_DT), amt: dsNum_(x.dividend_PRI), tax: dsTaxField_(x) }; });
+  return (d.dividendList || []).map(function (x) { return { rec: dsIso_(x.std_DT), pay: dsIso_(x.dividend_DT), amt: dsNum_(x.dividend_PRI), tax: dsTaxNum_(x.tax_PRI) }; });
 }
 
 function solHistory_(name, ctx) {
@@ -293,6 +293,9 @@ function dsJson_(url) {
 }
 // 운용사 응답에서 '1주당 과세표준' 칸 찾기: 이름이 과세표준을 뜻하는(tax base·std·txbs·과세표준) 숫자 칸만. 없으면 null
 //   (세액·과세여부·세율 같은 칸은 제외 — 잘못 잡으면 세금이 작게 계산되므로 확실한 것만)
+// 운용사별 확인된 과세표준 칸 (2026-10-01 debugTaxFields): KODEX taxDividA · RISE tax_standard_amount · ACE tax_PRI
+function dsTaxNum_(v) { return v === null || v === undefined || !/\d/.test(String(v)) ? null : dsNum_(v); }
+
 function dsTaxField_(x) {
   var keys = Object.keys(x || {});
   for (var i = 0; i < keys.length; i++) {
