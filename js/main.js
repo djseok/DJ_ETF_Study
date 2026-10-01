@@ -78,6 +78,9 @@ window.addEventListener('message', function (e) {
     var f = document.getElementById('uploadFrame');
     if (e.data.type === 'upload-height' && f) f.style.height = Math.max(400, e.data.height + 20) + 'px';
     if (e.data.type === 'upload-done') {
+        // 결과 화면이 짧아져서 빈 화면처럼 보이지 않게 입력창 맨 위로
+        var v = document.getElementById('viewUpload');
+        if (v) window.scrollTo({ top: v.offsetTop - 12, behavior: 'smooth' });
         // 시트 웹 게시가 갱신되는 데 1~5분 → 2분 뒤 포트폴리오 다시 받기
         setTimeout(function () { if (typeof loadPortfolioData === 'function') loadPortfolioData('port', true); }, 120000);
     }
