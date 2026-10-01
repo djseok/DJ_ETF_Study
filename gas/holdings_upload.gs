@@ -118,14 +118,23 @@ function huGemini_(images, knownNames) {
         buy_amount: { type: 'NUMBER' }, eval_amount: { type: 'NUMBER' }, profit: { type: 'NUMBER' } }, required: ['name', 'quantity'] } }
     }
   };
-  var res = null;
+  // 404(모델 없음)·503(사용량 몰림)·429(잠깐 한도)·500 이면 잠시 쉬었다 다시, 그래도 안 되면 다음 모델로
+  var res = null, busy = false;
+  outer:
   for (var mi = 0; mi < models.length; mi++) {
-    res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[mi] + ':generateContent', {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body)
-    });
-    if (res.getResponseCode() !== 404) break;
+    for (var tryN = 0; tryN < 2; tryN++) {
+      res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[mi] + ':generateContent', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body)
+      });
+      var code = res.getResponseCode();
+      if (code === 200) break outer;
+      if (code === 404) break;                       // 이 모델 이름이 없음 → 다음 모델
+      if (code === 503 || code === 429 || code === 500) { busy = true; Utilities.sleep(1500 * (tryN + 1)); continue; }
+      break outer;                                   // 키 오류 등은 바로 알림
+    }
   }
+  if (res.getResponseCode() !== 200 && busy) throw new Error('지금 Google AI 사용량이 몰려 있어요. 1~2분 뒤 다시 [읽어오기]를 눌러 주세요.');
   if (res.getResponseCode() !== 200) throw new Error('이미지 인식 실패 (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 200));
   var j = JSON.parse(res.getContentText());
   var text = (((j.candidates || [])[0] || {}).content || {}).parts;
