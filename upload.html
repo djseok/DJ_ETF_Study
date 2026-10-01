@@ -67,7 +67,7 @@
     <div class="step">2. 잔고 화면 캡처 (최대 4장)</div>
     <label class="drop">사진 선택 / 캡처 올리기<input id="files" type="file" accept="image/*" multiple></label>
     <div class="thumbs" id="thumbs"></div>
-    <p class="note">• 종목명·보유수량·평균단가(매입가)가 보이게 캡처해 주세요. 종목이 많으면 스크롤해서 여러 장.<br>
+    <p class="note">• 종목명·보유수량·평균단가(매입가)가 보이게 캡처해 주세요. 평단이 없는 화면이면 매입금액이나 평가금액·손익으로 계산해요. 종목이 많으면 스크롤해서 여러 장.<br>
       • 계좌번호·이름은 가리거나 잘라서 올려도 돼요. 이미지는 인식에만 쓰고 저장하지 않아요.<br>
       • 인식은 Google Gemini 가 처리해요. 같은 종목을 여러 증권사에 나눠 갖고 있다면 3단계에서 수량·평단을 합친 값으로 고쳐 주세요.</p>
     <button class="primary" id="btnParse" disabled>읽어오기</button>
@@ -161,7 +161,8 @@
         // 새 값은 고칠 수 있게 입력칸으로 (여러 증권사 합산 등)
         var inp = function (cls, v) { return '<input type="text" inputmode="numeric" class="' + cls + '" data-key="' + r.key + '" value="' + (v === null || v === undefined ? '' : Math.round(v)) + '" style="width:84px;padding:6px;font-size:14px;text-align:right"' + (can ? '' : ' disabled') + '>'; };
         var q = (r.oldQty === null ? '' : '<div class="raw">지금 ' + fmt(r.oldQty) + '</div>') + inp('eqty', r.newQty);
-        var p = (r.oldAvg === null ? '' : '<div class="raw">지금 ' + fmt(r.oldAvg) + '</div>') + inp('eavg', r.newAvg);
+        var p = (r.oldAvg === null ? '' : '<div class="raw">지금 ' + fmt(r.oldAvg) + '</div>') + inp('eavg', r.newAvg)
+          + (r.avgHow ? '<div class="raw" style="color:var(--warn)">계산: ' + r.avgHow + '</div>' : (r.newAvg ? '' : '<div class="raw" style="color:var(--up)">평단 못 읽음 → 입력</div>'));
         return '<tr><td><input type="checkbox" class="pick" value="' + r.key + '"' + (can ? ' checked' : ' disabled') + '></td>'
           + '<td>' + r.name + '<span class="tag ' + t[1] + '">' + t[0] + '</span>' + (r.raw !== r.name ? '<div class="raw">화면: ' + r.raw + '</div>' : '') + '</td>'
           + '<td class="num">' + q + '</td><td class="num">' + p + '</td></tr>';
