@@ -52,7 +52,7 @@ function installPremarketTrigger() {
   Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 06:20 선물·EWY 기준값 갱신');
 }
 
-function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmEwyInfo_(); pmUpdateFuturesRows_(info); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
+function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmUsSessionFresh_() ? pmEwyInfo_() : { open: 0, close: 0, delta: 0 }; pmUpdateFuturesRows_(info); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
 function recordActualsDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
   if (dow >= 6 || pmKrHoliday_()) return;
@@ -74,8 +74,8 @@ var PM_KR_HOLIDAYS = [
   '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-01', '2027-05-05', '2027-05-13', '2027-08-16',
   '2027-09-14', '2027-09-15', '2027-09-16', '2027-10-04', '2027-10-11', '2027-12-27', '2027-12-31'
 ];
-function pmKrHoliday_() {
-  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+function pmKrHoliday_(ymd) {
+  var today = ymd || Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
   var extra = (PropertiesService.getScriptProperties().getProperty('PM_KR_HOLIDAYS') || '').split(',').map(function (x) { return x.trim(); });
   return PM_KR_HOLIDAYS.indexOf(today) >= 0 || extra.indexOf(today) >= 0;
 }

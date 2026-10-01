@@ -245,7 +245,7 @@ function tigerHistory_(name) {
       if (dsNorm_(cells[0].replace(/\([0-9A-Z]{6}\)\s*$/, '')) !== key) return;
       if (seen[cells[2]]) return;
       seen[cells[2]] = true;
-      out.push({ rec: dsIso_(cells[2]), pay: dsIso_(cells[3]), amt: dsNum_(cells[4]), tax: cells[5] === undefined || cells[5] === '' ? null : dsNum_(cells[5]) });
+      out.push({ rec: dsIso_(cells[2]), pay: dsIso_(cells[3]), amt: dsNum_(cells[4]), tax: /\d/.test(cells[5] || '') ? dsNum_(cells[5]) : null });
     });
   });
   return out;
@@ -262,7 +262,7 @@ function kiwoomHistory_(name, ctx) {
     if (tables[t].replace(/\s/g, '').indexOf('주당분배금') === -1) continue;
     var rows = tables[t].match(/<tr[\s\S]*?<\/tr>/g) || [];
     var head = (tables[t].match(/<th[\s\S]*?<\/th>/g) || []).map(function (th) { return th.replace(/<[^>]+>/g, '').replace(/\s/g, ''); });
-    var taxIdx = head.findIndex(function (h) { return h.indexOf('과세') >= 0; });
+    var taxIdx = head.findIndex(function (h) { return h.indexOf('과세표준') >= 0; });
     return rows.map(function (tr) {
       var c = (tr.match(/<td[\s\S]*?<\/td>/g) || []).map(function (td) { return td.replace(/<[^>]+>/g, '').trim(); });
       return c.length >= 3 ? { rec: dsIso_(c[0]), pay: dsIso_(c[1]), amt: dsNum_(c[2]), tax: taxIdx >= 0 && c[taxIdx] !== undefined && c[taxIdx] !== '' ? dsNum_(c[taxIdx]) : null } : null; // 기준일 | 지급일 | 주당분배금 | ...
@@ -291,13 +291,16 @@ function dsJson_(url) {
   if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode() + ' ' + url);
   return JSON.parse(res.getContentText());
 }
-// 운용사 응답에서 '1주당 과세표준' 칸 찾기 (이름에 tax·txs·과세 가 들어간 숫자 칸). 없으면 null
+// 운용사 응답에서 '1주당 과세표준' 칸 찾기: 이름이 과세표준을 뜻하는(tax base·std·txbs·과세표준) 숫자 칸만. 없으면 null
+//   (세액·과세여부·세율 같은 칸은 제외 — 잘못 잡으면 세금이 작게 계산되므로 확실한 것만)
 function dsTaxField_(x) {
   var keys = Object.keys(x || {});
   for (var i = 0; i < keys.length; i++) {
-    if (!/tax|txs|txbs|과세/i.test(keys[i]) || /rate|rt$|yn$|percent/i.test(keys[i])) continue;
-    var v = x[keys[i]];
-    if (v === null || v === '' || v === undefined) continue;
+    var k = keys[i];
+    if (!/tax_?base|taxstd|tax_?std|txbs|txstd|txbase|과세표준/i.test(k)) continue;
+    if (/rate|rt$|yn$|gb$|type|percent|여부/i.test(k)) continue;
+    var v = x[k];
+    if (v === null || v === undefined || !/\d/.test(String(v))) continue;
     var n = Number(String(v).replace(/[^0-9.-]/g, ''));
     if (isFinite(n)) return n;
   }

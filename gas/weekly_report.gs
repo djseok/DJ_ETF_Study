@@ -106,7 +106,9 @@ function runWeekly_(dryRun) {
 
 // ── 자동화 실행 기록 (각 스크립트가 끝날 때 wrMarkRun_ 호출 → 스크립트 속성 RUNLOG) ──
 function wrMarkRun_(key) {
+  var lock = LockService.getScriptLock();
   try {
+    if (!lock.tryLock(10000)) return;
     var props = PropertiesService.getScriptProperties();
     var log = JSON.parse(props.getProperty('RUNLOG') || '{}');
     var d = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
@@ -114,7 +116,7 @@ function wrMarkRun_(key) {
     list.push(d);
     log[key] = list.slice(-15);
     props.setProperty('RUNLOG', JSON.stringify(log));
-  } catch (e) { }
+  } catch (e) { } finally { try { lock.releaseLock(); } catch (e2) { } }
 }
 
 // 이번 주 평일(국내 휴장일 제외) 중 며칠 돌았는지 → '07:30 알림 5/5 · …'
@@ -124,7 +126,7 @@ function wrRunStatus_(mon) {
   for (var i = 0; i < 5; i++) {
     var d = Utilities.formatDate(new Date(mon.getTime() + i * 864e5), 'Asia/Seoul', 'yyyy-MM-dd');
     if (d > today) break;
-    if (typeof PM_KR_HOLIDAYS !== 'undefined' && PM_KR_HOLIDAYS.indexOf(d) >= 0) continue;
+    if (typeof pmKrHoliday_ === 'function' && pmKrHoliday_(d)) continue;
     days.push(d);
   }
   var items = [['premarket', '07:30 알림'], ['actuals', '16:10 기록'], ['intraday', '장중 신호'], ['holdings', '보유종목'], ['dividend', '배당주기']];
@@ -198,6 +200,8 @@ function wrDiary_(monS, friS, taxOf) {
   return { members: members, holdings: holdings };
 }
 
+function wrNorm_(s) { return String(s || '').replace(/\s+/g, '').toUpperCase().replace(/커브드/g, '커버드'); } // 대시보드 taxNorm 과 같게
+
 // 'ETF들 배당이력' E열(1주당 과세표준)로 회차별 과세 비율 → function(종목, 'yyyy-MM-dd') → 0~1
 //   가까운 회차(±6일) → 같은 ETF 평균 → 없으면 1 (전액 과세)
 function wrTaxRatios_(ss) {
@@ -206,12 +210,12 @@ function wrTaxRatios_(ss) {
     sh.getRange(1, 1, sh.getLastRow(), 5).getValues().forEach(function (r) {
       var amt = Number(r[2]), d = r[1] instanceof Date ? r[1].getTime() : NaN;
       if (!r[0] || !(amt > 0) || isNaN(d)) return;
-      var k = hsNormName_(r[0]);
+      var k = wrNorm_(r[0]);
       (map[k] = map[k] || []).push({ t: d, amt: amt, tax: r[4] === '' || r[4] === null ? null : Number(r[4]) });
     });
   }
   return function (stock, ymd) {
-    var list = map[hsNormName_(stock)] || [], t = new Date(ymd + 'T00:00:00+09:00').getTime(), best = null;
+    var list = map[wrNorm_(stock)] || [], t = new Date(ymd + 'T00:00:00+09:00').getTime(), best = null;
     list.forEach(function (h) { if (h.tax !== null && Math.abs(h.t - t) <= 6 * 864e5 && (!best || Math.abs(h.t - t) < Math.abs(best.t - t))) best = h; });
     if (best) return Math.min(1, best.tax / best.amt);
     var known = list.filter(function (h) { return h.tax !== null; });
