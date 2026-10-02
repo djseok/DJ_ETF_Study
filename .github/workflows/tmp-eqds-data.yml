@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           mkdir -p tmpdata
-          for t in SPY QQQ ^KS11 ^KQ11 AAPL NVDA MSFT TSLA AMD PLTR KO INTC AMZN XOM PFE 005930.KS 000660.KS 035720.KS 005380.KS 042700.KS 247540.KQ 196170.KQ 035420.KS; do
+          for t in SMCI NKE SPY QQQ; do
             f=$(echo "$t" | tr '^' '_')
             for h in query1 query2 query1; do
               curl -sS -A "Mozilla/5.0" "https://$h.finance.yahoo.com/v8/finance/chart/$t?range=10y&interval=1d" -o "tmpdata/$f.json" && grep -q '"timestamp"' "tmpdata/$f.json" && break
