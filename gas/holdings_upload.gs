@@ -21,6 +21,8 @@
 var HU_DIARY_ID = '1nVnpen14YDDWRxODwt36HVlG7GId-zKzFIyQYn9p7vY';   // 동진ETF공부_개인일기장
 var HU_MANAGE_ID = '1r91WUqYvIfQ1jrehEKiBPUbO7a0iH7iIl3tgNsZoKRc';  // 관리시트
 var HU_LOG_TAB = '잔고_업로드_기록';
+// 전략 실적 기록: 이 멤버가 캡처를 반영하면 개인일기장 해당 탭에 그달 계좌 상태를 한 줄 남김 (D 전략)
+var HU_STRATEGY_TABS = { D: { log: 'D_실적기록', assume: 'D_가정' } };
 
 function doGet() { return huJson_({ ok: true, service: 'holdings-upload' }); }
 
@@ -214,7 +216,9 @@ function huApply_(member, token, pick, removeMissing, edits) {
     }
     cache.remove('HU_' + token);
     huLog_(member, log);
-    return { ok: true, changed: log.length, log: log };
+    var strategy = '';
+    try { strategy = huStrategyLog_(member, chosen); } catch (err) { strategy = '⚠️ 실적기록 실패: ' + err.message; }
+    return { ok: true, changed: log.length, log: log, strategy: strategy };
   } finally { lock.releaseLock(); }
 }
 
@@ -223,6 +227,82 @@ function huLog_(member, log) {
   var sh = ss.getSheetByName(HU_LOG_TAB);
   if (!sh) { sh = ss.insertSheet(HU_LOG_TAB); sh.getRange(1, 1, 1, 4).setValues([['시각', '멤버', '건수', '바뀐 내용']]); sh.setFrozenRows(1); }
   sh.appendRow([Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), member, log.length, log.join(' · ') || '변경 없음']);
+}
+
+// ---------------------------------------------------------
+// ③ 전략 실적 기록 (D_실적기록) — 반영이 끝난 뒤 멤버 탭에서 다시 읽어서 계산
+//   A 기록일 · B 회차 · C 레버리지 · D 나스닥CC · E HOLD 평가액 · F 예수금 · G·H 이번 달 매수액
+//   I·J 이번 달 분배금(CC·HOLD) · K 신규 입금(추정) · T 메모.  L~S 는 시트 수식이 계산
+//   같은 달에 여러 번 올리면 그달 줄을 덮어쓰고, 매수액은 더해감
+// ---------------------------------------------------------
+function huBucket_(name) {
+  var n = huNorm_(name);
+  if (n.indexOf('레버리지') >= 0) return 'LEV';
+  if ((n.indexOf('나스닥100') >= 0 || n.indexOf('테크100') >= 0) && n.indexOf('커버드콜') >= 0) return 'CC';
+  return 'HOLD';
+}
+
+// 순수 계산 (테스트 가능): port = 멤버 탭 A~L 값, deltas = [{name, dq}], prev = 그달 기존 줄(A~K) 또는 null
+function huStrategyRow_(member, port, deltas, now, start, prev) {
+  var val = { LEV: 0, CC: 0, HOLD: 0 }, price = {}, div = { CC: 0, HOLD: 0 };
+  var ym = now.getFullYear() * 12 + now.getMonth();
+  for (var i = 1; i < port.length; i++) {
+    var r = port[i];
+    if (String(r[0]).trim() === member && String(r[1]).trim()) {
+      var p = huNum_(r[5]);
+      val[huBucket_(r[1])] += huNum_(r[4]) * p;
+      price[huNorm_(r[1])] = p;
+    }
+    // H~L: 이름 · 수령일자 · 종목 · 당시수량 · 실수령액
+    var d = r[8];
+    if (String(r[7]).trim() === member && d instanceof Date && d.getFullYear() * 12 + d.getMonth() === ym) {
+      div[huBucket_(r[9]) === 'CC' ? 'CC' : 'HOLD'] += huNum_(r[11]);
+    }
+  }
+  var buy = { LEV: 0, CC: 0 };
+  (deltas || []).forEach(function (x) {
+    var b = huBucket_(x.name);
+    if (x.dq > 0 && buy[b] !== undefined) buy[b] += x.dq * (price[huNorm_(x.name)] || 0);
+  });
+  var m = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  var g = Math.round(buy.LEV + (prev ? huNum_(prev[6]) : 0));
+  var h = Math.round(buy.CC + (prev ? huNum_(prev[7]) : 0));
+  var cash = prev ? huNum_(prev[5]) : 0;
+  var deposit = Math.max(0, g + h - div.CC - div.HOLD);
+  return [now, m, Math.round(val.LEV), Math.round(val.CC), Math.round(val.HOLD), cash, g, h,
+    Math.round(div.CC), Math.round(div.HOLD), Math.round(deposit)];
+}
+
+function huStrategyLog_(member, chosen) {
+  var cfg = HU_STRATEGY_TABS[member];
+  if (!cfg) return '';
+  var ss = SpreadsheetApp.openById(HU_DIARY_ID);
+  var sh = ss.getSheetByName(cfg.log), asm = ss.getSheetByName(cfg.assume);
+  if (!sh || !asm) return '';
+  SpreadsheetApp.flush(); // 방금 고친 수량이 현재가 수식에 반영되도록
+  var port = ss.getSheetByName(member + '포토폴리오');
+  var pv = port.getRange(1, 1, Math.max(port.getLastRow(), 1), 12).getValues();
+  var start = asm.getRange('B19').getValue();
+  if (!(start instanceof Date)) start = new Date(2026, 6, 1);
+  var now = new Date();
+  var deltas = (chosen || []).map(function (r) { return { name: r.name, dq: huNum_(r.newQty) - huNum_(r.oldQty) }; });
+
+  // 마지막 기록 줄: A열 기준 (L~S 는 수식이 미리 채워져 있어 getLastRow 를 쓰면 안 됨)
+  var n = Math.max(sh.getLastRow() - 1, 1);
+  var a = sh.getRange(2, 1, n, 11).getValues(), last = 0;
+  for (var i = 0; i < a.length; i++) if (a[i][0] !== '' && a[i][0] !== null) last = i;
+  var m = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  var same = huNum_(a[last][1]) === m;
+  var row = huStrategyRow_(member, pv, deltas, now, start, same ? a[last] : null);
+  var target = same ? last + 2 : last + 3;
+  if (sh.getMaxColumns() < 20) sh.insertColumnsAfter(sh.getMaxColumns(), 20 - sh.getMaxColumns());
+  if (!sh.getRange(1, 20).getValue()) sh.getRange(1, 20).setValue('메모');
+  sh.getRange(target, 1, 1, 11).setValues([row]);
+  sh.getRange(target, 20).setValue('잔고 캡처 자동 기록 · 신규 입금은 매수액 − 분배금으로 추정');
+  // 수식(L~S)이 없는 줄이면 위 줄에서 복사
+  if (!sh.getRange(target, 12).getFormula() && target > 3) sh.getRange(target - 1, 12, 1, 8).copyTo(sh.getRange(target, 12, 1, 8));
+  return cfg.log + ' ' + m + 'M ' + (same ? '갱신' : '추가') + ': 평가 ' + Math.round((row[2] + row[3] + row[4]) / 1e4).toLocaleString() + '만 (레버리지 ' +
+    Math.round(row[2] / 1e4) + '만 · CC ' + Math.round(row[3] / 1e4) + '만 · 기타 ' + Math.round(row[4] / 1e4) + '만)';
 }
 
 // ---------------------------------------------------------
