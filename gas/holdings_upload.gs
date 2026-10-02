@@ -21,6 +21,8 @@
 var HU_DIARY_ID = '1nVnpen14YDDWRxODwt36HVlG7GId-zKzFIyQYn9p7vY';   // 동진ETF공부_개인일기장
 var HU_MANAGE_ID = '1r91WUqYvIfQ1jrehEKiBPUbO7a0iH7iIl3tgNsZoKRc';  // 관리시트
 var HU_LOG_TAB = '잔고_업로드_기록';
+// 전략 실적 기록: 이 멤버가 캡처를 반영하면 개인일기장 해당 탭에 그달 계좌 상태를 한 줄 남김 (D 전략)
+var HU_STRATEGY_TABS = { D: { log: 'D_실적기록', assume: 'D_가정', plan: 'D_매수계획', order: 'D_기록' } };
 
 function doGet() { return huJson_({ ok: true, service: 'holdings-upload' }); }
 
@@ -183,6 +185,8 @@ function huApply_(member, token, pick, removeMissing, edits) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new Error('다른 반영이 진행 중이에요. 잠시 뒤 다시 시도해 주세요');
   try {
+    var planBefore = null;
+    try { planBefore = huReadPlan_(member); } catch (err) { planBefore = null; } // 반영 전 이번 달 계획 (반영 후엔 수식이 다시 계산되므로 먼저 읽음)
     var cur = huCurrent_(member), sh = cur.sheet, log = [];
     // 확인 화면에서 고친 수량·평단 반영 (숫자일 때만)
     saved.rows.forEach(function (r) {
@@ -214,7 +218,10 @@ function huApply_(member, token, pick, removeMissing, edits) {
     }
     cache.remove('HU_' + token);
     huLog_(member, log);
-    return { ok: true, changed: log.length, log: log };
+    var strategy = '';
+    try { strategy = huStrategyLog_(member, chosen); } catch (err) { strategy = '⚠️ 실적기록 실패: ' + err.message; }
+    try { var ord = huOrderLog_(member, chosen, planBefore); if (ord) strategy += (strategy ? '<br>📝 ' : '') + ord; } catch (err) { strategy += ' · ⚠️ 매수 기록 실패: ' + err.message; }
+    return { ok: true, changed: log.length, log: log, strategy: strategy };
   } finally { lock.releaseLock(); }
 }
 
@@ -223,6 +230,134 @@ function huLog_(member, log) {
   var sh = ss.getSheetByName(HU_LOG_TAB);
   if (!sh) { sh = ss.insertSheet(HU_LOG_TAB); sh.getRange(1, 1, 1, 4).setValues([['시각', '멤버', '건수', '바뀐 내용']]); sh.setFrozenRows(1); }
   sh.appendRow([Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), member, log.length, log.join(' · ') || '변경 없음']);
+}
+
+// ---------------------------------------------------------
+// ③ 전략 실적 기록 (D_실적기록) — 반영이 끝난 뒤 멤버 탭에서 다시 읽어서 계산
+//   A 기록일 · B 회차 · C 레버리지 · D 나스닥CC · E HOLD 평가액 · F 예수금 · G·H 이번 달 매수액
+//   I·J 이번 달 분배금(CC·HOLD) · K 신규 입금(추정) · T 메모.  L~S 는 시트 수식이 계산
+//   같은 달에 여러 번 올리면 그달 줄을 덮어쓰고, 매수액은 더해감
+// ---------------------------------------------------------
+function huBucket_(name) {
+  var n = huNorm_(name);
+  if (n.indexOf('레버리지') >= 0) return 'LEV';
+  if ((n.indexOf('나스닥100') >= 0 || n.indexOf('테크100') >= 0) && n.indexOf('커버드콜') >= 0) return 'CC';
+  return 'HOLD';
+}
+
+// 순수 계산 (테스트 가능): port = 멤버 탭 A~L 값, deltas = [{name, dq}], prev = 그달 기존 줄(A~K) 또는 null
+function huStrategyRow_(member, port, deltas, now, start, prev) {
+  var val = { LEV: 0, CC: 0, HOLD: 0 }, price = {}, div = { CC: 0, HOLD: 0 };
+  var ym = now.getFullYear() * 12 + now.getMonth();
+  for (var i = 1; i < port.length; i++) {
+    var r = port[i];
+    if (String(r[0]).trim() === member && String(r[1]).trim()) {
+      var p = huNum_(r[5]);
+      val[huBucket_(r[1])] += huNum_(r[4]) * p;
+      price[huNorm_(r[1])] = p;
+    }
+    // H~L: 이름 · 수령일자 · 종목 · 당시수량 · 실수령액
+    var d = r[8];
+    if (String(r[7]).trim() === member && d instanceof Date && d.getFullYear() * 12 + d.getMonth() === ym) {
+      div[huBucket_(r[9]) === 'CC' ? 'CC' : 'HOLD'] += huNum_(r[11]);
+    }
+  }
+  var buy = { LEV: 0, CC: 0 };
+  (deltas || []).forEach(function (x) {
+    var b = huBucket_(x.name);
+    if (x.dq > 0 && buy[b] !== undefined) buy[b] += x.dq * (price[huNorm_(x.name)] || 0);
+  });
+  var m = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  var g = Math.round(buy.LEV + (prev ? huNum_(prev[6]) : 0));
+  var h = Math.round(buy.CC + (prev ? huNum_(prev[7]) : 0));
+  var cash = prev ? huNum_(prev[5]) : 0;
+  var deposit = Math.max(0, g + h - div.CC - div.HOLD);
+  return [now, m, Math.round(val.LEV), Math.round(val.CC), Math.round(val.HOLD), cash, g, h,
+    Math.round(div.CC), Math.round(div.HOLD), Math.round(deposit)];
+}
+
+function huStrategyLog_(member, chosen) {
+  var cfg = HU_STRATEGY_TABS[member];
+  if (!cfg) return '';
+  var ss = SpreadsheetApp.openById(HU_DIARY_ID);
+  var sh = ss.getSheetByName(cfg.log), asm = ss.getSheetByName(cfg.assume);
+  if (!sh || !asm) return '';
+  SpreadsheetApp.flush(); // 방금 고친 수량이 현재가 수식에 반영되도록
+  var port = ss.getSheetByName(member + '포토폴리오');
+  var pv = port.getRange(1, 1, Math.max(port.getLastRow(), 1), 12).getValues();
+  var start = asm.getRange('B19').getValue();
+  if (!(start instanceof Date)) start = new Date(2026, 6, 1);
+  var now = new Date();
+  var deltas = (chosen || []).map(function (r) { return { name: r.name, dq: huNum_(r.newQty) - huNum_(r.oldQty) }; });
+
+  // 마지막 기록 줄: A열 기준 (L~S 는 수식이 미리 채워져 있어 getLastRow 를 쓰면 안 됨)
+  var n = Math.max(sh.getLastRow() - 1, 1);
+  var a = sh.getRange(2, 1, n, 11).getValues(), last = 0;
+  for (var i = 0; i < a.length; i++) if (a[i][0] !== '' && a[i][0] !== null) last = i;
+  var m = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  var same = huNum_(a[last][1]) === m;
+  var row = huStrategyRow_(member, pv, deltas, now, start, same ? a[last] : null);
+  var target = same ? last + 2 : last + 3;
+  if (sh.getMaxColumns() < 20) sh.insertColumnsAfter(sh.getMaxColumns(), 20 - sh.getMaxColumns());
+  if (!sh.getRange(1, 20).getValue()) sh.getRange(1, 20).setValue('메모');
+  sh.getRange(target, 1, 1, 11).setValues([row]);
+  sh.getRange(target, 20).setValue('잔고 캡처 자동 기록 · 신규 입금은 매수액 − 분배금으로 추정');
+  // 수식(L~S)이 없는 줄이면 위 줄에서 복사
+  if (!sh.getRange(target, 12).getFormula() && target > 3) sh.getRange(target - 1, 12, 1, 8).copyTo(sh.getRange(target, 12, 1, 8));
+  return cfg.log + ' ' + m + 'M ' + (same ? '갱신' : '추가') + ': 평가 ' + Math.round((row[2] + row[3] + row[4]) / 1e4).toLocaleString() + '만 (레버리지 ' +
+    Math.round(row[2] / 1e4) + '만 · CC ' + Math.round(row[3] / 1e4) + '만 · 기타 ' + Math.round(row[4] / 1e4) + '만)';
+}
+
+// ---------------------------------------------------------
+// ④ 매수 기록 (D_기록) — 이번 반영에서 늘어난 레버리지·나스닥CC 수량을 계획과 나란히 기록
+//   A 기록일시 · B 단계 · C 계좌 총자산 · D 투입 현금 · E·F 레버리지 매수(주·금액) · G·H 나스닥CC 매수(주·금액)
+//   I 남는 현금(투입 현금 − 실제 매수) · J 매수 후 레버리지 비중 · K 메모(계획 대비)
+//   레버리지·나스닥CC 수량이 늘지 않았으면(조회만) 기록하지 않음
+// ---------------------------------------------------------
+function huReadPlan_(member) {
+  var cfg = HU_STRATEGY_TABS[member];
+  if (!cfg || !cfg.plan) return null;
+  var sh = SpreadsheetApp.openById(HU_DIARY_ID).getSheetByName(cfg.plan);
+  if (!sh) return null;
+  var v = sh.getRange('A1:G25').getValues();
+  return { phase: v[20][1], total: v[3][1], cash: huNum_(v[6][1]), levPlan: huNum_(v[9][2]), nccPlan: huNum_(v[10][2]) };
+}
+
+// 순수 계산 (테스트 가능): port = 멤버 탭 A~F 값(반영 후), deltas = [{name, dq}], plan = 반영 전 계획
+function huOrderRow_(member, port, deltas, plan, now) {
+  var price = {}, val = { LEV: 0, CC: 0 };
+  for (var i = 1; i < port.length; i++) {
+    var r = port[i];
+    if (String(r[0]).trim() !== member || !String(r[1]).trim()) continue;
+    var p = huNum_(r[5]); price[huNorm_(r[1])] = p;
+    var b = huBucket_(r[1]);
+    if (val[b] !== undefined) val[b] += huNum_(r[4]) * p;
+  }
+  var sh = { LEV: 0, CC: 0 }, amt = { LEV: 0, CC: 0 };
+  (deltas || []).forEach(function (x) {
+    var b = huBucket_(x.name);
+    if (x.dq > 0 && sh[b] !== undefined) { sh[b] += x.dq; amt[b] += x.dq * (price[huNorm_(x.name)] || 0); }
+  });
+  if (!(sh.LEV > 0 || sh.CC > 0)) return null;
+  var cash = plan ? plan.cash : 0, spent = amt.LEV + amt.CC;
+  var memo = '잔고 캡처 자동' + (plan ? ' · 계획 대비 레버리지 ' + sh.LEV + '/' + plan.levPlan + '주, 나스닥CC ' + sh.CC + '/' + plan.nccPlan + '주' : '');
+  return [now, plan ? plan.phase : '', plan ? Math.round(huNum_(plan.total)) : '', Math.round(cash), sh.LEV, Math.round(amt.LEV),
+    sh.CC, Math.round(amt.CC), cash ? Math.round(cash - spent) : '', val.LEV + val.CC > 0 ? val.LEV / (val.LEV + val.CC) : 0, memo];
+}
+
+function huOrderLog_(member, chosen, plan) {
+  var cfg = HU_STRATEGY_TABS[member];
+  if (!cfg || !cfg.order) return '';
+  var ss = SpreadsheetApp.openById(HU_DIARY_ID);
+  var sh = ss.getSheetByName(cfg.order);
+  if (!sh) return '';
+  var pv = ss.getSheetByName(member + '포토폴리오');
+  pv = pv.getRange(1, 1, Math.max(pv.getLastRow(), 1), 6).getValues();
+  var deltas = (chosen || []).map(function (r) { return { name: r.name, dq: huNum_(r.newQty) - huNum_(r.oldQty) }; });
+  var row = huOrderRow_(member, pv, deltas, plan, new Date());
+  if (!row) return '';
+  sh.appendRow(row);
+  return cfg.order + ' 기록: 레버리지 ' + row[4] + '주 · 나스닥CC ' + row[6] + '주 (' + row[10].replace('잔고 캡처 자동 · ', '') + ')';
 }
 
 // ---------------------------------------------------------
