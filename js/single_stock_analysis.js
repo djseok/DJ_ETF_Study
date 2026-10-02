@@ -32,7 +32,8 @@ async function runQuantAnalysis() {
             swing: true,
             noLossSell: true,         // 원칙: 손실 구간(평단 대비 수익 < minProfitToSell)에서는 매도하지 않음
             minProfitToSell: 0.01,    // 수수료 감안 최소 수익 +1%
-            trimRatio: 0.5            // RSI 70 하향 이탈 시 익절 비율
+            trimRatio: 0.5,           // RSI 70 하향 이탈 시 익절 비율
+            takeProfit: 0.30          // 평단 대비 +30% 도달 시 전량 익절 (21종목 백테스트에서 10·15·20·30% 중 수익·Sharpe 최고)
         };
 
         // 한국 종목은 코스피·코스닥, 미국 종목은 S&P500·나스닥100을 시장 기준으로 사용
@@ -511,9 +512,10 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
 
     // [스윙 매도 규칙] 보유 중일 때만 적용
     //  - 전량 매도: 단기 추세 훼손 (주가 < 20MA 이고 20MA 하락 전환)
+    //  - 목표 익절: 평단 대비 +takeProfit(30%) 도달 시 전량 익절
     //  - 절반 익절: RSI 70 과열권에서 하향 이탈
     //  - 손실 구간 매도 금지(cfg.noLossSell): 평단 대비 수익이 minProfitToSell 미만이면 위 매도와 위험관리 청산을 모두 보류
-    let swingExit = false, swingTrim = false, lossLocked = false;
+    let swingExit = false, swingTrim = false, tpExit = false, lossLocked = false;
     const avgCost = context.avgCost || 0;
     const profit = avgCost > 0 ? (vm.price / avgCost) - 1 : null;
     if (actW > 0 && cfg.noLossSell && profit !== null && profit < cfg.minProfitToSell) lossLocked = true;
@@ -532,6 +534,9 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
                 targetW = 0.0; swingExit = true;
                 if(isLive) whyNegative.push(`단기 추세 훼손(20MA 이탈·하락)${profit !== null ? ` — 수익 ${(profit*100).toFixed(1)}% 구간` : ''} ➔ 전량 매도`);
             }
+        } else if (cfg.takeProfit && profit !== null && profit >= cfg.takeProfit) {
+            targetW = 0.0; tpExit = true;
+            if(isLive) whyPositive.push(`평단 대비 +${(profit*100).toFixed(1)}% — 목표 수익(+${(cfg.takeProfit*100).toFixed(0)}%) 도달 ➔ 전량 익절`);
         } else if (vm.rsi.overboughtExit && !lossLocked) {
             targetW = Math.min(targetW, actW * (1 - cfg.trimRatio)); swingTrim = true;
             if(isLive) whyPositive.push(`RSI 70 과열권 하향 이탈 ➔ ${(cfg.trimRatio*100).toFixed(0)}% 익절`);
@@ -544,6 +549,8 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     if (isExplicitExit) {
         act = "🔴 위험관리 청산"; sty = "bg-red-600 text-white";
         if(isLive) whyNegative.push(`[위험관리 청산] ${exitReason} ➔ Target 0 강제 할당`);
+    } else if (tpExit) {
+        act = `💰 전량 익절 (+${(cfg.takeProfit*100).toFixed(0)}% 도달)`; sty = "bg-amber-500 text-white";
     } else if (swingExit) {
         act = "🔴 전량 매도 (추세 이탈)"; sty = "bg-red-600 text-white";
     } else if (swingTrim) {
@@ -564,7 +571,7 @@ function evaluateSignalAtDate(i, ind, spy, qqq, cfg, context) {
     return { 
         availScore, baseScore, adjScore, riskPenalty: penalty, candW, entryCap, gateCap, finalTargetWeight: targetW, actualWeight: actW, tradeDeltaWeight: tradeDelta,
         act, sty, tr: trSc, mo: moSc, rs: rsSc, ri: riSc, mk: mkSc,
-        whyPositive, whyNegative, whyNotAggressive, log, vm, isExplicitExit, swingExit, swingTrim, lossLocked, profit, stage: vm.stage
+        whyPositive, whyNegative, whyNotAggressive, log, vm, isExplicitExit, swingExit, swingTrim, tpExit, lossLocked, profit, stage: vm.stage
     };
 }
 
@@ -833,6 +840,8 @@ function runExtremeUnitTests(cfg) {
     let sLoss = evaluateSignalAtDate(i, fiS, null, null, scfg, { actualWeight: 0.3, avgCost: 110, mode: "test" });
     tLog("Swing Exit in Profit (Target 0)", sWin.finalTargetWeight === 0 && sWin.swingExit === true);
     tLog("No Sell in Loss (Target = Actual)", sLoss.finalTargetWeight === 0.3 && sLoss.lossLocked === true);
+    let sTp = evaluateSignalAtDate(i, baseInd, null, null, { ...scfg, takeProfit: 0.30 }, { actualWeight: 0.3, avgCost: 75, mode: "test" });
+    tLog("Take Profit +30% (Target 0)", sTp.finalTargetWeight === 0 && sTp.tpExit === true);
 
     return results;
 }
@@ -934,6 +943,7 @@ function calcSimulator() {
     }).join('');
 
     let tpHTML = `
+        <tr><td class="py-1">평단 대비 +${(cfg.takeProfit*100).toFixed(0)}% 도달 시 (목표가 ${isCcy}${(avgCost*(1+cfg.takeProfit)).toFixed(2)})</td><td>전량 익절</td></tr>
         <tr><td class="py-1">RSI 70 과열권에서 하향 이탈 시</td><td>${(cfg.trimRatio*100).toFixed(0)}% 익절 (평단 +${(cfg.minProfitToSell*100).toFixed(0)}% 이상일 때)</td></tr>
         <tr><td class="py-1">단기 추세 훼손 (20MA 이탈 + 20MA 하락) 시</td><td>전량 매도 (평단 +${(cfg.minProfitToSell*100).toFixed(0)}% 이상일 때)</td></tr>
         <tr><td class="py-1">위 조건이지만 손실 구간일 때</td><td>매도 보류 · 추가 매수도 보류 (원칙)</td></tr>
@@ -1112,7 +1122,8 @@ const safeTrd = (obj) => (obj && typeof obj.trd === 'number') ? obj.trd + '회' 
 
 function renderActionBanner(ev, conf) {
     let actionClass = "bg-slate-500";
-    if (ev.isExplicitExit || ev.swingExit) actionClass = "bg-red-600";
+    if (ev.tpExit) actionClass = "bg-amber-500";
+    else if (ev.isExplicitExit || ev.swingExit) actionClass = "bg-red-600";
     else if (ev.swingTrim) actionClass = "bg-yellow-600";
     else if (ev.tradeDeltaWeight > 0.01) actionClass = "bg-emerald-500";
     else if (ev.tradeDeltaWeight < -0.01) actionClass = "bg-yellow-600";
@@ -1297,7 +1308,7 @@ function renderEQDS_UI(ctx) {
                     <div class="flex justify-between"><span>최대 허용 비중 (50/60/80%):</span><span>${safeCagr(sensitivity?.exp50)} | ${safeCagr(sensitivity?.exp60)} | <b>${safeCagr(btOosA)}(Core 70)</b> | ${safeCagr(sensitivity?.exp80)}</span></div>
                     <div class="flex justify-between"><span>중기 이평선 (50/70):</span><span>${safeCagr(sensitivity?.pm50)} | <b>${safeCagr(btOosA)}(Core 60)</b> | ${safeCagr(sensitivity?.pm70)}</span></div>
                     <div class="flex justify-between"><span>장기 이평선 (180/220):</span><span>${safeCagr(sensitivity?.pl180)} | <b>${safeCagr(btOosA)}(Core 200)</b> | ${safeCagr(sensitivity?.pl220)}</span></div>
-                    <div class="mt-1 text-slate-500">* 스윙 규칙: 20MA 위·상승 추세에서 점수 비례 분할 매수 → RSI 70 하향 이탈 시 절반 익절 → 20MA 이탈·하락 시 전량 매도. 단, 평단 대비 +1% 미만(손실 구간)에서는 매도하지 않음. 최대 비중 ${(btOosA && cfg) ? cfg.maxExposure*100 : 70}%.</div>
+                    <div class="mt-1 text-slate-500">* 스윙 규칙: 20MA 위·상승 추세에서 점수 비례 분할 매수 → 평단 +${cfg && cfg.takeProfit ? (cfg.takeProfit*100).toFixed(0) : 30}% 도달 시 전량 익절 → RSI 70 하향 이탈 시 절반 익절 → 20MA 이탈·하락 시 전량 매도. 단, 평단 대비 +1% 미만(손실 구간)에서는 매도하지 않음. 최대 비중 ${(btOosA && cfg) ? cfg.maxExposure*100 : 70}%.</div>
                 </div>
                 ` : '<div class="text-xs text-slate-400">데이터 부족</div>'}
             </div>
