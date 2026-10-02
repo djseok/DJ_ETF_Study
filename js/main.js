@@ -29,7 +29,7 @@ function switchTab(tabName) {
     const allButtons = [
         'btnTabPort', 'btnTabQuant', 'btnTabCalc', 'btnTabDiv', 
         'btnTabSingle', 'btnTabMdd', 'btnTabRsi', 'btnTabMa', 
-        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc', 'btnTabTax', 'btnTabUpload'
+        'btnTabBacktestDiv', 'btnTabOneDollar', 'btnTabPortBt', 'btnTabAcc', 'btnTabTax', 'btnTabUpload', 'btnTabDplan'
     ];
     allButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
@@ -62,6 +62,7 @@ function switchTab(tabName) {
     if(tabName === 'tax' && typeof loadTaxView === 'function') loadTaxView();
     if(tabName === 'acc' && typeof loadAccuracyView === 'function') loadAccuracyView();
     if(tabName === 'portBt' && typeof initPortfolioBacktestView === 'function') initPortfolioBacktestView();
+    if(tabName === 'dplan' && typeof loadDStrategyView === 'function') loadDStrategyView();
 }
 
 // 📸 잔고 캡처 입력: 대시보드 안에서 upload.html 을 띄움 (member 를 주면 그 멤버로 미리 선택)

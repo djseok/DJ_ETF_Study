@@ -125,6 +125,9 @@
                     <button id="btnTabOneDollar" onclick="switchTab('oneDollar')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-yellow-50 text-slate-700 hover:text-yellow-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-rocket text-yellow-500 w-5"></i> $1 프로젝트
                     </button>
+                    <button id="btnTabDplan" onclick="switchTab('dplan')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-bold transition-all border border-transparent">
+                        <i class="fas fa-bullseye text-blue-500 w-5"></i> D 전략 (ISA)
+                    </button>
                     <button id="btnTabPortBt" onclick="switchTab('portBt')" class="w-full text-left px-4 py-3 bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded-xl font-bold transition-all border border-transparent">
                         <i class="fas fa-history text-sky-500 w-5"></i> 포트폴리오 백테스트
                     </button>
@@ -1191,6 +1194,49 @@
             
         </div>
         <!-- 11. 포트폴리오 백테스트 -->
+        <!-- 🎯 D 전략: 동진ETF공부_개인일기장 D_월별예상·D_실적기록 탭을 읽어서 보여줌 (js/d_strategy.js) -->
+        <div id="viewDplan" class="view-section hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 flex items-center"><i class="fas fa-bullseye text-blue-500 mr-2"></i> D 전략 (ISA · 레버리지 60 / 나스닥CC 40)</h2>
+                        <p class="text-xs font-semibold text-slate-400 mt-1">TIGER 미국나스닥100레버리지(418660) 60 · RISE 미국테크100데일리고정커버드콜(491620) 40 · 기존 보유는 팔지 않음 · 계좌 기록이 쌓일 때마다 시트가 다시 계산</p>
+                        <p id="dKpiMode" class="text-xs font-bold text-slate-500 mt-1"></p>
+                    </div>
+                    <button onclick="loadDStrategyView(true)" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600"><i class="fas fa-sync-alt mr-1"></i>새로고침</button>
+                </div>
+                <p id="dPlanStatus" class="text-sm font-bold text-slate-500"></p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-blue-50 rounded-xl p-4 border border-blue-100"><div class="text-xs font-bold text-slate-500">60M(2031.06) 예상 평가액</div><div id="dKpiV60" class="text-2xl font-black text-blue-700 mt-1">-</div><div id="dKpiRet60" class="text-xs font-bold text-slate-500"></div></div>
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200"><div class="text-xs font-bold text-slate-500">목표 1.5억 도달</div><div id="dKpiHit" class="text-2xl font-black text-slate-800 mt-1">-</div></div>
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200"><div class="text-xs font-bold text-slate-500">레버리지 매수 시작</div><div id="dKpiLev" class="text-2xl font-black text-slate-800 mt-1">-</div></div>
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200"><div class="text-xs font-bold text-slate-500">60M 월 분배금</div><div id="dKpiDiv" class="text-2xl font-black text-slate-800 mt-1">-</div></div>
+                </div>
+                <div class="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                    <div id="dNowTitle" class="text-sm font-black text-slate-800">이번 달 예상 매수</div>
+                    <div id="dNowPhase" class="text-xs font-bold text-slate-500 mt-0.5"></div>
+                    <div class="grid grid-cols-3 gap-2 mt-2 text-sm">
+                        <div>투입 현금<br><b id="dNowCash">-</b></div>
+                        <div>레버리지 418660<br><b id="dNowLev">-</b></div>
+                        <div>나스닥CC 491620<br><b id="dNowCc">-</b></div>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-2">주 단위 실제 주문 수량은 시트 메뉴 [📈 D 전략 → ② 이번 달 매수 계산]으로 확인</div>
+                </div>
+                <div class="h-72"><canvas id="dPlanChart"></canvas></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-slate-800 text-white"><tr>
+                            <th class="px-2 py-2 text-left">회차</th><th class="px-2 py-2 text-left">월</th><th class="px-2 py-2 text-right">투입 현금</th>
+                            <th class="px-2 py-2 text-right">레버리지 매수</th><th class="px-2 py-2 text-right">CC 매수</th><th class="px-2 py-2 text-right">예상 평가액</th>
+                            <th class="px-2 py-2 text-right">원금 대비</th><th class="px-2 py-2 text-right">월 분배금</th><th class="px-2 py-2 text-right">레버리지 비중</th>
+                        </tr></thead>
+                        <tbody id="dPlanTable" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <p class="text-[11px] text-slate-400">시뮬레이션이며 투자 권유가 아닙니다. 가정(3개월 평균 · 10년 롤링 · 10년 연복리 · 기본값)은 시트 D_가정 탭에서 바꿉니다.</p>
+            </div>
+        </div>
+
         <div id="viewPortBt" class="view-section hidden space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
                 <div>
@@ -1311,6 +1357,7 @@
     <script src="js/ma.js"></script>
     <script src="js/single_stock_analysis.js"></script>
     <script src="js/portfolio_backtest.js"></script>
+    <script src="js/d_strategy.js"></script>
     <script src="js/accuracy.js"></script>
     <script src="js/tax.js"></script>
     <script>
