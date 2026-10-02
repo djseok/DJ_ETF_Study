@@ -28,6 +28,9 @@ function doPost(e) {
       SpreadsheetApp.flush(); 
     }
 
+    // 마스터데이터 줄은 '중복' 응답보다 먼저 확인 → 줄이 빠져도 다음 봇 실행 때 스스로 채워짐
+    ensureMasterRow_(ss, etfName, code, dbSheetName);
+
     const lastRow = dbSheet.getLastRow();
     if (lastRow >= 2) {
       const existingDates = dbSheet.getRange(2, 1, lastRow - 1, 1).getValues();
@@ -45,7 +48,15 @@ function doPost(e) {
     dbSheet.appendRow([recordDate, payDate, "", dividend, taxBase]);
     dbSheet.getRange(newRow, 3).setFormula(formulaC);
 
-    const masterSheetName = "마스터데이터"; 
+    return ContentService.createTextOutput(JSON.stringify({"status": "success", "message": "성공"})).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": error.toString()})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// 마스터데이터 탭에 종목 줄이 없으면 추가 (시세 실패 시 DB_ 탭의 '가장 최근' 종가로 대체)
+function ensureMasterRow_(ss, etfName, code, dbSheetName) {
+    const masterSheetName = "마스터데이터";
     let masterSheet = ss.getSheetByName(masterSheetName);
 
     if (!masterSheet) {
@@ -70,7 +81,7 @@ function doPost(e) {
 
     if (!isExistInMaster) {
       const safeSheetName = `'${dbSheetName}'`; 
-      const formulaPrice = `=IFERROR(GOOGLEFINANCE("KRX:${code}", "price"), ${safeSheetName}!C2)`;
+      const formulaPrice = `=IFERROR(GOOGLEFINANCE("KRX:${code}", "price"), IFERROR(LOOKUP(2, 1/(${safeSheetName}!C2:C<>""), ${safeSheetName}!C2:C), 0))`;
       const formulaMin = `=IFERROR(MIN(${safeSheetName}!D:D), 0)`;
       const formulaAvg = `=IFERROR(AVERAGE(${safeSheetName}!D:D), 0)`;
       const formulaMax = `=IFERROR(MAX(${safeSheetName}!D:D), 0)`;
@@ -78,11 +89,6 @@ function doPost(e) {
 
       masterSheet.appendRow([etfName, formulaPrice, formulaMin, formulaAvg, formulaMax, formulaAvgTax]);
     }
-
-    return ContentService.createTextOutput(JSON.stringify({"status": "success", "message": "성공"})).setMimeType(ContentService.MimeType.JSON);
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": error.toString()})).setMimeType(ContentService.MimeType.JSON);
-  }
 }
 
 // 2️⃣ [NEW] 구글 서버를 활용한 TIGER IP 차단 우회 프록시 통로
