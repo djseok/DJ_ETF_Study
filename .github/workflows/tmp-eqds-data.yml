@@ -2,19 +2,22 @@ name: tmp-eqds-data
 on:
   push:
     branches: [tmp/eqds-data]
+permissions:
+  contents: write
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - run: |
-          mkdir data
-          for t in SPY QQQ ^KS11 ^KQ11 AAPL NVDA MSFT TSLA KO INTC AMZN XOM PFE 005930.KS 000660.KS 035720.KS 005380.KS 247540.KQ 035420.KS; do
+          mkdir -p tmpdata
+          for t in SPY QQQ ^KS11 ^KQ11 AAPL NVDA MSFT TSLA AMD PLTR KO INTC AMZN XOM PFE 005930.KS 000660.KS 035720.KS 005380.KS 042700.KS 247540.KQ 196170.KQ 035420.KS; do
             f=$(echo "$t" | tr '^' '_')
-            for h in query1 query2; do
-              curl -sS -A "Mozilla/5.0" "https://$h.finance.yahoo.com/v8/finance/chart/$t?range=10y&interval=1d" -o "data/$f.json" && grep -q '"timestamp"' "data/$f.json" && break
-              sleep 2
+            for h in query1 query2 query1; do
+              curl -sS -A "Mozilla/5.0" "https://$h.finance.yahoo.com/v8/finance/chart/$t?range=10y&interval=1d" -o "tmpdata/$f.json" && grep -q '"timestamp"' "tmpdata/$f.json" && break
+              sleep 3
             done
-            ls -la "data/$f.json"; sleep 1
+            ls -la "tmpdata/$f.json"; sleep 1
           done
-      - uses: actions/upload-artifact@v4
-        with: { name: prices, path: data }
+          git config user.name github-actions; git config user.email github-actions@users.noreply.github.com
+          git add tmpdata && git commit -m "tmp: price data" && git push
