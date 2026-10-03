@@ -175,33 +175,44 @@ function dStrategyPlan(cfg, rows, cash) {
     var levQty = phase2 && pLev > 0 ? Math.floor(levBudget / pLev) : 0;
     var ccQty = pCc > 0 ? Math.floor((cash - levQty * pLev) / pCc) : 0;
     return { phase2: phase2, dep: dep, toGo: Math.max(0, cfg.threshold - dep), lev: lev, ncc: ncc, pLev: pLev, pCc: pCc,
-        levQty: levQty, ccQty: ccQty, levTarget: phase2 ? cfg.wLev : 0 };
+        levQty: levQty, ccQty: ccQty, levTarget: phase2 ? cfg.wLev : 0, levBudget: levBudget };
 }
 
 function dStrategyNameOf(rows, code) { var r = rows.find(function (x) { return x.code === code; }); return r ? r.name : code; }
 
-async function dStrategyCalc(cashInput) {
+// cashInput = 한 달 총액, sessions = 이번 달 매수 횟수 (월 1회면 1)
+// 매주·매일이면 한 달 계획의 레버리지/나스닥CC 금액 비율대로 회차마다 나눠 삼
+async function dStrategyCalc(cashInput, sessions) {
+    sessions = sessions > 1 ? sessions : 1;
     var body = document.getElementById('calcTableBody'), note = document.getElementById('calcStrategyNote');
     try {
         var d = await dLoadCalcData();
         var input = document.getElementById('inputCash');
         // 처음 D 를 고르면 예수금 칸을 시트 D_설정 금액(이번 달 입금 + 분배금·예수금)으로 채움
-        if (!dCalcCashSet && input && d.cfg.cash > 0) { dCalcCashSet = true; input.value = Math.round(d.cfg.cash); cashInput = d.cfg.cash; }
+        if (!dCalcCashSet && input && d.cfg.cash > 0) { dCalcCashSet = true; input.value = Math.round(d.cfg.cash); cashInput = d.cfg.cash; if (typeof calcUpdatePerSessionNote === 'function') calcUpdatePerSessionNote(); }
         var p = dStrategyPlan(d.cfg, d.rows, cashInput);
-        var rowHtml = function (code, name, weight, price, qty) {
-            var alloc = qty * price;
+        // 회차 배분 비율 = 한 달 계획의 레버리지 예산 비율 (나머지는 나스닥CC)
+        var wLevSplit = cashInput > 0 ? Math.min(1, p.levBudget / cashInput) : 0;
+        var per = cashInput / sessions;
+        var levQty = p.levQty, ccQty = p.ccQty;
+        if (sessions > 1) {
+            levQty = p.pLev > 0 ? Math.floor(per * wLevSplit / p.pLev + 1e-9) : 0;
+            ccQty = p.pCc > 0 ? Math.floor(per * (1 - wLevSplit) / p.pCc + 1e-9) : 0;
+        }
+        var rowHtml = function (code, name, weight, price, qty, split) {
+            var alloc = sessions > 1 ? per * split : qty * price;
             return '<tr class="hover:bg-slate-50 transition-colors">' +
                 '<td class="px-6 py-4 font-bold text-slate-800">' + name + ' <span class="text-xs text-slate-400">' + code + '</span></td>' +
                 '<td class="px-6 py-4 text-right font-bold text-slate-400">' + Math.round(weight * 100) + '%</td>' +
                 '<td class="px-6 py-4 text-right font-mono text-slate-600">₩' + Math.round(price).toLocaleString() + '</td>' +
                 '<td class="px-6 py-4 text-right font-mono text-orange-600 font-bold bg-orange-50/40">₩' + Math.round(alloc).toLocaleString() + '</td>' +
                 '<td class="px-6 py-4 text-right bg-blue-50/20 border-l border-blue-100"><div class="flex items-center justify-end">' +
-                '<input type="number" min="0" data-price="' + price + '" data-stock="' + name + '" class="calc-manual-qty w-20 bg-white border border-blue-300 text-blue-700 font-black text-center rounded-lg shadow-inner p-1.5" value="' + qty + '">' +
+                '<input type="number" min="0" data-price="' + price + '" data-stock="' + name + '" data-weight="' + split + '" class="calc-manual-qty w-20 bg-white border border-blue-300 text-blue-700 font-black text-center rounded-lg shadow-inner p-1.5" value="' + qty + '">' +
                 '<span class="ml-2 text-slate-500 font-bold">주</span></div></td>' +
                 '<td class="px-6 py-4 text-right font-mono text-slate-800 font-black row-actual-cost">₩0</td></tr>';
         };
-        body.innerHTML = rowHtml(d.cfg.levCode, dStrategyNameOf(d.rows, d.cfg.levCode), p.levTarget, p.pLev, p.levQty) +
-                         rowHtml(d.cfg.nccCode, dStrategyNameOf(d.rows, d.cfg.nccCode), 1 - p.levTarget, p.pCc, p.ccQty);
+        body.innerHTML = rowHtml(d.cfg.levCode, dStrategyNameOf(d.rows, d.cfg.levCode), p.levTarget, p.pLev, levQty, wLevSplit) +
+                         rowHtml(d.cfg.nccCode, dStrategyNameOf(d.rows, d.cfg.nccCode), 1 - p.levTarget, p.pCc, ccQty, 1 - wLevSplit);
         if (note) {
             note.classList.remove('hidden');
             note.innerHTML = '<b>🎯 D 전략 (ISA) 규칙으로 계산</b> · ' +
@@ -209,8 +220,12 @@ async function dStrategyCalc(cashInput) {
                           : '1단계: 기본예탁금 1천만 원 전 → 나스닥CC만 (레버리지까지 남은 ' + Math.round(p.toGo / 1e4).toLocaleString() + '만 원)') +
                 '<br><span class="text-xs text-slate-500">기본예탁금 인정액(추정) ' + Math.round(p.dep).toLocaleString() + '원 · 기존 보유 종목은 사지도 팔지도 않음 · 기준 값은 시트 D_설정에서 변경</span>';
         }
+        if (note && sessions > 1) {
+            note.innerHTML += '<br><span class="text-xs text-amber-800">📆 분할 매수: 한 달 계획 기준 레버리지 ' + Math.round(wLevSplit * 100) + '% / 나스닥CC ' + Math.round((1 - wLevSplit) * 100) + '% 금액 비율로 ' + sessions + '회에 나눠 계산</span>';
+        }
         document.querySelectorAll('.calc-manual-qty').forEach(function (i) { i.addEventListener('input', updateManualCalculator); });
         updateManualCalculator();
+        if (typeof calcRenderSchedule === 'function') calcRenderSchedule();
     } catch (e) {
         if (body) body.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">⚠️ ' + e.message + '</td></tr>';
     }

@@ -371,6 +371,22 @@
                         <input type="number" id="inputCash" value="500000" step="50000" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-orange-500 focus:border-orange-500 font-mono">
                     </div>
                 </div>
+                <!-- 매수 주기: 한 달 예수금을 한 번에 / 매주 / 매일 나눠서 사기 (js/calc.js) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-500 mb-1">📆 매수 주기</label>
+                        <div class="grid grid-cols-3 gap-2" id="calcFreqBtns">
+                            <button type="button" data-freq="month" onclick="calcSetFreq('month')" class="calc-freq-btn py-3 rounded-xl text-sm font-bold border">월 1회</button>
+                            <button type="button" data-freq="week" onclick="calcSetFreq('week')" class="calc-freq-btn py-3 rounded-xl text-sm font-bold border">매주</button>
+                            <button type="button" data-freq="day" onclick="calcSetFreq('day')" class="calc-freq-btn py-3 rounded-xl text-sm font-bold border">매일</button>
+                        </div>
+                    </div>
+                    <div id="calcSessionsBox" class="hidden">
+                        <label class="block text-sm font-bold text-slate-500 mb-1">🔁 이번 달 매수 횟수 <span id="calcSessionsHint" class="text-xs font-normal text-slate-400"></span></label>
+                        <input type="number" id="inputSessions" min="1" max="31" step="1" value="4" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm font-bold rounded-xl p-3 focus:ring-orange-500 focus:border-orange-500 font-mono">
+                    </div>
+                </div>
+                <div id="calcPerSessionNote" class="hidden text-sm font-bold text-orange-700 bg-orange-50 border border-orange-100 rounded-xl p-3"></div>
             </div>
             <!-- D 전략 안내 (D 선택 시에만 표시, js/d_strategy.js) -->
             <div id="calcStrategyNote" class="hidden bg-amber-50 rounded-2xl p-4 border border-amber-200 text-sm"></div>
@@ -409,6 +425,22 @@
             <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl shadow-sm border border-blue-100">
                 <h3 class="font-extrabold text-blue-900 mb-3 flex items-center"><i class="fas fa-coins text-blue-500 mr-2"></i>💡 잔돈으로 1주 더!</h3>
                 <div id="extraBuyGuide" class="space-y-2"></div>
+            </div>
+
+            <!-- 분할 매수 일정 (매주·매일 선택 시에만 표시) -->
+            <div id="calcScheduleCard" class="hidden bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                <div class="p-4 bg-slate-800 text-white">
+                    <h3 class="font-bold"><i class="fas fa-calendar-alt mr-2 text-orange-400"></i> 이번 달 회차별 매수 일정</h3>
+                    <p class="text-xs text-slate-300 mt-1">회차마다 못 산 잔돈은 종목별로 다음 회차에 이월 → 1주가 비싼 종목도 돈이 모이면 그 회차에 매수</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm whitespace-nowrap">
+                        <thead id="calcScheduleHead" class="text-xs text-slate-400 font-bold bg-slate-50 border-b border-slate-200"></thead>
+                        <tbody id="calcScheduleBody" class="divide-y divide-slate-100 font-medium text-slate-700"></tbody>
+                        <tfoot id="calcScheduleFoot" class="bg-slate-50 font-bold border-t-2 border-slate-200"></tfoot>
+                    </table>
+                </div>
+                <p id="calcScheduleNote" class="text-[11px] text-slate-400 p-4 leading-relaxed"></p>
             </div>
 
             <!-- 매수·매도 후 보유 반영은 잔고 캡처로 (예전 수동 입력 폼은 동작하지 않아 제거) -->
