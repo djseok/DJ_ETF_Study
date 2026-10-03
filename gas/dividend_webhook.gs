@@ -61,8 +61,8 @@ function ensureMasterRow_(ss, etfName, code, dbSheetName) {
 
     if (!masterSheet) {
       masterSheet = ss.insertSheet(masterSheetName);
-      masterSheet.appendRow(["종목명", "현재가", "최소 배당금", "평균 배당금", "최대 배당금", "평균 과세표준"]);
-      masterSheet.getRange("A1:F1").setFontWeight("bold").setBackground("#FFF2CC");
+      masterSheet.appendRow(["종목명", "현재가", "최소 배당금", "평균 배당금", "최대 배당금", "평균 과세표준", "배당이력(회)"]);
+      masterSheet.getRange("A1:G1").setFontWeight("bold").setBackground("#FFF2CC");
       masterSheet.setFrozenRows(1);
       SpreadsheetApp.flush();
     }
@@ -86,8 +86,9 @@ function ensureMasterRow_(ss, etfName, code, dbSheetName) {
       const formulaAvg = `=IFERROR(AVERAGE(${safeSheetName}!D:D), 0)`;
       const formulaMax = `=IFERROR(MAX(${safeSheetName}!D:D), 0)`;
       const formulaAvgTax = `=IFERROR(AVERAGE(${safeSheetName}!E:E), 0)`;
+      const formulaCount = `=IFERROR(COUNT(${safeSheetName}!D:D), 0)`; // 대시보드 Top5: 이력이 짧은 종목 구분용
 
-      masterSheet.appendRow([etfName, formulaPrice, formulaMin, formulaAvg, formulaMax, formulaAvgTax]);
+      masterSheet.appendRow([etfName, formulaPrice, formulaMin, formulaAvg, formulaMax, formulaAvgTax, formulaCount]);
     }
 }
 

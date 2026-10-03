@@ -16,6 +16,7 @@
  * ▶ 새 ETF 추가: MasterData 맨 아래에 A '본체ETF', B 'KRX:코드', C 이름, H 대분류(성장/배당), I 중분류(해외/국내)만 적으면
  *   다음 날 아침 자동으로 ⓐ D~G 가격 수식 ⓑ H가 '배당'이면 'ETF 배당주기'에 등록
  *   ⓒ 이름에 '커버드콜'이 있고 H가 '배당'이면 마스터시트 '관리코드'에도 등록 (C열 주소는 밤 10시 자동 채우기)
+ *   ⓓ J 상장시장 · K 기초자산 · L 구조가 비어 있으면 이름·코드·I열로 추정해 채움 (직접 적은 칸은 그대로, M열이 과세유형 자동 판정)
  *
  * ▶ 티커를 못 찾은 종목이 있으면
  *   '매핑테이블' A열에 로그에 나온 종목명 그대로, B열에 티커(예: NVDA, KRX:005930, TYO:6981)를 적고 다시 실행
@@ -158,7 +159,7 @@ function runHoldings_(dryRun) {
 function hsRegisterNewEtfs_(ss, master, dryRun) {
   var last = master.getLastRow();
   if (last < 3) return;
-  var v = master.getRange(3, 1, last - 2, 9).getValues();
+  var v = master.getRange(3, 1, last - 2, 12).getValues(); // A~L (J~L: 상장시장·기초자산·구조)
   var norm = function (x) { return String(x || '').replace(/\s+/g, '').replace(/커브드/g, '커버드').toUpperCase(); };
 
   var schedule = ss.getSheetByName(HS_TAB_SCHEDULE);
@@ -204,8 +205,39 @@ function hsRegisterNewEtfs_(ss, master, dryRun) {
       }
       codeKeys[norm(name)] = true; codeKeys[norm(code)] = true;
     }
+    // ⓓ 과세 분류 J~L — 빈 칸만 이름·코드·I열(해외/국내)로 추정해 채움 (직접 적은 값은 절대 안 바꿈)
+    var cur = [r[9], r[10], r[11]];
+    if (cur.some(function (x) { return String(x || '').trim() === ''; })) {
+      var guess = hsGuessTaxClass_(String(r[1]), name, String(r[8] || '').trim());
+      var out = cur.map(function (x, k) { return String(x || '').trim() === '' ? guess[k] : x; });
+      log.push('🏷️ ' + name + ': J~L 자동 분류 → ' + out.join(' / ') + ' (M열 과세유형 확인)');
+      if (!dryRun) {
+        master.getRange(row, 10, 1, 3).setValues([out]);
+        master.getRange(row, 10).setNote('J~L 자동 추정 ' + hsToday_() + ' — 틀리면 직접 고치세요 (고친 값은 유지됨)');
+      }
+    }
   });
   if (log.length) Logger.log('🆕 새 ETF 등록' + (dryRun ? ' (미리보기)' : '') + '\n' + log.join('\n'));
+}
+
+// 이름·코드·I열(해외/국내)로 [상장시장, 기초자산, 구조] 추정 — 규칙 기반이라 M열 '⚠ 확인필요'는 사람이 확인
+function hsGuessTaxClass_(ticker, name, region) {
+  var t = String(ticker || '').trim().toUpperCase(), n = String(name || '');
+  var listed = (/^KRX:/.test(t) || /^[0-9A-Z]{6}$/.test(t) && /\d/.test(t)) ? '국내상장' : '미국상장';
+  var overseasByName = /미국|글로벌|나스닥|NASDAQ|S&P|다우존스|차이나|중국|일본|인도|베트남|유럽|선진국|신흥국|월드/i.test(n);
+  var overseas = region === '해외' || (region !== '국내' && overseasByName);
+  var asset;
+  if (/리츠|부동산/.test(n)) asset = overseas ? '해외리츠' : '국내리츠';
+  else if (/채권|국채|회사채|금리|KOFR|CD|머니마켓|단기자금/i.test(n)) asset = '채권';
+  else if (/금현물|골드|GOLD|원유|WTI|구리|은선물|원자재|천연가스선물/i.test(n)) asset = '원자재';
+  else if (/혼합/.test(n)) asset = '혼합';
+  else asset = overseas ? '해외주식' : '국내주식';
+  var structure;
+  if (/레버리지|인버스|곱버스|\b2X\b|\b3X\b/i.test(n)) structure = '레버리지·인버스';
+  else if (/커버드콜|커브드콜/.test(n)) structure = '커버드콜';
+  else if (/액티브/.test(n)) structure = '액티브';
+  else structure = '지수추종';
+  return [listed, asset, structure];
 }
 
 function hsTargets_(master) {
