@@ -907,7 +907,10 @@
             <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 overflow-x-auto">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-black text-slate-800 flex items-center"><i class="fas fa-layer-group text-blue-500 mr-2"></i>종목별 자산 배분 (최대 5개)</h2>
-                    <span class="text-xs font-bold text-slate-400">* 비율(%)이나 금액을 입력하면 자동 환산됩니다.</span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-slate-400">* 비율(%)이나 금액을 입력하면 자동 환산됩니다.</span>
+                        <button type="button" onclick="autoFillTopYieldSlots(true)" title="평균 배당금 ÷ 현재가 기준 상위 5개 (배당이력 6회 미만은 후순위)" class="text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-100 whitespace-nowrap"><i class="fas fa-ranking-star mr-1"></i>월 분배율 Top5 채우기</button>
+                    </div>
                 </div>
                 <div class="space-y-2 min-w-[600px]">
                     <div class="grid grid-cols-12 gap-3 text-xs font-bold text-slate-500 text-center px-2 pb-1 border-b border-slate-100">

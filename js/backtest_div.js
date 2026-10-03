@@ -52,6 +52,8 @@ async function fetchBacktestMasterData() {
                 const avgDiv = getNum(columns[3]);
                 const maxDiv = getNum(columns[4]);
                 const taxBase = getNum(columns[5]);
+                const histRaw = (columns[6] || '').trim();
+                const history = histRaw === '' ? null : getNum(histRaw); // G열 배당이력(회) — 없으면 null(모름)
 
                 if (name !== "") {
                     simEtfDatabase[name] = { 
@@ -59,18 +61,63 @@ async function fetchBacktestMasterData() {
                         minDiv: minDiv || 0,
                         avgDiv: avgDiv || 0,
                         maxDiv: maxDiv || 0,
-                        taxBase: taxBase || 0
+                        taxBase: taxBase || 0,
+                        history: history
                     };
                 }
             }
         }
         generateSlots();
+        autoFillTopYieldSlots(false);
         isDivDataLoaded = true;
         setupEventListeners();
         runPortfolioSimulator();
     } catch (error) {
         console.error("배당 시뮬레이터 데이터 로딩 실패:", error);
     }
+}
+
+// ✨ 월 분배율 = 평균 배당금 ÷ 현재가 (1주당 금액은 주가가 다르면 비교가 안 되므로 비율로 정렬)
+const TOP_YIELD_MIN_HISTORY = 6; // 배당이력이 이보다 짧으면 평균이 부풀 수 있어 후순위
+
+function monthlyYield(etf) {
+    return etf && etf.price > 0 && etf.avgDiv > 0 ? etf.avgDiv / etf.price : 0;
+}
+
+function rankByMonthlyYield() {
+    const all = Object.entries(simEtfDatabase)
+        .map(([name, etf]) => ({ name, yld: monthlyYield(etf), history: etf.history }))
+        .filter(x => x.yld > 0)
+        .sort((a, b) => b.yld - a.yld);
+    const enough = all.filter(x => x.history === null || x.history >= TOP_YIELD_MIN_HISTORY);
+    const short = all.filter(x => !(x.history === null || x.history >= TOP_YIELD_MIN_HISTORY));
+    return enough.concat(short); // 이력 충분한 종목 먼저, 모자라면 짧은 종목으로 채움
+}
+
+// force=false: 슬롯이 전부 비어 있을 때만(첫 로딩) 채움 / true: 버튼으로 다시 채움
+function autoFillTopYieldSlots(force) {
+    const filled = [];
+    for (let i = 1; i <= SLOT_COUNT; i++) {
+        const v = document.getElementById(`simSlotEtf${i}`)?.value;
+        if (v) filled.push(v);
+    }
+    if (!force && filled.length > 0) return;
+
+    const top = rankByMonthlyYield().slice(0, SLOT_COUNT);
+    if (top.length === 0) return;
+    const totalAsset = getNum(document.getElementById('simTotalAsset')?.value);
+    const ratio = parseFloat((100 / top.length).toFixed(2));
+    for (let i = 1; i <= SLOT_COUNT; i++) {
+        const sel = document.getElementById(`simSlotEtf${i}`);
+        const ratioInput = document.getElementById(`simSlotRatio${i}`);
+        const amountInput = document.getElementById(`simSlotAmount${i}`);
+        if (!sel || !ratioInput || !amountInput) continue;
+        const pick = top[i - 1];
+        sel.value = pick ? pick.name : '';
+        ratioInput.value = pick ? ratio : '';
+        amountInput.value = pick ? fmtNum(totalAsset * (ratio / 100)) : '';
+    }
+    if (force) runPortfolioSimulator();
 }
 
 function generateSlots() {
@@ -83,7 +130,10 @@ function generateSlots() {
     let divOptions = `<optgroup label="🔄 내 배당 종목 (배당금으로 주식 수 불리기)">`;
     for (const [name, data] of Object.entries(simEtfDatabase)) {
         const priceLabel = data.price > 0 ? `₩${fmtNum(data.price)}` : `⚠️ 시세 오류`;
-        optionsHtml += `<option value="${name}">${name} (${priceLabel})</option>`;
+        const yld = monthlyYield(data);
+        const yldLabel = yld > 0 ? ` · 월 ${(yld * 100).toFixed(2)}%` : '';
+        const histLabel = (data.history !== null && data.history < TOP_YIELD_MIN_HISTORY) ? ` · 이력 ${data.history}회` : '';
+        optionsHtml += `<option value="${name}">${name} (${priceLabel}${yldLabel}${histLabel})</option>`;
         divOptions += `<option value="${name}">${name} (${priceLabel})</option>`;
     }
     divOptions += `</optgroup>`;
