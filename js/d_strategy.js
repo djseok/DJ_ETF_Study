@@ -211,7 +211,6 @@ async function dStrategyCalc(cashInput) {
         }
         document.querySelectorAll('.calc-manual-qty').forEach(function (i) { i.addEventListener('input', updateManualCalculator); });
         updateManualCalculator();
-        if (typeof runStressTest === 'function') runStressTest();
     } catch (e) {
         if (body) body.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">⚠️ ' + e.message + '</td></tr>';
     }
