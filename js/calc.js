@@ -32,6 +32,11 @@ function calculateRebalancing() {
 
     const targetUser = selector.value;
     const cashInput = parseFloat(document.getElementById('inputCash').value) || 0;
+
+    // D 는 ISA D 전략 규칙(레버리지 60 / 나스닥CC 40, 1천만 원 전에는 나스닥CC만)으로 계산 → js/d_strategy.js
+    const dNote = document.getElementById('calcStrategyNote');
+    if (targetUser === 'D' && typeof dStrategyCalc === 'function') { dStrategyCalc(cashInput); return; }
+    if (dNote) dNote.classList.add('hidden');
     const userObj = globalParsedUsers[targetUser];
     
     if (!userObj || !userObj.items || userObj.items.length === 0) {

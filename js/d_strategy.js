@@ -130,3 +130,89 @@ function renderDStrategy(plan, actual) {
         });
     }
 }
+
+
+// =========================================================
+// 🧮 구매 계산기 연동: D 선택 시 D 전략 규칙으로 장바구니 계산
+//   시트 D_매수계획 과 같은 공식 (D_설정 · D_보유 탭 사용)
+// =========================================================
+var dCalcCache = null;
+var dCalcCashSet = false;
+
+async function dLoadCalcData() {
+    if (dCalcCache) return dCalcCache;
+    var res = await Promise.all([fetch(sheetUrl('D_CFG')), fetch(sheetUrl('D_HOLD'))]);
+    if (!res[0].ok || !res[1].ok) throw new Error('D_설정 · D_보유 탭을 불러오지 못했어요');
+    var cfgM = parseCsv(await res[0].text()), holdM = parseCsv(await res[1].text());
+    var get = function (label) { return dFindLabel(cfgM, label); };
+    var cfg = {
+        levCode: String(get('레버리지 종목코드')).trim(),
+        nccCode: String(get('나스닥CC 종목코드(신규 매수용)')).trim(),
+        wLev: dNum(get('레버리지 목표 비중')),
+        threshold: dNum(get('레버리지 활성 기준금액')),
+        eligible: String(get('레버리지 사전교육 이수')).toUpperCase() === 'TRUE',
+        cash: (dNum(get('이번 달 신규 입금액')) || 0) + (dNum(get('분배금 + 예수금')) || 0),
+        haircut: dNum(get('보유주식 예탁금 반영률')),
+        appDeposit: dNum(get('앱 표시 기본예탁금 인정액(선택)'))
+    };
+    // D_보유: A 코드 · B 종목명 · C 역할 · D 수량 · E 평단 · F 수동가 · G 현재가 · H 평가액
+    var rows = holdM.slice(1).filter(function (r) { return String(r[1] || '').trim(); }).map(function (r) {
+        return { code: String(r[0]).trim(), name: String(r[1]).trim(), role: String(r[2]).trim().toUpperCase(), price: dNum(r[6]) || 0, value: dNum(r[7]) || 0 };
+    });
+    dCalcCache = { cfg: cfg, rows: rows };
+    return dCalcCache;
+}
+
+// 순수 계산 (시트 D_매수계획 과 같은 규칙)
+function dStrategyPlan(cfg, rows, cash) {
+    var sum = function (role) { return rows.filter(function (r) { return !role || r.role === role; }).reduce(function (s, r) { return s + r.value; }, 0); };
+    var lev = sum('LEV'), ncc = sum('NCC'), total = sum(null);
+    var dep = cfg.appDeposit > 0 ? cfg.appDeposit + cash : cash + total * (cfg.haircut > 0 ? cfg.haircut : 1);
+    var phase2 = dep >= cfg.threshold && cfg.eligible;
+    var priceOf = function (code) { var r = rows.find(function (x) { return x.code === code; }); return r ? r.price : 0; };
+    var pLev = priceOf(cfg.levCode), pCc = priceOf(cfg.nccCode);
+    var levBudget = phase2 ? Math.min(cash, Math.max(0, cfg.wLev * (lev + ncc + cash) - lev)) : 0;
+    var levQty = phase2 && pLev > 0 ? Math.floor(levBudget / pLev) : 0;
+    var ccQty = pCc > 0 ? Math.floor((cash - levQty * pLev) / pCc) : 0;
+    return { phase2: phase2, dep: dep, toGo: Math.max(0, cfg.threshold - dep), lev: lev, ncc: ncc, pLev: pLev, pCc: pCc,
+        levQty: levQty, ccQty: ccQty, levTarget: phase2 ? cfg.wLev : 0 };
+}
+
+function dStrategyNameOf(rows, code) { var r = rows.find(function (x) { return x.code === code; }); return r ? r.name : code; }
+
+async function dStrategyCalc(cashInput) {
+    var body = document.getElementById('calcTableBody'), note = document.getElementById('calcStrategyNote');
+    try {
+        var d = await dLoadCalcData();
+        var input = document.getElementById('inputCash');
+        // 처음 D 를 고르면 예수금 칸을 시트 D_설정 금액(이번 달 입금 + 분배금·예수금)으로 채움
+        if (!dCalcCashSet && input && d.cfg.cash > 0) { dCalcCashSet = true; input.value = Math.round(d.cfg.cash); cashInput = d.cfg.cash; }
+        var p = dStrategyPlan(d.cfg, d.rows, cashInput);
+        var rowHtml = function (code, name, weight, price, qty) {
+            var alloc = qty * price;
+            return '<tr class="hover:bg-slate-50 transition-colors">' +
+                '<td class="px-6 py-4 font-bold text-slate-800">' + name + ' <span class="text-xs text-slate-400">' + code + '</span></td>' +
+                '<td class="px-6 py-4 text-right font-bold text-slate-400">' + Math.round(weight * 100) + '%</td>' +
+                '<td class="px-6 py-4 text-right font-mono text-slate-600">₩' + Math.round(price).toLocaleString() + '</td>' +
+                '<td class="px-6 py-4 text-right font-mono text-orange-600 font-bold bg-orange-50/40">₩' + Math.round(alloc).toLocaleString() + '</td>' +
+                '<td class="px-6 py-4 text-right bg-blue-50/20 border-l border-blue-100"><div class="flex items-center justify-end">' +
+                '<input type="number" min="0" data-price="' + price + '" data-stock="' + name + '" class="calc-manual-qty w-20 bg-white border border-blue-300 text-blue-700 font-black text-center rounded-lg shadow-inner p-1.5" value="' + qty + '">' +
+                '<span class="ml-2 text-slate-500 font-bold">주</span></div></td>' +
+                '<td class="px-6 py-4 text-right font-mono text-slate-800 font-black row-actual-cost">₩0</td></tr>';
+        };
+        body.innerHTML = rowHtml(d.cfg.levCode, dStrategyNameOf(d.rows, d.cfg.levCode), p.levTarget, p.pLev, p.levQty) +
+                         rowHtml(d.cfg.nccCode, dStrategyNameOf(d.rows, d.cfg.nccCode), 1 - p.levTarget, p.pCc, p.ccQty);
+        if (note) {
+            note.classList.remove('hidden');
+            note.innerHTML = '<b>🎯 D 전략 (ISA) 규칙으로 계산</b> · ' +
+                (p.phase2 ? '2단계: 레버리지 60 / 나스닥CC 40에서 모자란 종목부터'
+                          : '1단계: 기본예탁금 1천만 원 전 → 나스닥CC만 (레버리지까지 남은 ' + Math.round(p.toGo / 1e4).toLocaleString() + '만 원)') +
+                '<br><span class="text-xs text-slate-500">기본예탁금 인정액(추정) ' + Math.round(p.dep).toLocaleString() + '원 · 기존 보유 종목은 사지도 팔지도 않음 · 기준 값은 시트 D_설정에서 변경</span>';
+        }
+        document.querySelectorAll('.calc-manual-qty').forEach(function (i) { i.addEventListener('input', updateManualCalculator); });
+        updateManualCalculator();
+        if (typeof runStressTest === 'function') runStressTest();
+    } catch (e) {
+        if (body) body.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400 font-bold">⚠️ ' + e.message + '</td></tr>';
+    }
+}
