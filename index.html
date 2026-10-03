@@ -437,52 +437,8 @@
                 </div>
             </div>
 
-            
-            <div class="bg-blue-50 p-6 rounded-2xl shadow-sm border border-blue-200 mt-6">
-                <h4 class="font-black text-lg text-blue-900 mb-4"><i class="fas fa-pen-fancy text-blue-600 mr-2"></i>포트폴리오 실시간 업데이트 (매수/매도)</h4>
-                <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
-                    <div>
-                        <label class="block text-xs font-bold text-blue-800 mb-1">투자자</label>
-                        <select id="inputLogUser" class="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-slate-700 shadow-sm">
-                            <option value="동진">동진</option>
-                            <option value="S">S</option>
-                            <option value="D">D</option>
-                            <option value="J">J</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-blue-800 mb-1">매매 구분</label>
-                        <select id="inputLogType" class="w-full p-3 bg-white border border-blue-200 rounded-xl font-black text-slate-800 shadow-sm">
-                            <option value="매수" class="text-red-500">🔴 매수 (+)</option>
-                            <option value="매도" class="text-blue-500">🔵 매도 (-)</option>
-                        </select>
-                    </div>
-                    <div class="col-span-2 md:col-span-1">
-                        <label class="block text-xs font-bold text-blue-800 mb-1">종목명</label>
-                        <select id="inputLogStock" class="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-slate-700 text-xs shadow-sm">
-                            <option value="KODEX 미국반도체">KODEX 미국반도체</option>
-                            <option value="TIGER 미국배당다우존스">TIGER 미국배당다우존스</option>
-                            <option value="KODEX 미국나스닥100데일리커버드콜OTM">KODEX 커버드콜OTM</option>
-                            <option value="RISE 미국나스닥100">RISE 나스닥100</option>
-                            <option value="RISE 미국S&P500">RISE S&P500</option>
-                            <option value="TIME 글로벌AI인공지능액티브">TIME 글로벌AI</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-blue-800 mb-1">단가 (₩)</label>
-                        <input type="number" id="inputLogPrice" placeholder="65000" class="w-full p-3 bg-white border border-blue-200 rounded-xl font-mono shadow-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-blue-800 mb-1">수량 (주)</label>
-                        <input type="number" id="inputLogQty" placeholder="10" class="w-full p-3 bg-white border border-blue-200 rounded-xl font-mono shadow-sm">
-                    </div>
-                    <div class="col-span-2 md:col-span-1 flex items-end">
-                        <button id="btnSubmitLog" onclick="submitTransactionLog()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md transition-all">
-                            <i class="fas fa-paper-plane mr-1"></i> 전송
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <!-- 매수·매도 후 보유 반영은 잔고 캡처로 (예전 수동 입력 폼은 동작하지 않아 제거) -->
+            <button onclick="openUpload(document.getElementById('calcUserSelector') ? document.getElementById('calcUserSelector').value : '')" class="mt-6 w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-2xl font-bold text-sm border border-blue-200 flex items-center justify-center"><i class="fas fa-camera text-blue-600 mr-2"></i> 매수·매도 후에는 📸 잔고 캡처로 보유 종목 업데이트</button>
         </div>
 
         <!-- 4. 배당&총알 -->
