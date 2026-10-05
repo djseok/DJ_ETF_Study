@@ -161,7 +161,7 @@ function calculateRebalancing() {
 
     let tableHtml = "";
     userObj.items.forEach(item => {
-        let actualWeight = item.targetWeight > 1 ? item.targetWeight / 100 : item.targetWeight; 
+        let actualWeight = item.targetWeight; // port.js 에서 이미 0~1 비율로 바꿔 둠
         
         // 목표 비중이 없거나 0이면 건너뛰기
         if (actualWeight <= 0) return;

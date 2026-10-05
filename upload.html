@@ -196,8 +196,8 @@
     var pick = Array.prototype.map.call(document.querySelectorAll('.pick:checked, .pickMissing:checked'), function (x) { return x.value; });
     $('btnApply').disabled = true; $('msg3').textContent = '반영 중…';
     var edits = {};
-    document.querySelectorAll('.eqty').forEach(function (x) { (edits[x.dataset.key] = edits[x.dataset.key] || {}).qty = Number(String(x.value).replace(/[^0-9.]/g, '')); });
-    document.querySelectorAll('.eavg').forEach(function (x) { (edits[x.dataset.key] = edits[x.dataset.key] || {}).avg = Number(String(x.value).replace(/[^0-9.]/g, '')); });
+    document.querySelectorAll('.eqty').forEach(function (x) { var v = String(x.value).replace(/[^0-9.]/g, ''); if (v !== '') (edits[x.dataset.key] = edits[x.dataset.key] || {}).qty = Number(v); }); // 빈칸은 0주가 아니라 '안 고침'
+    document.querySelectorAll('.eavg').forEach(function (x) { var v = String(x.value).replace(/[^0-9.]/g, ''); if (v !== '') (edits[x.dataset.key] = edits[x.dataset.key] || {}).avg = Number(v); });
     document.querySelectorAll('.eticker').forEach(function (x) { if (x.value.trim()) (edits[x.dataset.key] = edits[x.dataset.key] || {}).ticker = x.value.trim(); });
     call({ action: 'apply', member: a.member, pin: a.pin, token: token, pick: pick, edits: edits, removeMissing: $('removeMissing').checked }).then(function (j) {
       $('s3').classList.add('hidden'); $('s2').classList.add('hidden'); $('s4').classList.remove('hidden');

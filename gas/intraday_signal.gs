@@ -75,21 +75,26 @@ function runIntraday_(dryRun) {
   if (!hits.length) return;
 
   // 카톡 (200자 제한 → 나눠서)
-  var msgs = [], cur = '⚡ 장중 신호 ' + time;
+  var msgs = [], cur = { text: '⚡ 장중 신호 ' + time, hits: [] };
   hits.forEach(function (h) {
     var tag = h.side === 'BUY' ? (h.first ? '🔵 매수 구간 진입' : '🔵 추가 하락') : (h.first ? '🔴 매도 구간 진입' : '🔴 추가 상승');
     var add = '\n' + tag + '\n' + pmShort_(h.e.name) + ' ' + pmPct_(h.pct) + ' · ' + Math.round(h.q.price).toLocaleString() + '원 (기준 ' + (h.th > 0 ? '+' : '') + h.th + '%)';
-    if ((cur + add).length > PM_KAKAO_MAX) { msgs.push(cur); cur = '⚡ 장중 신호 ' + time + ' (계속)'; }
-    cur += add;
+    if ((cur.text + add).length > PM_KAKAO_MAX) { msgs.push(cur); cur = { text: '⚡ 장중 신호 ' + time + ' (계속)', hits: [] }; }
+    cur.text += add; cur.hits.push(h);
   });
   msgs.push(cur);
-  msgs.forEach(function (m) { kakaoSendToMe_(m); Utilities.sleep(300); });
-
-  hits.forEach(function (h) { sent[h.key] = h.level; });
+  // 보낸 메시지에 들어간 신호만 '보냄'으로 기록 → 중간에 카톡이 실패해도 이미 간 알림이 10분마다 반복되지 않게
+  var done = [], failed = null;
+  for (var i = 0; i < msgs.length; i++) {
+    try { kakaoSendToMe_(msgs[i].text); done = done.concat(msgs[i].hits); Utilities.sleep(300); }
+    catch (e) { failed = e; break; }
+  }
+  done.forEach(function (h) { sent[h.key] = h.level; });
   props.setProperty(sentKey, JSON.stringify(sent));
   idCleanupProps_(props, sentKey);
-  idWriteLog_(ss, today, time, hits);
-  Logger.log('⚡ 장중 신호 ' + hits.length + '건 발송');
+  if (done.length) idWriteLog_(ss, today, time, done);
+  Logger.log('⚡ 장중 신호 ' + done.length + '/' + hits.length + '건 발송');
+  if (failed) throw failed; // 못 보낸 신호는 다음 실행(10분 뒤)에 다시 시도
 }
 
 // 현재가·전일 종가: 야후(1분봉 메타) → MasterData D·E

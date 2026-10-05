@@ -45,15 +45,33 @@ function doPost(e) {
 
 function huJson_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-// 비밀번호 확인 (5번 틀리면 10분 잠금)
+// 비밀번호 확인 (5번 틀리면 10분 잠금 · 6시간에 15번 틀리면 6시간 잠금)
+//   멤버가 없을 때와 비밀번호가 틀렸을 때 같은 메시지 → 등록된 멤버 이름을 알아낼 수 없게
+//   틀린 횟수는 잠금 안에서 읽고 더함 → 동시에 여러 번 보내도 횟수가 빠지지 않게
 function huCheckPin_(member, pin) {
   var pins = JSON.parse(PropertiesService.getScriptProperties().getProperty('MEMBER_PINS') || '{}');
-  if (!member || !pins[member]) throw new Error('등록되지 않은 멤버예요');
-  var cache = CacheService.getScriptCache(), key = 'HU_FAIL_' + member;
-  var fails = Number(cache.get(key) || 0);
-  if (fails >= 5) throw new Error('비밀번호를 여러 번 틀려 10분 동안 잠겼어요');
-  if (String(pins[member]) !== pin) { cache.put(key, String(fails + 1), 600); throw new Error('비밀번호가 맞지 않아요'); }
-  cache.remove(key);
+  var bad = '멤버 또는 비밀번호가 맞지 않아요';
+  if (!member || !/^[A-Za-z0-9가-힣]{1,20}$/.test(member)) throw new Error(bad);
+  var cache = CacheService.getScriptCache(), key = 'HU_FAIL_' + member, keyLong = 'HU_FAIL6H_' + member;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('요청이 많아요. 잠시 뒤 다시 시도해 주세요'); // 다른 멤버의 '반영'이 끝날 때까지 기다림
+  try {
+    var fails = Number(cache.get(key) || 0), failsLong = Number(cache.get(keyLong) || 0);
+    if (failsLong >= 15) throw new Error('비밀번호를 너무 많이 틀려 6시간 동안 잠겼어요');
+    if (fails >= 5) throw new Error('비밀번호를 여러 번 틀려 10분 동안 잠겼어요');
+    if (!pins[member] || String(pins[member]) !== pin) {
+      cache.put(key, String(fails + 1), 600);
+      cache.put(keyLong, String(failsLong + 1), 21600);
+      throw new Error(bad);
+    }
+    cache.remove(key);
+  } finally { lock.releaseLock(); }
+}
+
+// 시트에 쓰는 글자가 = + - @ 로 시작하면 수식으로 실행되지 않게 앞에 ' 를 붙임
+function huSafe_(s) {
+  s = String(s === null || s === undefined ? '' : s);
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
 }
 
 // ---------------------------------------------------------
@@ -89,12 +107,12 @@ function huCompare_(member, read, known) {
       else if (ev > 0 && pl !== 0) { avg = (ev - pl) / qty; how = '(평가금액 − 손익) ÷ 수량'; }
     }
     var m = huMatch_(x.name, known, cur.byKey);
-    if (m) { parsed[m.key] = { raw: x.name, name: m.name, code: m.code, matched: true, qty: qty, avg: avg, how: how }; return; }
+    if (m) { parsed[m.key] = { raw: huSafe_(x.name), name: m.name, code: m.code, matched: true, qty: qty, avg: avg, how: how }; return; }
     // ETF 목록에 없으면 개별 종목: 티커(한국 6자리 코드 · 미국 티커)로 관리
     var t = huTicker_(x.ticker) || huTickerByName_(x.name);
     var usd = String(x.currency || '').toUpperCase() === 'USD';
     if (usd && avg > 0) { avg = avg * huUsdKrw_(); how = (how ? how + ' · ' : '') + '달러 × 오늘 환율'; } // 포트폴리오는 원화 기준
-    parsed[t ? 'T_' + t : 'X_' + x.name] = { raw: x.name, name: String(x.name).trim(), code: t, matched: false, stock: true, qty: qty, avg: avg, how: how, usd: usd };
+    parsed[t ? 'T_' + t : 'X_' + x.name] = { raw: huSafe_(x.name), name: huSafe_(String(x.name).trim()), code: t, matched: false, stock: true, qty: qty, avg: avg, how: how, usd: usd };
   });
 
   var rows = [], seen = {};
@@ -180,11 +198,13 @@ function huGemini_(images, knownNames) {
 // ---------------------------------------------------------
 function huApply_(member, token, pick, removeMissing, edits) {
   var cache = CacheService.getScriptCache();
-  var saved = JSON.parse(cache.get('HU_' + token) || 'null');
-  if (!saved || saved.member !== member) throw new Error('확인 시간이 지났어요. 다시 올려 주세요 (15분)');
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw new Error('다른 반영이 진행 중이에요. 잠시 뒤 다시 시도해 주세요');
   try {
+    // 잠금 안에서 확인 → '반영'을 두 번 눌러도 두 번째는 이미 쓴 확인 번호라 막힘
+    var saved = JSON.parse(cache.get('HU_' + token) || 'null');
+    if (!saved || saved.member !== member) throw new Error('확인 시간이 지났거나 이미 반영했어요. 다시 올려 주세요 (15분)');
+    cache.remove('HU_' + token);
     var planBefore = null;
     try { planBefore = huReadPlan_(member); } catch (err) { planBefore = null; } // 반영 전 이번 달 계획 (반영 후엔 수식이 다시 계산되므로 먼저 읽음)
     var cur = huCurrent_(member), sh = cur.sheet, log = [];
@@ -192,7 +212,7 @@ function huApply_(member, token, pick, removeMissing, edits) {
     saved.rows.forEach(function (r) {
       var e = edits[r.key];
       if (!e) return;
-      if (isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty * 1e6) / 1e6; // 소수점 주식 허용
+      if (e.qty !== null && e.qty !== '' && isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty * 1e6) / 1e6; // 소수점 주식 허용
       if (e.ticker && r.stock && !r.curKey) { var tk = huTicker_(e.ticker); if (tk) { r.code = tk; if (r.status === 'needTicker') r.status = 'new'; } }
       if (isFinite(e.avg) && e.avg > 0) r.newAvg = Math.round(e.avg);
       if (r.status === 'same' && (r.newQty !== r.oldQty || r.newAvg !== r.oldAvg)) r.status = 'change';
@@ -206,7 +226,7 @@ function huApply_(member, token, pick, removeMissing, edits) {
       } else {
         var row = cur.lastRow + 1; cur.lastRow = row;
         var code = String(r.code || '').replace(/^KRX:/i, '');
-        sh.getRange(row, 1, 1, 6).setValues([[member, r.name, 0, r.newAvg, r.newQty, huPriceFormula_(code)]]);
+        sh.getRange(row, 1, 1, 6).setValues([[member, huSafe_(r.name), 0, r.newAvg, r.newQty, huPriceFormula_(code)]]);
         log.push('+ ' + r.name + (r.stock ? ' (' + code + ')' : '') + ' ' + r.newQty + '주');
       }
     });
@@ -216,7 +236,6 @@ function huApply_(member, token, pick, removeMissing, edits) {
         if (c && (!pick || pick.indexOf(m.key) >= 0)) { sh.getRange(c.row, 5).setValue(0); log.push(m.name + ' ' + c.qty + '→0주'); }
       });
     }
-    cache.remove('HU_' + token);
     huLog_(member, log);
     var strategy = '';
     try { strategy = huStrategyLog_(member, chosen); } catch (err) { strategy = '⚠️ 실적기록 실패: ' + err.message; }
@@ -229,7 +248,7 @@ function huLog_(member, log) {
   var ss = SpreadsheetApp.openById(HU_MANAGE_ID);
   var sh = ss.getSheetByName(HU_LOG_TAB);
   if (!sh) { sh = ss.insertSheet(HU_LOG_TAB); sh.getRange(1, 1, 1, 4).setValues([['시각', '멤버', '건수', '바뀐 내용']]); sh.setFrozenRows(1); }
-  sh.appendRow([Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), member, log.length, log.join(' · ') || '변경 없음']);
+  sh.appendRow([Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'), member, log.length, huSafe_(log.join(' · ') || '변경 없음')]);
 }
 
 // ---------------------------------------------------------

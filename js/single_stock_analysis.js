@@ -1161,7 +1161,7 @@ function renderEQDS_UI(ctx) {
     }).join('');
 
     const fmtRS = (val) => val === "N/A" ? "N/A" : (val > 0 ? '+'+val.toFixed(2) : val.toFixed(2)) + '%p';
-    const mddCell = (n, mObj) => `<div class="flex justify-between"><span>${n}:</span><span>Cur ${(mObj.currentDD*100).toFixed(1)}% | Max ${(mObj.maxDD).toFixed(1)}%</span></div>`;
+    const mddCell = (n, mObj) => `<div class="flex justify-between"><span>${n}:</span><span>Cur ${(mObj.currentDD).toFixed(1)}% | Max ${(mObj.maxDD).toFixed(1)}%</span></div>`;
 
     let h = `
         <div class="space-y-6">
@@ -1206,7 +1206,7 @@ function renderEQDS_UI(ctx) {
                         ${mddCell("60D", vm.mdd.d60)}
                         ${mddCell("120D", vm.mdd.d120)}
                         ${mddCell("252D", vm.mdd.d252)}
-                        <div class="flex justify-between font-bold"><span>ALL:</span><span>Cur ${(vm.mdd.all.currentDD*100).toFixed(1)}% | Max ${(vm.mdd.all.maxDD).toFixed(1)}%</span></div>
+                        <div class="flex justify-between font-bold"><span>ALL:</span><span>Cur ${(vm.mdd.all.currentDD).toFixed(1)}% | Max ${(vm.mdd.all.maxDD).toFixed(1)}%</span></div>
                     </div>
                     <div class="text-[10px] text-slate-600 mt-2 font-bold bg-slate-50 p-2 rounded">
                         * MDD는 매수 점수에 직접 반영되지 않으며, 위험 확인용입니다.<br>
@@ -1353,7 +1353,7 @@ function drawQuantChart() {
     if (chkMa20 && chkMa20.checked) ds.push({ label: '20MA', data: currentQuantData.ma[20], borderColor: '#eab308', borderWidth: 1.5, pointRadius: 0, tension: 0.4, yAxisID: 'y' });
     if (chkMa60 && chkMa60.checked) ds.push({ label: '60MA', data: currentQuantData.ma[60], borderColor: '#22c55e', borderWidth: 1.5, pointRadius: 0, tension: 0.4, yAxisID: 'y' });
     if (chkMa200 && chkMa200.checked) ds.push({ label: '200MA', data: currentQuantData.ma[200], borderColor: '#8b5cf6', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, tension: 0.4, yAxisID: 'y' });
-    if (chkRsi && chkRsi.checked) ds.push({ label: 'RSI(14)', data: currentQuantData.rsi.map(r=>r?r.cur:null), borderColor: '#f97316', borderWidth: 2, pointRadius: 0, tension: 0.3, yAxisID: 'y1' });
+    if (chkRsi && chkRsi.checked) ds.push({ label: 'RSI(14)', data: currentQuantData.rsi, borderColor: '#f97316', borderWidth: 2, pointRadius: 0, tension: 0.3, yAxisID: 'y1' });
     
     quantChartInstance = new Chart(ctx, {
         type: 'line', data: { labels: currentQuantData.dates, datasets: ds },

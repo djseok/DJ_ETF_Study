@@ -45,7 +45,9 @@ async function fetchAndParsePortfolio() {
             let pQtyStr = String(row[4] || "").replace(/[^0-9.-]/g, '');
             let pCurrPriceStr = String(row[5] || "").replace(/[^0-9.]/g, '');
 
+            // 목표 비중 → 0~1 비율. '60.00%' 처럼 % 가 있으면 항상 ÷100 (예: '1%' = 0.01), % 없이 1 넘는 숫자는 퍼센트로 봄
             let pWeight = parseFloat(pWeightStr) || 0;
+            if (String(row[2] || "").includes('%') || pWeight > 1) pWeight = pWeight / 100;
             let pAvgPrice = parseFloat(pAvgPriceStr) || 0;
             let pQty = parseFloat(pQtyStr) || 0;
             let pCurrPrice = parseFloat(pCurrPriceStr) || pAvgPrice;
