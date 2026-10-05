@@ -146,6 +146,13 @@ function runHoldings_(dryRun) {
   // 5) 쓰기 — 받아온 게 하나도 없으면 아무것도 바꾸지 않음
   var ok = targets.filter(function (t) { return t.rows.length; });
   if (!ok.length) { Logger.log('❌ 보유종목을 하나도 받지 못해 중단 (기존 시트 유지)'); return; }
+  // 일부 ETF 만 못 받았으면 어제 PDF_자동 내용을 그대로 씀 → ETF_Quant_Signals 섹션(직접 정한 기준·베타)과 신호가 사라지지 않게
+  var prev = hsPrevPdf_(ss);
+  targets.forEach(function (t) {
+    if (t.rows.length || !prev[t.code]) return;
+    t.rows = prev[t.code]; t.date = t.rows[0].date; t.hasWeight = true;
+    Logger.log('⚠️ ' + t.name + ' (' + t.code + ') 오늘 못 받아 지난 기록(' + t.date + ') 유지');
+  });
   if (newMaps.length) mapSheet.getRange(mapSheet.getLastRow() + 1, 1, newMaps.length, 4).setValues(newMaps);
   hsFixMasterCodes_(master);
   if (newMaster.length) hsAppendMaster_(master, newMaster);
@@ -340,7 +347,9 @@ function hsParseWise_(res) {
   var html = res.getContentText();
   var i = html.indexOf('var CU_data = ');
   if (i < 0) return [];
-  var arr = (JSON.parse(html.substring(i + 14).split(';')[0]).grid_data) || [];
+  var arr;
+  try { arr = (JSON.parse(html.substring(i + 14).split(';')[0]).grid_data) || []; }
+  catch (e) { Logger.log('⚠️ WiseReport 응답을 읽지 못함: ' + e.message); return []; } // 한 ETF 가 깨져도 나머지는 계속
   return arr.map(function (x, k) {
     return {
       no: k + 1, name: String(x.STK_NM_KOR || '').trim(), shares: Number(x.AGMT_STK_CNT) || 0,
@@ -506,6 +515,23 @@ function hsQuotes_(tickers) {
 // =========================================================
 // 시트 쓰기
 // =========================================================
+// PDF_자동 탭의 지난 기록 → { ETF코드: rows } (hsWritePdf_ 와 같은 열 순서)
+function hsPrevPdf_(ss) {
+  var sh = ss.getSheetByName(HS_TAB_PDF), out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues().forEach(function (r) {
+    var code = hsTickerStr_(r[1]).toUpperCase(); // 숫자로 저장된 069500 → '069500'
+    if (!code || !r[4]) return;
+    var g = String(r[6] || ''), isKind = g === '현금' || g === '파생' || g === '미확인';
+    (out[code] = out[code] || []).push({
+      date: r[2] instanceof Date ? Utilities.formatDate(r[2], 'Asia/Seoul', 'yyyy-MM-dd') : String(r[2]),
+      no: r[3], name: String(r[4]), ticker: hsTickerStr_(r[5]) || undefined, kind: isKind ? g : '', market: isKind ? '' : g,
+      shares: Number(r[7]) || 0, weight: Number(r[8]) || 0, wSrc: String(r[9] || ''), mapSrc: String(r[10] || '')
+    });
+  });
+  return out;
+}
+
 function hsWritePdf_(ss, targets) {
   var sh = ss.getSheetByName(HS_TAB_PDF) || ss.insertSheet(HS_TAB_PDF);
   var rows = [['본체ETF명', 'ETF코드', '기준일', '순번', '구성종목명', '티커', '구분', '주식수', '비중(%)', '비중출처', '티커출처']];
