@@ -317,7 +317,7 @@ function pmWeeklyAccuracy_(ss) {
 // 본체ETF 목록 (MasterData A='본체ETF', H=대분류)
 function pmEtfList_(master) {
   return master.getRange(3, 1, master.getLastRow() - 2, 9).getValues()
-    .filter(function (r) { return String(r[0]).trim() === '본체ETF' && r[1] && r[2]; })
+    .filter(function (r) { return String(r[0]).trim() === '본체ETF' && r[1] && r[2] && hsIsKrCode_(r[1]); }) // 국내 상장만 (미국 ETF 는 예측·신호 대상 아님)
     .map(function (r) { return { code: String(r[1]).replace(/^KRX:/i, '').trim().toUpperCase(), name: String(r[2]).trim(), group: String(r[7]).trim() }; });
 }
 
