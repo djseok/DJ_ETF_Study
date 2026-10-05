@@ -70,7 +70,7 @@ function premarketDaily_() {
 
 // 국내 증시(KRX) 평일 휴장일 — 해마다 12월에 다음 해 날짜 추가 (스크립트 속성 PM_KR_HOLIDAYS 에 'yyyy-MM-dd,…' 로 더할 수도 있음)
 var PM_KR_HOLIDAYS = [
-  '2026-10-09', '2026-12-25', '2026-12-31',
+  '2026-10-05', '2026-10-09', '2026-12-25', '2026-12-31', // 10-05 개천절 대체공휴일
   '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-01', '2027-05-05', '2027-05-13', '2027-08-16',
   '2027-09-14', '2027-09-15', '2027-09-16', '2027-10-04', '2027-10-11', '2027-12-27', '2027-12-31'
 ];
@@ -110,6 +110,12 @@ function runPremarket_(dryRun) {
   // 국내 구성종목: 미국에 상장된 한국 ETF(EWY)의 지난밤 미국장 시가→종가 변동으로 추정 (국내장 마감 이후의 움직임)
   futInfo.EWY = usNote ? { open: 0, close: 0, delta: 0 } : pmEwyInfo_();
   var krMove = futInfo.EWY.delta || 0;
+  // 야후 장애로 미국 종목 가격을 절반 넘게 못 받으면 예측이 '국내/HOLD' 쪽으로 쏠림 → 조용히 보내지 않고 알림에 경고 표시
+  var usNeed = Object.keys(usTickers).length, usGot = Object.keys(usTickers).filter(function (t) { return usMove[t] !== undefined; }).length;
+  if (!usNote && usNeed > 0 && usGot < usNeed * 0.5) {
+    usNote = '⚠️ 미국 종목 가격 ' + usGot + '/' + usNeed + '개만 받음 → 예측 부정확';
+    Logger.log('⚠️ 미국 종목 가격을 ' + usGot + '/' + usNeed + '개만 받아 알림에 경고 표시 (야후 응답 확인)');
+  }
   var fut = { NQ: futInfo.NQ.delta, ES: futInfo.ES.delta, YM: futInfo.YM.delta };
   var fx = pmFxSinceKrClose_();
   var vix = pmVix_();
