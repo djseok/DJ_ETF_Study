@@ -482,7 +482,9 @@ function hsTime_(code) {
 
 // 서버가 그려 주는 표(종목코드 · 종목명 · 수량 · 비중)에서 보유종목 읽기
 function hsHtmlHoldings_(html, code) {
-  var dm = html.replace(/<[^>]+>/g, ' ').match(/기준일[^0-9]{0,40}(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/);
+  // 기준일: '기준일 : 2026.10.02'(HANARO) 또는 '2026.10.02 기준'(TIME). 실시간 '2026-10-06 10:41:15 기준' 은 제외
+  var text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  var dm = text.match(/기준일[^0-9]{0,40}(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/) || text.match(/(\d{4})\.(\d{1,2})\.(\d{1,2})\s*기준/);
   var date = dm ? dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2) : '';
   var tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
   for (var i = 0; i < tables.length; i++) {
@@ -620,7 +622,7 @@ function hsSearchTickers_(names) {
   var reqs = names.map(function (n) {
     if (/[가-힣]/.test(n)) return { url: 'https://ac.stock.naver.com/ac?q=' + encodeURIComponent(n) + '&target=stock%2Cetf', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
     // 검색어 다듬기: '/THE', 'ORD.', 'Equity', '-CLASS A', '-A' 같은 꼬리 제거
-    var q = n.replace(/\/.*$/, '').replace(/\b(EQUITY|ORD)\b\.?/gi, ' ')
+    var q = n.replace(/\/.*$/, '').replace(/\b(EQUITY|ORD)\b\.?/gi, ' ').replace(/\bCos\b/gi, 'Companies')
       .replace(/[-\s]+CL(?:ASS)?\s+[A-C]\b.*$/i, '').replace(/-CL(?:ASS)?[A-C]?\b.*$/i, '')
       .replace(/\s*-\s*[A-C]$/i, '').replace(/[.\s]+$/, '').replace(/\s+/g, ' ').trim();
     return { url: 'https://query2.finance.yahoo.com/v1/finance/search?q=' + encodeURIComponent(q) + '&quotesCount=6&newsCount=0', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
