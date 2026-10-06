@@ -1,0 +1,45 @@
+name: Apps Script 배포
+
+# gas/*.gs 가 main 에 병합되면 Apps Script 편집기에 자동 반영 (tools/gas_deploy.js)
+#  · 점검(check): 편집기 코드와 저장소 코드 비교만, 아무것도 바꾸지 않음
+#  · 배포(deploy): gas/deploy.json 에서 enabled 인 프로젝트 중 달라진 곳만 반영, 웹 앱은 새 버전으로 (주소 그대로)
+# 필요한 Secrets: CLASPRC_JSON, GAS_ID_MANAGE, GAS_ID_DIARY, GAS_ID_MASTER, GAS_ID_UPLOAD (gas/README.md 참고)
+on:
+  push:
+    branches: [main]
+    paths: ['gas/**', 'tools/gas_deploy.js', '.github/workflows/gas_deploy.yml']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check = 비교만 / deploy = 반영'
+        type: choice
+        options: [check, deploy]
+        default: check
+
+concurrency:
+  group: gas-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 편집기 코드가 저장소 예전 버전과 같은지 비교하려고 전체 기록을 받음
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 🔎 배포 설정 확인
+        run: node tests/gas_deploy.test.js
+      - name: 📤 Apps Script ${{ github.event.inputs.mode || 'deploy' }}
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          GAS_ID_MANAGE: ${{ secrets.GAS_ID_MANAGE }}
+          GAS_ID_DIARY: ${{ secrets.GAS_ID_DIARY }}
+          GAS_ID_MASTER: ${{ secrets.GAS_ID_MASTER }}
+          GAS_ID_UPLOAD: ${{ secrets.GAS_ID_UPLOAD }}
+        run: node tools/gas_deploy.js ${{ github.event.inputs.mode || 'deploy' }}

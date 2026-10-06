@@ -1,0 +1,51 @@
+{
+  "_설명": "gas/*.gs 를 어느 Apps Script 프로젝트에 올릴지. 스크립트 ID 는 GitHub Secrets(secret 이름)에 둡니다. remote = 편집기 왼쪽 파일 목록의 이름(.gs 없이), 적지 않으면 파일 이름과 같음. enabled 가 false 면 점검만 하고 올리지 않아요. webapp 이 true 면 올린 뒤 웹 앱 배포를 새 버전으로 바꿔요(주소 그대로).",
+  "projects": {
+    "manage": {
+      "label": "관리시트",
+      "secret": "GAS_ID_MANAGE",
+      "enabled": false,
+      "webapp": false,
+      "files": {
+        "etf_holdings_sync.gs": {},
+        "premarket_alert.gs": {},
+        "intraday_signal.gs": {},
+        "weekly_report.gs": {},
+        "dividend_schedule_sync.gs": {},
+        "dollar_dividend_autolog.gs": {},
+        "dollar_ticker_sync.gs": {}
+      }
+    },
+    "diary": {
+      "label": "개인일기장 (배당 입력 폼)",
+      "secret": "GAS_ID_DIARY",
+      "enabled": false,
+      "webapp": false,
+      "files": {
+        "dividend_form.gs": {},
+        "dividend_autolog.gs": {},
+        "d_strategy_calculator.gs": {}
+      }
+    },
+    "master": {
+      "label": "마스터시트 (배당 봇 웹앱)",
+      "secret": "GAS_ID_MASTER",
+      "enabled": false,
+      "webapp": true,
+      "files": {
+        "dividend_webhook.gs": { "remote": "Code" },
+        "webhook_security.gs": {},
+        "etf_url_autofill.gs": {}
+      }
+    },
+    "upload": {
+      "label": "자동가져오기 (잔고 캡처 웹앱)",
+      "secret": "GAS_ID_UPLOAD",
+      "enabled": false,
+      "webapp": true,
+      "files": {
+        "holdings_upload.gs": {}
+      }
+    }
+  }
+}
