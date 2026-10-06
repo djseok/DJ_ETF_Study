@@ -2,7 +2,9 @@
  * 📦 ETF 보유종목(PDF) 자동 수집 → 예측 엔진 자동 갱신 — 관리시트 Apps Script
  *
  * 매일 아침
- *   ① MasterData 의 '본체ETF' 줄마다 WiseReport 에서 전체 보유종목(PDF)을 받아
+ *   ① MasterData 의 '본체ETF' 줄마다 전체 보유종목(PDF)을 받아
+ *      운용사 사이트 먼저 (KODEX · TIGER · ACE · SOL · HANARO · TIME) → 못 받으면 WiseReport (RISE · KIWOOM 은 WiseReport)
+ *      로그의 [운용사] / [WiseReport · 운용사: 이유] 로 어디서 받았는지 확인
  *   ② 종목명 → 티커를 찾고 (매핑테이블 · MasterData → 없으면 야후/네이버 검색 후 매핑테이블에 '자동'으로 추가)
  *   ③ 비중이 없는 해외주식 ETF 는 주식수 × 현재가(원화 환산)로 비중을 계산해
  *   ④ 'PDF_자동' 탭에 저장하고, MasterData 에 없는 종목은 가격 수식과 함께 추가한 뒤
@@ -67,11 +69,19 @@ function runHoldings_(dryRun) {
   var targets = hsTargets_(master);
   Logger.log('대상 ETF ' + targets.length + '개');
 
-  // 1) 보유종목 받기
-  var responses = hsFetchAll_(targets.map(function (t) {
+  // 1) 보유종목 받기: 운용사 사이트 먼저 → 못 받거나 비중이 이상하면 WiseReport
+  var ictx = {};
+  targets.forEach(function (t) {
+    try { t.rows = hsIssuerHoldings_(t, ictx) || []; } catch (e) { t.rows = []; t.issuerErr = String(e.message || e).slice(0, 60); }
+    if (t.rows.length && !hsIssuerRowsOk_(t.rows)) { t.issuerErr = '비중 합계 이상'; t.rows = []; }
+    if (t.rows.length) t.src = '운용사';
+  });
+  var rest = targets.filter(function (t) { return !t.rows.length; });
+  var responses = hsFetchAll_(rest.map(function (t) {
     return { url: 'https://navercomp.wisereport.co.kr/v2/ETF/index.aspx?cmp_cd=' + t.code, headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
   }));
-  targets.forEach(function (t, i) { t.rows = hsParseWise_(responses[i]); t.date = t.rows.length ? t.rows[0].date : ''; });
+  rest.forEach(function (t, i) { t.rows = hsParseWise_(responses[i]); if (t.rows.length) t.src = 'WiseReport'; });
+  targets.forEach(function (t) { t.date = t.rows.length ? t.rows[0].date : ''; });
 
   // 2) 이름 → 티커
   var index = hsNameIndex_(master, mapSheet);
@@ -81,7 +91,9 @@ function runHoldings_(dryRun) {
       r.kind = HS_CASH_RE.test(r.name) ? '현금' : (HS_DERIV_RE.test(r.name) ? '파생' : '');
       if (r.kind) return;
       var hit = index.byName[hsNormName_(r.name)];
-      if (hit) { r.ticker = hit.ticker; r.mapSrc = hit.src; } else unresolved[r.name] = true;
+      if (hit) { r.ticker = hit.ticker; r.mapSrc = hit.src; }
+      else if (r.hint) { r.ticker = r.hint; r.mapSrc = '운용사코드'; } // 운용사가 준 종목코드 (NVDA US · 005930 · KR7 ISIN)
+      else unresolved[r.name] = true;
     });
   });
   var found = hsSearchTickers_(Object.keys(unresolved)); // { 이름: {ticker, src} }
@@ -132,7 +144,8 @@ function runHoldings_(dryRun) {
     var eq = t.rows.filter(function (r) { return !r.kind; });
     var sumW = t.rows.reduce(function (s, r) { return s + (r.weight || 0); }, 0);
     var miss = t.rows.filter(function (r) { return r.kind === '미확인' || r.wSrc === '가격없음'; });
-    Logger.log((t.rows.length ? '📦 ' : '❌ ') + t.name + ' (' + t.code + ') ' + (t.date || '-') + ' | 종목 ' + eq.length +
+    Logger.log((t.rows.length ? '📦 ' : '❌ ') + t.name + ' (' + t.code + ') ' + (t.date || '-') +
+      ' [' + (t.src || '실패') + (t.issuerErr ? ' · 운용사: ' + t.issuerErr : '') + ']' + ' | 종목 ' + eq.length +
       '개 | 비중 ' + (t.hasWeight ? '공시' : '계산') + ' 합계 ' + sumW.toFixed(1) + '%' +
       (miss.length ? ' | ⚠️ 제외 ' + miss.length + '개: ' + miss.slice(0, 8).map(function (r) { return r.name + (r.kind === '미확인' ? '(티커?)' : '(가격?)'); }).join(', ') : ''));
     if (t.rows.length) {
@@ -361,6 +374,182 @@ function hsParseWise_(res) {
       weight: x.ETF_WEIGHT === null || x.ETF_WEIGHT === undefined || x.ETF_WEIGHT === '' ? 0 : Number(x.ETF_WEIGHT), date: x.TRD_DT || ''
     };
   }).filter(function (r) { return r.name; });
+}
+
+// =========================================================
+// 운용사 직접 수집 (2026-10-06 주소 확인) — 실패하면 null/빈 배열 → WiseReport 로 대체
+//   행 모양은 WiseReport 와 같음 { no, name, shares, weight, date } + hint(운용사가 준 종목코드 → 티커)
+// =========================================================
+function hsIssuerHoldings_(t, ctx) {
+  var brand = String(t.name).toUpperCase().split(' ')[0];
+  switch (brand) {
+    case 'KODEX': return hsKodex_(t.code);
+    case 'TIGER': return hsTiger_(t.code);
+    case 'ACE': return hsAce_(t.code, ctx);
+    case 'SOL': return hsSol_(t.code, ctx);
+    case 'HANARO': return hsHanaro_(t.code, ctx);
+    case 'TIME': return hsTime_(t.code);
+    default: return null; // RISE · KIWOOM: 운용사 주소 미확인 → WiseReport
+  }
+}
+
+// 현금 빼고 비중 합계가 80~120% 이고 종목이 있어야 사용 (HANARO 설정현금액 100% 같은 표기는 0으로)
+function hsIssuerRowsOk_(rows) {
+  var sum = 0, n = 0;
+  rows.forEach(function (r) {
+    if (HS_CASH_RE.test(r.name)) { if (r.weight >= 99) r.weight = 0; return; }
+    sum += r.weight || 0; n++;
+  });
+  return n > 0 && sum >= 80 && sum <= 120;
+}
+
+function hsKodex_(code) {
+  var h = { 'User-Agent': HS_UA, 'Referer': 'https://www.samsungfund.com/', 'Accept': 'application/json, text/plain, */*' };
+  var list = hsJson_('https://www.samsungfund.com/api/v1/kodex/product.do?ordrColm=NAV&ordrSort=DESC&pageNo=1&srchTerm=w&srchVal=' + code, h);
+  list = Array.isArray(list) ? list : (list && list.list) || [];
+  var f = list.filter(function (x) { return String(x.stkTicker || '').toUpperCase() === code; })[0];
+  if (!f) throw new Error('목록에 없음');
+  var d = String(f.gijunYMD || '');
+  var j = hsJson_('https://www.samsungfund.com/api/v1/kodex/product-pdf/' + f.fId + '.do?gijunYMD=' + d.slice(0, 4) + '.' + d.slice(4, 6) + '.' + d.slice(6, 8), h);
+  var p = j.pdf || {}, date = hsIso_(p.gijunYMD || d);
+  return (p.list || []).map(function (x, k) {
+    return { no: k + 1, name: String(x.secNm || '').trim(), shares: hsNum_(x.applyQ), weight: hsNum_(x.ratio), date: date, hint: hsHint_(x.itmNo) };
+  }).filter(function (r) { return r.name; });
+}
+
+function hsTiger_(code) {
+  var j = hsJson_('https://investments.miraeasset.com/tigeretf/ko/product/chart/prdct-item-list.ajax?ksdFund=' + hsKrIsin_(code) + '&prfPrd=Week01&listCnt=500', { 'User-Agent': HS_UA });
+  return (j.rtnData || []).map(function (x, k) {
+    return { no: k + 1, name: String(x.memItemname || '').trim(), shares: hsNum_(x.stockQty), weight: hsNum_(x.stockRate), date: hsIso_(x.wkdate), hint: hsHint_(x.code) };
+  }).filter(function (r) { return r.name; });
+}
+
+function hsAce_(code, ctx) {
+  var isin = hsKrIsin_(code);
+  if (!ctx.ace) ctx.ace = {};
+  for (var page = 0; page <= 15 && !ctx.ace[isin]; page++) { // 목록(ISIN → 펀드코드)을 찾을 때까지 넘김 (0·1 어느 쪽부터 시작해도 되게)
+    var list = [];
+    try { list = (hsJson_('https://papi.aceetf.co.kr/api/funds?size=50&page=' + page, { 'User-Agent': HS_UA }).data) || []; } catch (e) { if (page > 0) throw e; }
+    list.forEach(function (x) { if (x.stockCd) ctx.ace[x.stockCd] = x.fundCd; });
+    if (page > 0 && !list.length) break;
+  }
+  if (!ctx.ace[isin]) throw new Error('목록에 없음');
+  var j = hsJson_('https://papi.aceetf.co.kr/api/funds/' + ctx.ace[isin] + '/pdf?page=1&size=500', { 'User-Agent': HS_UA });
+  return (j.pdfList || []).map(function (x, k) {
+    return { no: k + 1, name: String(x.sec_NM || '').trim(), shares: hsNum_(x.cu_ITEM_CNT), weight: hsNum_(x.wg), date: hsIso_(x.std_DT || j.last_STD_DT), hint: hsHint_(x.jm_KSC_CD) };
+  }).filter(function (r) { return r.name; });
+}
+
+function hsSol_(code, ctx) {
+  if (!ctx.solHtml) ctx.solHtml = hsText_('https://www.soletf.com/ko/fund');
+  var id = hsNearLink_(ctx.solHtml, '(' + code + ')', /\/ko\/fund\/etf\/(\d+)/g);
+  if (!id) throw new Error('목록에 없음');
+  var j = hsJson_('https://www.soletf.com/api/etf/pds/pdf/' + id, { 'User-Agent': HS_UA });
+  var items = j.items || (j.data && j.data.items) || [];
+  return items.map(function (x, k) {
+    return { no: k + 1, name: String(x.SEC_NM || '').trim(), shares: hsNum_(x.QTY), weight: hsNum_(x.WT_DISP), date: hsIso_(x.WORK_DT || j.workDt), hint: hsHint_(x.STOCK_CODE) };
+  }).filter(function (r) { return r.name; });
+}
+
+// HANARO: 목록 첫 화면(10개)에 있는 ETF 만 찾을 수 있음 → 못 찾으면 WiseReport
+function hsHanaro_(code, ctx) {
+  if (!ctx.hanaroHtml) ctx.hanaroHtml = hsText_('https://www.hanaroetf.com/fund/fund-list');
+  var id = hsNearLink_(ctx.hanaroHtml, code, /\/fund\/([0-9A-F]{16})/g);
+  if (!id) throw new Error('목록 첫 화면에 없음');
+  return hsHtmlHoldings_(hsText_('https://www.hanaroetf.com/fund/' + id), code);
+}
+
+// TIME: 코드 → idx 를 스크립트 속성에 기억 (없으면 상세 페이지 1~40 을 한 번 훑어서 찾음)
+function hsTime_(code) {
+  var props = PropertiesService.getScriptProperties();
+  var map = {};
+  try { map = JSON.parse(props.getProperty('HS_TIME_IDX') || '{}'); } catch (e) { map = {}; }
+  var html = map[code] ? hsText_('https://timeetf.co.kr/m11_view.php?idx=' + map[code]) : '';
+  if (!html || html.indexOf(code) < 0) {
+    var idxs = []; for (var i = 1; i <= 40; i++) idxs.push(i);
+    var res = hsFetchAll_(idxs.map(function (i) { return { url: 'https://timeetf.co.kr/m11_view.php?idx=' + i, headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true }; }));
+    html = '';
+    res.forEach(function (r, k) {
+      if (html || !r || r.getResponseCode() !== 200) return;
+      var tx = r.getContentText();
+      if (tx.indexOf(code) >= 0) { html = tx; map[code] = idxs[k]; }
+    });
+    if (!html) throw new Error('상세 페이지를 못 찾음');
+    props.setProperty('HS_TIME_IDX', JSON.stringify(map));
+  }
+  return hsHtmlHoldings_(html, code);
+}
+
+// 서버가 그려 주는 표(종목코드 · 종목명 · 수량 · 비중)에서 보유종목 읽기
+function hsHtmlHoldings_(html, code) {
+  var dm = html.replace(/<[^>]+>/g, ' ').match(/기준일[^0-9]{0,40}(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/);
+  var date = dm ? dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2) : '';
+  var tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
+  for (var i = 0; i < tables.length; i++) {
+    var head = (tables[i].match(/<th[\s\S]*?<\/th>/gi) || []).map(hsCellText_);
+    var col = function (w) { for (var k = 0; k < head.length; k++) if (head[k].indexOf(w) >= 0) return k; return -1; };
+    var cName = col('종목명'), cQty = col('수량'), cW = col('비중'), cCode = col('종목코드');
+    if (cName < 0 || cW < 0) continue;
+    var out = [];
+    (tables[i].match(/<tr[\s\S]*?<\/tr>/gi) || []).forEach(function (tr) {
+      var c = (tr.match(/<td[\s\S]*?<\/td>/gi) || []).map(hsCellText_);
+      if (c.length !== head.length || !c[cName]) return;
+      out.push({ no: out.length + 1, name: c[cName], shares: cQty >= 0 ? hsNum_(c[cQty]) : 0, weight: hsNum_(c[cW]), date: date, hint: cCode >= 0 ? hsHint_(c[cCode]) : '' });
+    });
+    if (out.length) return out;
+  }
+  throw new Error('보유종목 표 없음 (' + code + ')');
+}
+
+// 운용사 종목코드 → 티커 힌트: 'NVDA US Equity' · 'TXN US' → NVDA · TXN / '005930' · 'KR7005930003' → KRX:005930
+function hsHint_(v) {
+  var s = String(v == null ? '' : v).trim().toUpperCase();
+  var m = s.match(/^([A-Z][A-Z0-9]{0,5}(?:[\/.][A-Z])?)\s+US(?:\s+EQUITY)?$/);
+  if (m) return m[1].replace('/', '.');
+  if (/^\d[0-9A-Z]{5}$/.test(s)) return 'KRX:' + s;
+  m = s.match(/^KR7(\d{6})\d{3}$/);
+  return m ? 'KRX:' + m[1] : '';
+}
+
+// 국내 상장 코드 → ISIN (KR7 + 코드 + 00 + 검사숫자, 영문은 A=10 … Z=35)
+function hsKrIsin_(code) {
+  var b = 'KR7' + code + '00';
+  var d = b.split('').map(function (x) { return /\d/.test(x) ? x : String(x.charCodeAt(0) - 55); }).join('');
+  var s = 0;
+  for (var i = d.length - 1, k = 0; i >= 0; i--, k++) { var n = Number(d[i]); if (k % 2 === 0) { n *= 2; if (n > 9) n -= 9; } s += n; }
+  return b + ((10 - s % 10) % 10);
+}
+
+// 목록 페이지에서 key 바로 근처에 있는 상세 링크 id
+function hsNearLink_(html, key, re) {
+  var at = html.indexOf(key);
+  if (at < 0) return '';
+  var best = '', dist = 1e9, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(html))) {
+    var d = Math.abs(m.index - at);
+    if (d < dist && d < 2000) { dist = d; best = m[1]; }
+  }
+  return best;
+}
+
+function hsJson_(url, headers) {
+  var res = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode());
+  return JSON.parse(res.getContentText());
+}
+function hsText_(url) {
+  var res = UrlFetchApp.fetch(url, { headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode());
+  return res.getContentText();
+}
+function hsCellText_(h) { return String(h).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); }
+function hsNum_(v) { var n = Number(String(v == null ? '' : v).replace(/[^0-9.-]/g, '')); return isFinite(n) ? n : 0; }
+function hsIso_(v) {
+  var t = String(v == null ? '' : v).trim().replace(/[.\/]/g, '-');
+  if (/^\d{8}$/.test(t)) return t.slice(0, 4) + '-' + t.slice(4, 6) + '-' + t.slice(6, 8);
+  var m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
 }
 
 // =========================================================
