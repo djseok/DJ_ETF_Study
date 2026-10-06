@@ -61,7 +61,7 @@
       <div><label for="pin">비밀번호</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="멤버 비밀번호"></div>
     </div>
     <label for="account">계좌</label>
-    <select id="account"><option value="isa">한투 ISA (원화 · 멤버 포토폴리오)</option><option value="toss">토스 미국주식 (달러 · 1달러 포토폴리오)</option></select>
+    <select id="account"><option value="isa">한투 ISA (원화 · 멤버 포토폴리오)</option><option value="toss">토스 미국주식 (달러 · 토스 전체 보유)</option></select>
     <label style="font-weight:600"><input type="checkbox" id="remember" style="width:auto"> 이 기기에서 기억하기</label>
   </section>
 
@@ -183,7 +183,7 @@
       var usd = ac === 'toss';
       var fmtAvg = function (v) { return v === null || v === undefined ? '–' : (usd ? '$' + (+v).toFixed(2) : fmt(v)); };
       $('note3').textContent = usd
-        ? "체크된 줄만 반영돼요. '1달러 마스터 포토폴리오'의 수량·평단(달러)만 고치고, 원화 포트폴리오와 D 실적기록은 건드리지 않아요. '티커 필요'면 미국 티커를 적어 주세요(예: MSTY)."
+        ? "체크된 줄만 반영돼요. '토스_보유'(토스 전체 보유)의 수량·평단(달러)을 고치고, '1달러 마스터 포토폴리오'에 이미 있는 종목은 같이 맞춰요. 원화 포트폴리오와 D 실적기록은 건드리지 않아요. '티커 필요'면 미국 티커를 적어 주세요(예: SMCI)."
         : '체크된 줄만 반영돼요. ETF 가 아닌 개별 종목(국내·미국)도 티커로 들어가요 — \'티커 필요\'면 티커를 적어 주세요(예: 플래닛 랩스 → PL). 금액은 모두 원화 기준이에요.';
       $('diff').innerHTML = j.rows.map(function (r) {
         var t = TAG[r.status], can = r.status === 'new' || r.status === 'change' || r.status === 'needTicker';

@@ -22,6 +22,8 @@ var APP_CONFIG = {
         // 동진ETF공부_개인일기장
         PORTFOLIO: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=449713965&single=true&output=csv",
         DOLLAR_PORT: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=2370013&single=true&output=csv",
+        // 토스증권 전체 보유 (토스_보유 탭: 이름 · 티커 · 종목명 · 수량 · 평단$ · 현재가$) — 실보유 현황의 달러 자산은 이 탭이 우선
+        TOSS_PORT: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=9110&single=true&output=csv",
         // D 전략 (D_월별예상 · D_실적기록 탭)
         D_PLAN: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=9103&single=true&output=csv",
         D_ACTUAL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCTcHadjbIOvs7_Qj7owcNQXi7OE6Lobcr3g0n8UuBZ0k3L0upQOzXcsFBbtq7wowIwAtscyGP46vF/pub?gid=9102&single=true&output=csv",
