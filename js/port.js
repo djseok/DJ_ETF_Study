@@ -25,7 +25,7 @@ async function loadPortfolioData(currentTab, forceReload) {
 // 1달러 프로젝트(미국 상장, 달러 자산) → 멤버별 달러 보유 목록. 환율은 1달러 마스터시트 A1(또는 A2)
 //   주의: 원화 환산 원금도 '오늘 환율' 기준 (매수 당시 환율 기록이 없어서) → 달러 자산 수익률은 달러 기준과 같음
 async function fetchDollarHoldings() {
-    const out = { fx: 0, byUser: {} };
+    const out = { fx: 0, byUser: {}, divPerPay: {}, received: {} };
     try {
         const [portRes, masterRes] = await Promise.all([fetch(sheetUrl('DOLLAR_PORT')), fetch(sheetUrl('DOLLAR_MASTER'))]);
         if (!portRes.ok) return out;
@@ -34,8 +34,13 @@ async function fetchDollarHoldings() {
             const m = parseCsvToMatrix(await masterRes.text());
             const c = [m[0] && m[0][0], m[1] && m[1][0]].map(num).find(x => x > 1000 && x < 2500);
             if (c) out.fx = c;
+            // 관리종목: B 티커 · E 최근 4회 평균 분배금($, 시트의 GET_DIVIDENDS 탭에서 자동)
+            m.slice(2).forEach(r => { const t = String(r[1] || '').trim().toUpperCase(), d = num(r[4]); if (t && d > 0) out.divPerPay[t] = d; });
         }
         parseCsvToMatrix(await portRes.text()).slice(1).forEach(r => {
+            // J 이름 · K 티커 · L 누적배당금($): 받은 배당 기록 (보유 목록과 따로)
+            const rn = String(r[9] || '').trim().replace(/님|포트폴리오/g, ''), rt = String(r[10] || '').trim().toUpperCase(), ra = num(r[11]);
+            if (rn && rt && ra) { const u = out.received[rn] = out.received[rn] || {}; u[rt] = (u[rt] || 0) + ra; }
             const name = String(r[0] || '').trim(), ticker = String(r[1] || '').trim().toUpperCase();
             const qty = num(r[4]), curUsd = num(r[6]), avgUsd = num(r[7]);
             if (!name || !ticker || name.includes('이름') || !(qty > 0)) return;
@@ -137,11 +142,18 @@ async function fetchAndParsePortfolio() {
             if (!fx) return; // 환율을 못 받으면 합치지 않음 (잘못된 원화 금액 방지)
             const u = users[name] = users[name] || { name: name, totalInvest: 0, totalCurrent: 0, items: [], krwInvest: 0, krwCurrent: 0 };
             u.usdItems = dollar.byUser[name];
+            u.usdItems.forEach(it => { it.divPerPay = dollar.divPerPay[it.ticker] || 0; });
             u.usdInvest = u.usdItems.reduce((s, it) => s + it.avgUsd * it.qty, 0);
             u.usdCurrent = u.usdItems.reduce((s, it) => s + it.curUsd * it.qty, 0);
             u.fx = fx;
             u.totalInvest += u.usdInvest * fx;
             u.totalCurrent += u.usdCurrent * fx;
+        });
+        // 받은 달러 배당(1달러 J~L): 지금 그 종목을 안 들고 있어도 기록은 보여 줌 (멤버가 있을 때만)
+        Object.keys(dollar.received).forEach(name => {
+            if (!fx || !users[name]) return;
+            users[name].usdReceived = dollar.received[name];
+            users[name].fx = fx;
         });
 
         // 수익률 계산 및 명예의 전당(랭킹) 정렬
