@@ -53,6 +53,10 @@ assert.strictEqual(plan.files[plan.files.length - 1].name, 'c');
 // 같은 함수가 편집기 다른 파일에도 있으면 멈춤
 plan = planProject({ files: { 'a.gs': {} } }, remote, { 'a.gs': 'function a() {}\nfunction z() {}' });
 assert(plan.problems.some(p => p.includes("'z'")));
+// 편집기에만 있는 파일끼리 겹치는 건 경고만 (지금 상태 그대로)
+plan = planProject({ files: { 'a.gs': {} } }, remote.concat([{ name: 'old', type: 'SERVER_JS', source: 'function z() {}' }]), { 'a.gs': 'function a() {}' });
+assert.deepStrictEqual(plan.problems, []);
+assert(plan.warnings.some(w => w.includes("'z'")));
 // 문법 오류면 멈춤
 plan = planProject({ files: { 'a.gs': {} } }, remote, { 'a.gs': 'function a( {' });
 assert(plan.problems.some(p => p.startsWith('문법 오류')));

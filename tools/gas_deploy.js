@@ -68,7 +68,7 @@ function planProject(cfg, remoteFiles, repo) {
     if (src == null) { problems.push(`저장소에 gas/${file} 이 없음`); return; }
     const hit = files.find(f => f.name === remoteName && f.type === 'SERVER_JS');
     if (!hit) {
-      if (opt.new) { files.push({ name: remoteName, type: 'SERVER_JS', source: src }); rows.push({ file, remote: remoteName, status: 'new' }); }
+      if (opt.new) { mapped.add(remoteName); files.push({ name: remoteName, type: 'SERVER_JS', source: src }); rows.push({ file, remote: remoteName, status: 'new' }); }
       else problems.push(`편집기에 '${remoteName}' 파일이 없음 (gas/${file}) — 편집기 파일 이름이 다르면 deploy.json 에 remote 로 적기, 새 파일이면 new: true`);
       return;
     }
@@ -78,15 +78,22 @@ function planProject(cfg, remoteFiles, repo) {
   });
   const extra = remoteFiles.filter(f => f.type !== 'JSON' && !mapped.has(f.name)).map(f => ({ name: f.name, type: f.type, source: f.source }));
 
+  // 저장소가 맡은 파일이 끼는 중복·문법 오류만 막음. 편집기에만 있는 파일끼리의 중복은 지금도 그대로라 경고만
+  const warnings = [];
   const seen = {};
   files.filter(f => f.type === 'SERVER_JS').forEach(f => {
     topLevelNames(f.source).forEach(n => (seen[n] = seen[n] || []).push(f.name));
+    if (!mapped.has(f.name)) return;
     try { new vm.Script(f.source, { filename: f.name }); } catch (e) { problems.push(`문법 오류: ${f.name} — ${e.message}`); }
   });
-  Object.keys(seen).forEach(n => { if (seen[n].length > 1) problems.push(`같은 이름 '${n}' 이 두 번 선언됨: ${seen[n].join(', ')}`); });
+  Object.keys(seen).forEach(n => {
+    if (seen[n].length < 2) return;
+    const msg = `같은 이름 '${n}' 이 여러 번 선언됨: ${seen[n].join(', ')}`;
+    if (seen[n].some(name => mapped.has(name))) problems.push(msg); else warnings.push(msg + ' (편집기에만 있는 파일끼리, 지금과 같음)');
+  });
 
   const changed = rows.some(r => r.status !== 'same');
-  return { files, rows, extra, problems, changed };
+  return { files, rows, extra, problems, warnings, changed };
 }
 
 // ── Google API ─────────────────────────────────────────────────────────────
@@ -175,6 +182,7 @@ async function main() {
         const hint = best && best.s >= 0.3 ? ` · gas/${best.file} 와 ${Math.round(best.s * 100)}% 비슷` : '';
         say(`- 📌 ${f.name} (${f.type === 'HTML' ? 'HTML' : '스크립트'}, ${normalize(f.source).split('\n').length}줄) 편집기에만 있음 → 그대로 둠${hint}`);
       });
+      plan.warnings.forEach(w => say(`- ⚠️ ${w}`));
       plan.problems.forEach(p => say(`- ❌ ${p}`));
 
       if (mode === 'check') continue;

@@ -8,7 +8,7 @@
       "webapp": false,
       "files": {
         "etf_holdings_sync.gs": {},
-        "premarket_alert.gs": {},
+        "premarket_alert.gs": { "remote": "premarket_alert.gs" },
         "intraday_signal.gs": {},
         "weekly_report.gs": {},
         "dividend_schedule_sync.gs": {},
@@ -22,9 +22,9 @@
       "enabled": false,
       "webapp": false,
       "files": {
-        "dividend_form.gs": {},
-        "dividend_autolog.gs": {},
-        "d_strategy_calculator.gs": {}
+        "dividend_form.gs": { "remote": "Code" },
+        "dividend_autolog.gs": { "remote": "dividend_autolog.gs" },
+        "d_strategy_calculator.gs": { "remote": "D_전략_매수계산기" }
       }
     },
     "master": {
@@ -34,7 +34,7 @@
       "webapp": true,
       "files": {
         "dividend_webhook.gs": { "remote": "Code" },
-        "webhook_security.gs": {},
+        "webhook_security.gs": { "remote": "webhook_security.gs" },
         "etf_url_autofill.gs": {}
       }
     },
