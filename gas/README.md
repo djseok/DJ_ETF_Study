@@ -31,6 +31,7 @@ PR 이 main 에 병합되면 GitHub Actions 가 바뀐 `.gs` 를 Apps Script 편
    | `GAS_ID_DIARY` | 동진ETF공부_개인일기장 (배당 입력 폼) |
    | `GAS_ID_MASTER` | 동진_웹송출용_마스터시트 (배당 봇) |
    | `GAS_ID_UPLOAD` | 자동가져오기 (잔고 캡처) |
+   | `GAS_ID_TOSS` | 토스뱅크_동진_자동화시스템 (미국 배당 GET_DIVIDENDS) |
 
 5. **Actions → Apps Script 배포 → Run workflow → check** → 결과 화면(Summary)에서 파일마다
    - ✅ 같음 / ✏️ 다름 + "저장소 예전 버전과 같음" → 덮어써도 안전

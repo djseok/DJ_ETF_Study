@@ -46,9 +46,11 @@
     "toss": {
       "label": "토스뱅크_동진_자동화시스템 (미국 배당 GET_DIVIDENDS)",
       "secret": "GAS_ID_TOSS",
-      "enabled": false,
+      "enabled": true,
       "webapp": false,
-      "files": {}
+      "files": {
+        "toss_dividends.gs": { "remote": "Code" }
+      }
     },
     "upload": {
       "label": "자동가져오기 (잔고 캡처 웹앱)",
