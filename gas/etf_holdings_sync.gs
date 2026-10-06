@@ -13,10 +13,12 @@
  *   2) syncHoldings      : 실제 갱신 (PDF_자동 · 매핑테이블 · MasterData · ETF_Quant_Signals)
  *   3) installHoldingsTrigger : 매일 아침 6시대 자동 실행
  *
- * ▶ 새 ETF 추가: MasterData 맨 아래에 A '본체ETF', B 'KRX:코드', C 이름, H 대분류(성장/배당), I 중분류(해외/국내)만 적으면
- *   다음 날 아침 자동으로 ⓐ D~G 가격 수식 ⓑ H가 '배당'이면 'ETF 배당주기'에 등록
+ * ▶ 새 ETF 추가: MasterData 맨 아래에 A '본체ETF', B 티커만 적으면 (국내 'KRX:0005A0' · 미국 'MSTY')
+ *   다음 날 아침 자동으로 ⓞ 비어 있는 C 이름(국내 네이버 · 미국 야후) · H 성장/배당 · I 해외/국내 추정
+ *   ⓐ D~G 가격 수식 (본체ETF 가격 수식이 다른 줄·다른 코드를 가리키면 바로잡음) ⓑ H가 '배당'이면 'ETF 배당주기'에 등록
  *   ⓒ 이름에 '커버드콜'이 있고 H가 '배당'이면 마스터시트 '관리코드'에도 등록 (C열 주소는 밤 10시 자동 채우기)
  *   ⓓ J 상장시장 · K 기초자산 · L 구조가 비어 있으면 이름·코드·I열로 추정해 채움 (직접 적은 칸은 그대로, M열이 과세유형 자동 판정)
+ *   미국 상장 ETF 는 개장 전 예측·장중 신호·WiseReport 보유종목 대상에서 빠짐 (국내 장 기준). 배당주기·관리코드 등록도 아직 국내만
  *
  * ▶ 티커를 못 찾은 종목이 있으면
  *   '매핑테이블' A열에 로그에 나온 종목명 그대로, B열에 티커(예: NVDA, KRX:005930, TYO:6981)를 적고 다시 실행
@@ -179,21 +181,53 @@ function hsRegisterNewEtfs_(ss, master, dryRun) {
   } catch (e) { Logger.log('⚠️ 마스터시트 관리코드 탭을 열 수 없어요: ' + e); }
 
   var log = [];
+  var formulas = master.getRange(3, 4, last - 2, 2).getFormulas(); // D·E
+  // ⓞ 티커만 적은 줄: 이름(C) · 성장/배당(H) · 해외/국내(I) 채우기
+  var needName = [];
+  v.forEach(function (r, i) { if (String(r[0]).trim() === '본체ETF' && r[1] && !String(r[2]).trim()) needName.push(i); });
+  var names = hsLookupEtfNames_(needName.map(function (i) { return String(v[i][1]); }));
+  needName.forEach(function (i, k) {
+    var nm = names[k];
+    if (!nm) { log.push('❓ ' + v[i][1] + ': 이름을 찾지 못함 → C열에 정식 이름을 직접 적어 주세요 (' + (i + 3) + '행)'); return; }
+    v[i][2] = nm.name;
+    log.push('🔤 ' + (i + 3) + '행 ' + v[i][1] + ' → ' + nm.name + (nm.warn ? ' ⚠️ ' + nm.warn : ''));
+    if (!dryRun) master.getRange(i + 3, 3).setValue(nm.name);
+  });
+  v.forEach(function (r, i) {
+    if (String(r[0]).trim() !== '본체ETF' || !r[1] || !String(r[2]).trim()) return;
+    var kr = hsIsKrCode_(r[1]), nm = String(r[2]).trim(), fill = [r[7], r[8]];
+    if (String(fill[0]).trim() === '') fill[0] = hsGuessDividend_(nm) ? '배당' : '성장';
+    if (String(fill[1]).trim() === '') fill[1] = !kr || hsOverseasByName_(nm) ? '해외' : '국내';
+    if (fill[0] !== r[7] || fill[1] !== r[8]) {
+      log.push('🏷️ ' + nm + ': H·I 자동 → ' + fill.join(' / ') + ' (틀리면 직접 고치세요)');
+      r[7] = fill[0]; r[8] = fill[1];
+      if (!dryRun) master.getRange(i + 3, 8, 1, 2).setValues([fill]);
+    }
+  });
+
   v.forEach(function (r, i) {
     if (String(r[0]).trim() !== '본체ETF' || !r[1] || !r[2]) return;
     var row = i + 3, name = String(r[2]).trim(), code = String(r[1]).replace(/^KRX:/i, '').trim().toUpperCase();
-    var isDiv = String(r[7]).trim() === '배당';
+    var isDiv = String(r[7]).trim() === '배당', kr = hsIsKrCode_(r[1]);
 
-    // ⓐ 가격 수식 (D열이 비어 있을 때만)
-    if (r[3] === '' || r[3] === null) {
-      log.push('💲 ' + name + ': MasterData ' + row + '행 D~G 가격 수식');
-      if (!dryRun) master.getRange(row, 4, 1, 4).setValues([[
+    // ⓐ 가격 수식: 비어 있거나, 다른 줄(D34 등)·다른 종목코드를 가리키면 표준 수식으로
+    var bad = hsBadPriceFormula_(formulas[i], row, code);
+    if (r[3] === '' || r[3] === null || bad) {
+      log.push('💲 ' + name + ': MasterData ' + row + '행 D~G 가격 수식' + (bad ? ' 바로잡음 (' + bad + ')' : ''));
+      if (!dryRun) master.getRange(row, 4, 1, 4).setValues([kr ? [
         '=IFERROR(GOOGLEFINANCE(SUBSTITUTE($B' + row + ',"KRX:",""), "closeyest"), 0)',
         '=IFERROR(GOOGLEFINANCE(SUBSTITUTE($B' + row + ',"KRX:",""), "price"), D' + row + ')',
-        '=D' + row, '=E' + row]]);
+        '=D' + row, '=E' + row] : [ // 미국: 달러 가격(D·E) → 원화(F·G), 미국주식 줄과 같은 방식
+        '=IFERROR(GOOGLEFINANCE($B' + row + ', "closeyest"), 0)',
+        '=IFERROR(GOOGLEFINANCE($B' + row + ', "price"), D' + row + ')',
+        '=ROUND($D' + row + ' * Characteristic!$E$3)', '=ROUND($E' + row + ' * Characteristic!$E$3)']]);
+    }
+    if (!kr) {
+      if (isDiv && !schedNames[norm(name)]) log.push('ℹ️ ' + name + ': 미국 상장 → 배당주기 자동 등록은 다음 단계에서 지원');
+      // 과세 분류(J~L)는 아래 ⓓ 에서 '미국상장' 으로 채움
     }
     // ⓑ 배당주기 등록
-    if (isDiv && schedule && !schedNames[norm(name)]) {
+    if (kr && isDiv && schedule && !schedNames[norm(name)]) {
       log.push('📅 ' + name + ': ETF 배당주기에 등록 (지급월·평균은 아침 7시 자동 갱신)');
       if (!dryRun) {
         var sr = schedule.getLastRow() + 1;
@@ -203,7 +237,7 @@ function hsRegisterNewEtfs_(ss, master, dryRun) {
       schedNames[norm(name)] = true;
     }
     // ⓒ 관리코드 등록 (월배당 커버드콜)
-    if (isDiv && /커버드콜|커브드콜/.test(name) && codeSheet && !codeKeys[norm(name)] && !codeKeys[norm(code)]) {
+    if (kr && isDiv && /커버드콜|커브드콜/.test(name) && codeSheet && !codeKeys[norm(name)] && !codeKeys[norm(code)]) {
       log.push('🧩 ' + name + ': 마스터시트 관리코드에 등록 (C열 주소는 밤 10시, 배당 수집은 자정 봇)');
       if (!dryRun) {
         var cr = codeSheet.getLastRow() + 1;
@@ -231,7 +265,7 @@ function hsRegisterNewEtfs_(ss, master, dryRun) {
 function hsGuessTaxClass_(ticker, name, region) {
   var t = String(ticker || '').trim().toUpperCase(), n = String(name || '');
   var listed = (/^KRX:/.test(t) || /^[0-9A-Z]{6}$/.test(t) && /\d/.test(t)) ? '국내상장' : '미국상장';
-  var overseasByName = /미국|글로벌|나스닥|NASDAQ|S&P|다우존스|차이나|중국|일본|인도|베트남|유럽|선진국|신흥국|월드/i.test(n);
+  var overseasByName = hsOverseasByName_(n);
   var overseas = region === '해외' || (region !== '국내' && overseasByName);
   var asset;
   if (/리츠|부동산/.test(n)) asset = overseas ? '해외리츠' : '국내리츠';
@@ -247,9 +281,64 @@ function hsGuessTaxClass_(ticker, name, region) {
   return [listed, asset, structure];
 }
 
+function hsOverseasByName_(n) { return /미국|글로벌|나스닥|NASDAQ|S&P|다우존스|차이나|중국|일본|인도|베트남|유럽|선진국|신흥국|월드/i.test(String(n || '')); }
+
+// 국내 상장 코드인지: 'KRX:0005A0' · '069500' (숫자로 시작하는 6자리). 미국 티커(MSTY · BRK.B)는 false
+function hsIsKrCode_(b) {
+  var t = String(b || '').trim().toUpperCase();
+  if (/^\d{1,5}$/.test(t)) return true; // 시트가 숫자로 바꾼 069500 → 69500
+  return /^KRX:/.test(t) || /^\d[0-9A-Z]{5}$/.test(t);
+}
+
+// 성장/배당 추정 (이름 기준): 커버드콜·배당·인컴·리츠 등이면 배당
+function hsGuessDividend_(name) {
+  return /커버드콜|커브드콜|배당|인컴|리츠|부동산|프리미엄|월지급|COVERED\s*CALL|OPTION\s*INCOME|INCOME|DIVIDEND|YIELD|REIT|PREMIUM/i.test(String(name || ''));
+}
+
+// 가격 수식이 다른 줄(D34)이나 다른 종목코드를 가리키면 이유를, 괜찮으면 '' (수식이 아니면 건드리지 않음)
+function hsBadPriceFormula_(f, row, code) {
+  var why = [];
+  [f[0], f[1]].forEach(function (x, k) {
+    if (!x) return;
+    (x.match(/\bD(\d+)\b/g) || []).forEach(function (m) {
+      if (Number(m.slice(1)) !== row) why.push(m + ' 참조');
+      else if (k === 0) why.push('D열이 자기 자신 참조'); // 순환 참조
+    });
+    (x.match(/GOOGLEFINANCE\("(?:KRX:)?([0-9A-Z.]+)"/gi) || []).forEach(function (m) {
+      var c = m.replace(/GOOGLEFINANCE\("(?:KRX:)?/i, '').replace(/"$/, '').toUpperCase();
+      if (hsTickerStr_(c) !== hsTickerStr_(code)) why.push('다른 코드 ' + c);
+    });
+  });
+  return why.join(', ');
+}
+
+// 티커 → 정식 이름 (국내: 네이버 자동완성 · 미국: 야후 검색). 결과 순서는 입력 순서, 못 찾으면 null
+function hsLookupEtfNames_(tickers) {
+  if (!tickers.length) return [];
+  var codes = tickers.map(function (t) { return hsIsKrCode_(t) ? hsTickerStr_(String(t).replace(/^KRX:/i, '').trim()).toUpperCase() : String(t).trim().toUpperCase(); });
+  var res = hsFetchAll_(codes.map(function (c, i) {
+    return hsIsKrCode_(tickers[i])
+      ? { url: 'https://ac.stock.naver.com/ac?q=' + encodeURIComponent(c) + '&target=stock%2Cetf', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true }
+      : { url: 'https://query2.finance.yahoo.com/v1/finance/search?q=' + encodeURIComponent(c) + '&quotesCount=6&newsCount=0', headers: { 'User-Agent': HS_UA }, muteHttpExceptions: true };
+  }));
+  return codes.map(function (c, i) {
+    try {
+      if (!res[i] || res[i].getResponseCode() !== 200) return null;
+      var j = JSON.parse(res[i].getContentText());
+      if (hsIsKrCode_(tickers[i])) {
+        var it = (j.items || []).filter(function (x) { return String(x.code || '').toUpperCase() === c; })[0];
+        return it && it.name ? { name: String(it.name).trim() } : null;
+      }
+      var q = (j.quotes || []).filter(function (x) { return String(x.symbol || '').toUpperCase() === c.replace(/\./g, '-') || String(x.symbol || '').toUpperCase() === c; })[0];
+      if (!q) return null;
+      return { name: String(q.longname || q.shortname || c).trim(), warn: q.quoteType && q.quoteType !== 'ETF' ? 'ETF 가 아니라 ' + q.quoteType + ' 로 나옴' : '' };
+    } catch (e) { return null; }
+  });
+}
+
 function hsTargets_(master) {
   var v = master.getRange(3, 1, master.getLastRow() - 2, 3).getValues();
-  return v.filter(function (r) { return String(r[0]).trim() === '본체ETF' && r[1]; })
+  return v.filter(function (r) { return String(r[0]).trim() === '본체ETF' && r[1] && hsIsKrCode_(r[1]); }) // WiseReport 는 국내 상장만
     .map(function (r) { return { code: String(r[1]).replace(/^KRX:/i, '').trim().toUpperCase(), name: String(r[2]).trim(), rows: [] }; });
 }
 
