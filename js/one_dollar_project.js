@@ -106,8 +106,8 @@ async function loadDollarData() {
             fetch(DOLLAR_MASTER_URL), fetch(DOLLAR_PORT_URL)
         ]);
         
-        dollarApp.masterData = parseSimpleArrayCSV(await masterRes.text());
-        dollarApp.portData = parseSimpleArrayCSV(await portRes.text());
+        dollarApp.masterData = parseSimpleArrayCSV(await sheetCsvText(masterRes, '1달러 마스터'));
+        dollarApp.portData = parseSimpleArrayCSV(await sheetCsvText(portRes, '1달러 포트폴리오'));
 
         if (dollarApp.masterData.length > 0) {
             let candidate0 = cleanNumber(dollarApp.masterData[0][0]);
@@ -120,7 +120,7 @@ async function loadDollarData() {
         renderDollarTable();
         populateDollarMemberSelect();
     } catch (error) {
-        console.error("$1 데이터 로딩 에러:", error);
+        showLoadError(error);
     }
 }
 

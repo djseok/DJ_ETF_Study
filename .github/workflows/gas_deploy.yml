@@ -3,7 +3,7 @@ name: Apps Script 배포
 # gas/*.gs 가 main 에 병합되면 Apps Script 편집기에 자동 반영 (tools/gas_deploy.js)
 #  · 점검(check): 편집기 코드와 저장소 코드 비교만, 아무것도 바꾸지 않음
 #  · 배포(deploy): gas/deploy.json 에서 enabled 인 프로젝트 중 달라진 곳만 반영, 웹 앱은 새 버전으로 (주소 그대로)
-#  · legacy / remove: 편집기에만 있는 옛 파일 점검·정리 (직접 실행할 때만)
+#  · legacy: 편집기에만 있는 옛 파일이 어디서 쓰이는지 점검 (직접 실행할 때만)
 # 필요한 Secrets: CLASPRC_JSON, GAS_ID_MANAGE, GAS_ID_DIARY, GAS_ID_MASTER, GAS_ID_UPLOAD (gas/README.md 참고)
 on:
   push:
@@ -12,14 +12,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'check = 비교만 / deploy = 반영 / legacy = 편집기에만 있는 파일 점검 / remove = 아래 파일 지우기(지우기 전 버전 백업)'
+        description: 'check = 비교만 / deploy = 반영 / legacy = 편집기에만 있는 파일 점검(내용은 내 Drive 백업)'
         type: choice
-        options: [check, deploy, legacy, remove]
+        options: [check, deploy, legacy]
         default: check
-      files:
-        description: 'remove 일 때만: 지울 편집기 파일 이름 (쉼표로, 예: ETF_NOW,auto)'
-        type: string
-        default: ''
 
 concurrency:
   group: gas-deploy
@@ -47,5 +43,4 @@ jobs:
           GAS_ID_DIARY: ${{ secrets.GAS_ID_DIARY }}
           GAS_ID_MASTER: ${{ secrets.GAS_ID_MASTER }}
           GAS_ID_UPLOAD: ${{ secrets.GAS_ID_UPLOAD }}
-          REMOVE_FILES: ${{ github.event.inputs.files }}
         run: node tools/gas_deploy.js ${{ github.event.inputs.mode || 'deploy' }}

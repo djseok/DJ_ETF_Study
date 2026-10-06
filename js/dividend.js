@@ -58,7 +58,7 @@ function loadDynamicDividendRules() {
     if (!dividendRulesLoadPromise) {
         dividendRulesLoadPromise = (async function () {
             var res = await fetch(DIVIDEND_RULES_CSV_URL);
-            var matrix = parseCsvToMatrix(await res.text());
+            var matrix = parseCsvToMatrix(await sheetCsvText(res, '배당 규칙'));
             var rulesObj = {};
 
             for (var i = 1; i < matrix.length; i++) {
@@ -81,7 +81,7 @@ function loadDynamicDividendRules() {
             globalDividendRulesMatrix = rulesObj;
         })().catch(function (e) {
             dividendRulesLoadPromise = null; // 실패하면 다음 번에 다시 시도
-            console.error("동적 배당 룰북 로드 실패:", e);
+            showLoadError(e);
         });
     }
     return dividendRulesLoadPromise;

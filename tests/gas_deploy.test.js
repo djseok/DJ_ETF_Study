@@ -64,6 +64,17 @@ assert(plan.problems.some(p => p.startsWith('문법 오류')));
 assert.deepStrictEqual(lineDiff('a\nb\nc', 'a\nc\nd'), { add: 1, del: 1 });
 assert.deepStrictEqual(topLevelNames('function f() {\n  const x = 1;\n}\nconst Y = 2;\nasync function g() {}'), ['f', 'Y', 'g']);
 
+// retire: 저장소로 옮긴 옛 파일은 지우고 새 파일로 대신 (같은 함수가 있어도 옛 파일이 빠지니 문제 아님), 저장소가 맡은 파일은 못 지움
+plan = planProject({ files: { 'n.gs': { new: true }, 'a.gs': {} }, retire: ['old1', 'gone'] },
+  remote.concat([{ name: 'old1', type: 'SERVER_JS', source: 'function getX() {}' }]), { 'n.gs': 'function getX() { return 1; }', 'a.gs': 'function a() {}' });
+assert.deepStrictEqual(plan.problems, []);
+assert.deepStrictEqual(plan.retire, ['old1']);
+assert(!plan.files.some(f => f.name === 'old1'));
+assert(!plan.extra.some(f => f.name === 'old1'));
+assert.strictEqual(plan.changed, true);
+plan = planProject({ files: { 'a.gs': {} }, retire: ['a'] }, remote, { 'a.gs': 'function a() {}' });
+assert(plan.problems.some(p => p.includes("'a'")));
+
 // 편집기에만 있는 파일 점검: 다른 파일에서 부르는지(주석·메서드 호출 제외), 특수 함수·사용자 함수·트리거 등록
 const lg = legacyUsage([{ name: 'old', type: 'SERVER_JS', source: 'function onOpen() {}\n/** @customfunction */\nfunction ETFX(a) { return a; }\nfunction helper() {}\nfunction inst() { ScriptApp.newTrigger("helper"); }' }],
   [{ name: 'old', type: 'SERVER_JS', source: 'function helper() {}' }, { name: 'new', type: 'SERVER_JS', source: 'function z() { helper(); }\n// ETFX(1)\nvar q = obj.ETFX(2);' }])[0];

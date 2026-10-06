@@ -98,9 +98,11 @@ async function initDashboard() {
             fetch(MASTER_CSV_URL).catch(function(){ return null; })
         ]);
 
-        if (macroRes) macroData = parseCsvToMatrix(await macroRes.text());
-        if (signalRes) signalData = parseCsvToMatrix(await signalRes.text());
-        if (masterRes) masterData = parseCsvToMatrix(await masterRes.text()); 
+        // 하나가 실패해도 나머지는 그대로 쓰고, 실패한 건 화면에 알림
+        var loadCsv = async function (res, label) { try { return parseCsvToMatrix(await sheetCsvText(res, label)); } catch (e) { showLoadError(e); return []; } };
+        macroData = await loadCsv(macroRes, '거시지표');
+        signalData = await loadCsv(signalRes, '퀀트 신호');
+        masterData = await loadCsv(masterRes, 'MasterData');
 
         if (typeof extractGlobalMacroVariables === 'function') extractGlobalMacroVariables();
         if (typeof initFilters === 'function') initFilters(); 

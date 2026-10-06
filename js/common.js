@@ -159,6 +159,35 @@ function describePriceError(data) {
     return '';
 }
 
+// 시트 CSV 응답 확인: 응답 실패나 게시 해제(로그인 화면 HTML)면 오류로 → 빈 화면·'불러오는 중'으로 멈추지 않게
+async function sheetCsvText(res, label) {
+    if (!res) throw new Error(label + ' 시트에 연결하지 못했어요');
+    var t = await res.text();
+    if (!res.ok || /^\s*</.test(t)) throw new Error(label + ' 시트를 불러오지 못했어요' + (res.ok ? ' (웹 게시 상태 확인)' : ' (' + res.status + ')'));
+    return t;
+}
+
+// 화면 위쪽에 불러오기 실패 알림 (같은 문구는 한 번만, 누르면 닫힘)
+function showLoadError(msg) {
+    console.error(msg);
+    if (typeof document === 'undefined' || !document.body) return;
+    var box = document.getElementById('loadErrorBox');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'loadErrorBox';
+        box.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;max-width:92vw;display:flex;flex-direction:column;gap:6px';
+        document.body.appendChild(box);
+    }
+    var text = String(msg && msg.message || msg);
+    if (/Failed to fetch|NetworkError|Load failed/i.test(text)) text = '시트에 연결하지 못했어요 (인터넷 연결 확인)';
+    if (Array.prototype.some.call(box.children, function (c) { return c.textContent === '⚠️ ' + text; })) return;
+    var item = document.createElement('div');
+    item.textContent = '⚠️ ' + text;
+    item.style.cssText = 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.08);cursor:pointer';
+    item.onclick = function () { item.remove(); };
+    box.appendChild(item);
+}
+
 // 시트·외부 글자를 화면(innerHTML)에 넣을 때 태그로 해석되지 않게
 function escapeHtml(s) {
     return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {

@@ -12,6 +12,9 @@ PR 이 main 에 병합되면 GitHub Actions 가 바뀐 `.gs` 를 Apps Script 편
 - 편집기에 그 이름의 파일이 없거나, 합쳤을 때 같은 함수가 두 번 생기거나, 문법 오류면 올리지 않고 멈춰요
 - 트리거·스크립트 속성은 그대로 유지돼요. **새 트리거가 필요한 함수(`install…Trigger`)는 처음 한 번 편집기에서 직접 실행**
 - `enabled: false` 인 프로젝트는 점검만 해요. 점검 결과가 맞으면 `true` 로 바꿉니다
+- 편집기에만 있던 옛 파일을 저장소로 옮겼으면 `retire` 에 그 이름을 적어요 → 다음 배포 때 편집기에서 지우고, 지우기 전 버전을 만들어 둬서 편집기 **프로젝트 기록**에서 되살릴 수 있어요 (관리시트의 Code·ETF_PDF·ETF_NOW·auto·mdd → `etf_holdings_legacy.gs`·`price_proxy.gs`, ETF_PDF 는 쓰는 곳이 없어 옮기지 않음)
+- **Actions → Apps Script 배포 → Run workflow → legacy**: 편집기에만 있는 파일의 함수가 어디서 쓰이는지 점검(로그엔 함수 이름만), 내용은 내 Google Drive 에 백업 파일로
+- 배포가 실패하면 카톡으로 한 번 알려요 (`deploy_watch.gs`, 장중 신호 트리거가 30분마다 확인 · 07~23시)
 
 ### 처음 한 번 (PC)
 

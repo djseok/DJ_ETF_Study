@@ -16,7 +16,7 @@
     <!-- 💡 프리텐다드 웹 폰트 로드 -->
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
     
@@ -320,21 +320,21 @@
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="space-y-3">
-                        <h4 class="font-black text-slate-700">내 정보 입력 <span class="text-xs font-bold text-slate-400">🔒 이 기기 브라우저에만 저장 · 서버로 보내지 않아요</span></h4>
+                        <h4 class="font-black text-slate-700">내 정보 입력 <span class="text-xs font-bold text-slate-400">🔒 저장하지 않아요 · 창을 닫으면 사라져요</span></h4>
                         <label class="block"><span class="text-xs font-bold text-slate-600">세전 연봉 (원)</span>
-                            <input id="tax_salary" inputmode="numeric" placeholder="예: 60000000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <input id="tax_salary" inputmode="numeric" autocomplete="off" placeholder="예: 60000000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
                             <span class="text-[11px] text-slate-400">종합과세 시 추가 세금 계산에만 써요</span></label>
                         <label class="block"><span class="text-xs font-bold text-slate-600">근로소득 과세표준 (선택)</span>
-                            <input id="tax_baseOverride" inputmode="numeric" placeholder="원천징수영수증 값" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <input id="tax_baseOverride" inputmode="numeric" autocomplete="off" placeholder="원천징수영수증 값" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
                             <span class="text-[11px] text-slate-400">있으면 연봉 추정 대신 이 값을 써서 더 정확해요</span></label>
                         <label class="block"><span class="text-xs font-bold text-slate-600">해외주식형 ETF 매도 차익 (올해, 과세분)</span>
-                            <input id="tax_etfGain" inputmode="numeric" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <input id="tax_etfGain" inputmode="numeric" autocomplete="off" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
                             <span class="text-[11px] text-slate-400">증권사 앱의 배당소득 과세분 · 국내주식형 ETF 차익은 비과세</span></label>
                         <label class="block"><span class="text-xs font-bold text-slate-600">예금이자 · 다른 배당 (올해 예상)</span>
-                            <input id="tax_otherFin" inputmode="numeric" placeholder="예: 500000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <input id="tax_otherFin" inputmode="numeric" autocomplete="off" placeholder="예: 500000" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
                             <span class="text-[11px] text-slate-400">예금·적금 이자, 개별주식 배당 등</span></label>
                         <label class="block"><span class="text-xs font-bold text-slate-600">ISA · 연금계좌에서 받은 분배금 (제외)</span>
-                            <input id="tax_isa" inputmode="numeric" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                            <input id="tax_isa" inputmode="numeric" autocomplete="off" placeholder="예: 0" class="mt-1 w-full p-2.5 border border-slate-300 rounded-lg mono font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-400">
                             <span class="text-[11px] text-slate-400">이 계좌 안의 분배금은 종합과세 집계에서 빠져요</span></label>
                         <button onclick="taxClearInputs()" class="text-xs font-bold text-slate-400 hover:text-red-500">입력값 지우기</button>
                     </div>
@@ -1016,7 +1016,7 @@
                                 <span class="text-lg font-black text-slate-900 mono" id="simGenAnnualTaxBase">0원</span>
                             </div>
                             <div id="simMedicareWarning" class="text-center py-2.5 rounded-lg font-black text-sm bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors">
-                                ✅ 피부양자 자격 안전 (1천만 원 이하)
+                                ✅ 금융소득 1천만 원 이하 → 피부양자 소득에서 빠져요
                             </div>
                         </div>
                     </div>
@@ -1311,7 +1311,7 @@
         <!-- 뷰 영역 끝 -->
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script src="js/common.js"></script>
     <script src="js/main.js"></script>
     <script src="js/quant_core.js"></script>

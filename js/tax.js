@@ -1,6 +1,6 @@
 // =========================================================
 // 🧾 금융소득종합과세 사전 점검 (2026년 세법 기준 · 참고용 추정)
-//   - 연봉 등 입력값은 이 브라우저(localStorage)에만 저장 — 시트·GitHub 어디에도 보내지 않음
+//   - 연봉 등 입력값은 화면이 열려 있는 동안만 기억 — 브라우저·시트·GitHub 어디에도 저장하지 않음
 //   - 금융소득 = 올해 받은 배당(과세표준 기준) + 남은 예상 배당(과세표준 비율) + 해외주식형 ETF 매도차익 + 기타 이자·배당 − ISA·연금계좌 분
 //   - 2,000만원 초과 → 비교과세: max(근로 과세표준 + 초과분을 누진세율 + 2,000만×14%, 근로 누진세 + 금융소득×14%)
 //   - 건강보험(직장가입자): 보수 외 소득이 2,000만원 초과 시 초과분 × (7.19% + 0.9448%) — 금융소득은 1,000만원 넘으면 전액 반영
@@ -35,17 +35,24 @@ function taxEstimateWageBase(salary) {
     return Math.max(0, salary - taxWageDeduction(salary) - 1500000 - social);
 }
 
-function taxStoreKey(member) { return 'djTax_' + new Date().getFullYear() + '_' + member; }
-function taxLoadInputs(member) {
-    try { return JSON.parse(localStorage.getItem(taxStoreKey(member)) || '{}'); } catch (e) { return {}; }
-}
-function taxSaveInputs(member, v) {
-    try { localStorage.setItem(taxStoreKey(member), JSON.stringify(v)); } catch (e) { }
+// 입력값은 이 화면이 열려 있는 동안만 기억 (멤버별) · 브라우저에 저장하지 않음 → 창을 닫으면 사라짐
+var TAX_MEM = {};
+function taxLoadInputs(member) { return TAX_MEM[member] || {}; }
+function taxSaveInputs(member, v) { TAX_MEM[member] = v; }
+// 예전에 브라우저에 저장해 둔 입력값(djTax_연도_멤버) 지우기
+function taxForgetSaved() {
+    try {
+        for (var i = localStorage.length - 1; i >= 0; i--) {
+            var k = localStorage.key(i);
+            if (/^djTax_\d{4}_/.test(k)) localStorage.removeItem(k);
+        }
+    } catch (e) { }
 }
 function taxNum(id) { var el = document.getElementById(id); return el ? (parseFloat(String(el.value).replace(/[^0-9.]/g, '')) || 0) : 0; }
 function taxWon(v) { return '₩' + Math.round(v).toLocaleString(); }
 
 async function loadTaxView() {
+    taxForgetSaved();
     await Promise.all([
         typeof loadDivHistory === 'function' ? loadDivHistory() : null,
         typeof loadDynamicDividendRules === 'function' ? loadDynamicDividendRules() : null,
@@ -75,8 +82,7 @@ function taxFillInputs() {
 }
 
 function taxClearInputs() {
-    var m = document.getElementById('taxMember').value;
-    try { localStorage.removeItem(taxStoreKey(m)); } catch (e) { }
+    delete TAX_MEM[document.getElementById('taxMember').value];
     taxFillInputs(); renderTax();
 }
 

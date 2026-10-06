@@ -39,7 +39,7 @@ async function fetchBacktestMasterData() {
     try {
         const targetUrl = BACKTEST_DIV_CSV_URL + "&t=" + new Date().getTime();
         const response = await fetch(targetUrl);
-        const csvText = await response.text();
+        const csvText = await sheetCsvText(response, '배당 백테스트');
         const lines = parseCSV(csvText);
         
         simEtfDatabase = {}; 
@@ -73,7 +73,7 @@ async function fetchBacktestMasterData() {
         setupEventListeners();
         runPortfolioSimulator();
     } catch (error) {
-        console.error("배당 시뮬레이터 데이터 로딩 실패:", error);
+        showLoadError(error);
     }
 }
 
@@ -303,14 +303,19 @@ function runPortfolioSimulator() {
     if(elGenAnnualTaxBase) elGenAnnualTaxBase.textContent = fmtNum(genAnnualTaxBase) + "원";
     if(elGenAnnualTax) elGenAnnualTax.textContent = "-" + fmtNum(genAnnualTax) + "원";
 
+    // 건보 피부양자 소득 요건: 소득 합계 연 2,000만 원 초과면 탈락. 금융소득(이자·배당)은 1,000만 원 이하면 빼고, 넘으면 전액 포함 (재산 요건은 따로)
     const warningBox = document.getElementById('simMedicareWarning');
     if (warningBox) {
-        if (genAnnualTaxBase > 10000000) {
-            warningBox.className = "text-center py-2.5 rounded-lg font-black text-sm bg-red-100 text-red-700 border border-red-200 mt-2 shadow-sm";
-            warningBox.innerHTML = "⚠️ 건보료 피부양자 탈락 (과표 1천만 원 초과)";
+        const box = "text-center py-2.5 rounded-lg font-black text-sm mt-2 shadow-sm ";
+        if (genAnnualTaxBase > 20000000) {
+            warningBox.className = box + "bg-red-100 text-red-700 border border-red-200";
+            warningBox.innerHTML = "⚠️ 건보료 피부양자 탈락 (금융소득만으로 2천만 원 초과 · 종합과세 대상)";
+        } else if (genAnnualTaxBase > 10000000) {
+            warningBox.className = box + "bg-amber-100 text-amber-800 border border-amber-200";
+            warningBox.innerHTML = "⚠️ 금융소득 1천만 원 초과 → 전액이 피부양자 소득으로 잡혀요 (연금·근로 등과 합쳐 2천만 원 넘으면 탈락)";
         } else {
-            warningBox.className = "text-center py-2.5 rounded-lg font-black text-sm bg-emerald-100 text-emerald-700 border border-emerald-200 mt-2 shadow-sm";
-            warningBox.innerHTML = "✅ 피부양자 자격 안전 (1천만 원 이하)";
+            warningBox.className = box + "bg-emerald-100 text-emerald-700 border border-emerald-200";
+            warningBox.innerHTML = "✅ 금융소득 1천만 원 이하 → 피부양자 소득에서 빠져요";
         }
     }
 
