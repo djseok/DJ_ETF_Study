@@ -269,8 +269,57 @@ function calculateAndDrawDividends() {
             : "";
     }
 
+    renderUsdDividends(isAll ? names : [targetUser], targetLabel, yearActual + yearExpected);
     renderStackedDividendChart(actualByStock, expectedByStock);
     renderUpcomingDividends(holdings, receivedThisMonthKeys, netK);
+}
+
+// 💵 달러 자산(1달러 프로젝트) 배당: 원화 배당과 섞지 않고 따로 표시
+//   받은 배당 = 1달러 시트 J~L '누적배당금'($, 적힌 그대로)
+//   예상 = 관리종목 '최근 4회 평균 분배금'($) × 보유수량, 1달러 탭과 같이 주 1회 지급으로 계산 · 세후는 미국 원천징수 15% 공제
+var USD_DIV_TAX = 0.15;
+function renderUsdDividends(memberNames, targetLabel, krwYearTotal) {
+    var box = document.getElementById('dividend-usd');
+    if (!box) return;
+    var fx = 0, received = {}, weekly = {}, labels = {};
+    memberNames.forEach(function (n) {
+        var u = globalParsedUsers ? globalParsedUsers[n] : null;
+        if (!u || !u.fx) return;
+        fx = u.fx;
+        Object.keys(u.usdReceived || {}).forEach(function (t) { received[t] = (received[t] || 0) + u.usdReceived[t]; });
+        (u.usdItems || []).forEach(function (it) {
+            labels[it.ticker] = it.label || it.ticker;
+            if (it.divPerPay > 0) weekly[it.ticker] = (weekly[it.ticker] || 0) + it.divPerPay * it.qty;
+        });
+    });
+    var tickers = Object.keys(weekly).concat(Object.keys(received).filter(function (t) { return !(t in weekly); }));
+    if (!fx || !tickers.length) { box.className = 'hidden'; box.innerHTML = ''; return; }
+
+    var k = divAfterTax ? 1 - USD_DIV_TAX : 1;
+    var usd = function (v) { return '$' + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var won = function (v) { return '₩' + Math.round(v * fx).toLocaleString(); };
+    var now = new Date();
+    var weeksLeft = Math.floor((new Date(now.getFullYear(), 11, 31) - now) / (7 * 864e5));
+    var recTotal = 0, weekTotal = 0;
+    tickers.forEach(function (t) { recTotal += received[t] || 0; weekTotal += (weekly[t] || 0) * k; });
+    var restYear = weekTotal * weeksLeft;
+
+    var rows = tickers.sort(function (a, b) { return (weekly[b] || 0) - (weekly[a] || 0); }).map(function (t) {
+        return '<tr class="border-b border-slate-100 last:border-0"><td class="py-2 font-bold text-slate-700">' + escapeHtml(labels[t] || t) + ' <span class="text-[10px] text-slate-400">' + escapeHtml(t) + '</span></td>'
+            + '<td class="py-2 text-right mono text-slate-600">' + (weekly[t] ? usd(weekly[t] * k) : '-') + '</td>'
+            + '<td class="py-2 text-right mono font-bold text-emerald-600">' + (received[t] ? usd(received[t]) : '-') + '</td></tr>';
+    }).join('');
+
+    box.className = 'bg-white p-6 rounded-2xl shadow-sm border border-emerald-200';
+    box.innerHTML = '<h4 class="font-black text-lg text-slate-800 mb-1">💵 달러 자산 배당 <span class="text-xs font-bold text-slate-400 ml-1">' + escapeHtml(targetLabel) + ' · 1달러 프로젝트 · ' + (divAfterTax ? '세후(미국 15% 원천징수)' : '세전') + ' · 환율 ₩' + Math.round(fx).toLocaleString() + '</span></h4>'
+        + '<p class="text-xs text-slate-400 mb-4">위의 원화 배당 합계에는 들어가지 않아요. 예상은 최근 4회 평균 분배금 × 보유수량, 주 1회 지급 기준(1달러 탭과 같은 방식)이라 실제와 다를 수 있어요.</p>'
+        + '<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">'
+        + '<div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100"><div class="text-[11px] font-bold text-emerald-700">받은 달러 배당 (누적)</div><div class="font-black mono text-emerald-800">' + usd(recTotal) + '</div><div class="text-[11px] text-slate-500 mono">' + won(recTotal) + '</div></div>'
+        + '<div class="bg-slate-50 p-3 rounded-xl border border-slate-100"><div class="text-[11px] font-bold text-slate-600">주간 예상</div><div class="font-black mono text-slate-800">' + usd(weekTotal) + '</div><div class="text-[11px] text-slate-500 mono">' + won(weekTotal) + '</div></div>'
+        + '<div class="bg-slate-50 p-3 rounded-xl border border-slate-100"><div class="text-[11px] font-bold text-slate-600">올해 남은 예상 (' + weeksLeft + '주)</div><div class="font-black mono text-slate-800">' + usd(restYear) + '</div><div class="text-[11px] text-slate-500 mono">' + won(restYear) + '</div></div>'
+        + '</div>'
+        + '<table class="w-full text-left text-sm whitespace-nowrap"><thead><tr class="text-[11px] text-slate-400"><th class="pb-1">종목</th><th class="pb-1 text-right">주간 예상</th><th class="pb-1 text-right">받은 배당</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        + '<div class="mt-4 pt-3 border-t border-slate-100 flex justify-between text-sm font-black text-emerald-800"><span>올해 원화 배당 + 달러 남은 예상 (₩ 환산)</span><span class="mono">₩' + Math.round(krwYearTotal + restYear * fx).toLocaleString() + '</span></div>';
 }
 
 // 다가오는 배당 (오늘부터 60일): 지급 예정일 = 지급월 + 최근 지급일의 '일(day)' (주말이면 다음 월요일)
