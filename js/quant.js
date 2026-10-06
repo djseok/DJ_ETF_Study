@@ -7,6 +7,7 @@ let currentSubFilter = 'all';
 let currentSearchText = '';
 let globalFuturesDelta = 0; // 🌟 나스닥 선물: 미국장 마감(뉴욕 16:00) 이후 변동률
 let globalFutures = { NQ: 0, ES: 0, YM: 0 }; // 나스닥 · S&P · 다우 선물 (마감 이후 변동률)
+let globalFuturesMissing = {}; // 값이 비었거나 0 이라 계산에서 뺀 선물 (예: { NQ: true })
 let globalEwyDelta = 0; // 🇰🇷 EWY(미국 상장 한국 ETF) 지난밤 미국장 시가→종가 — 개장 전 국내 구성종목 추정용 (오늘 갱신된 값만)
 
 // 국내장 개장 전인지 (평일 09:00 전 · 주말)
@@ -14,6 +15,12 @@ function krPreOpen() {
     const p = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', weekday: 'short', hour: '2-digit', hour12: false }).formatToParts(new Date());
     const wd = p.find(x => x.type === 'weekday').value, hr = parseInt(p.find(x => x.type === 'hour').value, 10) % 24;
     return wd === 'Sat' || wd === 'Sun' || hr < 9;
+}
+
+// 전일·현재 값 중 하나라도 0 이하(빈칸·조회 실패)면 변동률을 만들지 않음 → null
+//   (현재값이 0 으로 들어오면 (0 − 전일) / 전일 = −100% 가 되어 예측이 망가짐)
+function safeDelta(prev, live) {
+    return prev > 0 && live > 0 ? (live - prev) / prev : null;
 }
 
 function extractGlobalMacroVariables() {
@@ -35,7 +42,8 @@ function extractGlobalMacroVariables() {
         let prev = parseFloat(String(row[3] || "").replace(/[^0-9.-]/g, '')) || 0;
         let live = parseFloat(String(row[4] || "").replace(/[^0-9.-]/g, '')) || 0;
         
-        let pct = prev > 0 ? ((live - prev) / prev * 100) : 0;
+        const delta = safeDelta(prev, live);
+        let pct = delta === null ? 0 : delta * 100;
         let colorClass = pct >= 0 ? 'text-red-500' : 'text-blue-500';
         let sign = pct >= 0 ? '▲' : '▼';
 
@@ -46,13 +54,18 @@ function extractGlobalMacroVariables() {
         }
         // 🌟 선물 (Characteristic: 전일지수 = 미국장 마감 시점 가격, 현재지수 = 지금) → 마감 이후 변동률
         if (ticker === 'S&P선물지수' || ticker === '다우선물지수') {
-            globalFutures[ticker === 'S&P선물지수' ? 'ES' : 'YM'] = prev > 0 ? (live - prev) / prev : 0;
+            const k = ticker === 'S&P선물지수' ? 'ES' : 'YM';
+            globalFutures[k] = delta === null ? 0 : delta;
+            globalFuturesMissing[k] = delta === null;
         }
         else if (ticker === '나스닥선물지수' || name === '크롤링') {
-            globalFuturesDelta = prev > 0 ? (live - prev) / prev : 0;
+            globalFuturesDelta = delta === null ? 0 : delta;
             globalFutures.NQ = globalFuturesDelta;
+            globalFuturesMissing.NQ = delta === null;
             if(document.getElementById('macro-futures')) {
-                document.getElementById('macro-futures').innerHTML = `
+                document.getElementById('macro-futures').innerHTML = delta === null
+                    ? `<div class="text-xl md:text-2xl font-extrabold mono text-slate-400">-</div><div class="text-xs font-bold text-slate-400">값 없음</div>`
+                    : `
                     <div class="text-xl md:text-2xl font-extrabold mono text-slate-800">${live.toLocaleString()}</div>
                     <div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>
                 `;
@@ -69,7 +82,7 @@ function extractGlobalMacroVariables() {
         }
         else if (combinedText.includes('환율') || combinedText.includes('USDKRW')) {
             if (combinedText.includes('엔화') || combinedText.includes('JPY')) return;
-            globalFxDelta = prev > 0 ? (live - prev) / prev : 0;
+            globalFxDelta = delta === null ? 0 : delta;
             if(document.getElementById('macro-fx')) document.getElementById('macro-fx').innerHTML = `<div class="text-xl md:text-2xl font-extrabold mono text-slate-800">₩${live.toLocaleString()}</div><div class="text-xs font-bold ${colorClass}">${sign} ${Math.abs(pct).toFixed(2)}%</div>`;
         }
         else if (combinedText.includes('VIX')) {
@@ -304,7 +317,7 @@ function renderTargetAssetDashboard(target) {
     }
     
     if(document.getElementById('mathBase')) document.getElementById('mathBase').innerText = `${baseRet.toFixed(2)}%`;
-    if(document.getElementById('mathFutures')) document.getElementById('mathFutures').innerText = `${futLabel} ${(futDelta*100).toFixed(2)}%`;
+    if(document.getElementById('mathFutures')) document.getElementById('mathFutures').innerText = globalFuturesMissing[futKey] ? `${futLabel} 값 없음 (보정 제외)` : `${futLabel} ${(futDelta*100).toFixed(2)}%`;
     if(document.getElementById('mathFutMix')) document.getElementById('mathFutMix').innerText = `β × 미국 ${(usShare*100).toFixed(0)}%`;
 
     if(document.getElementById('predictedChange')) {
