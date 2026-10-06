@@ -231,7 +231,7 @@ function renderPortfolioView(rankArray) {
             ${cell('받은 배당 (세후)', won(dv.net), dv.count ? '세전 ' + won(dv.gross) + ' · ' + dv.count + '회' : '기록 없음', 'text-emerald-600')}
             ${cell('손익 (배당 포함)', won(withDivPL), pct(withDivPct), clr(withDivPL))}
         </div>`;
-        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div>${summary}<div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}${usdHtml}</tbody></table></div></div>`;
+        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div>${summary}<div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}${usdHtml}</tbody></table></div>${typeof lookThroughHtml === 'function' ? lookThroughHtml(user) : ''}</div>`;
     });
 
     const rankCont = document.getElementById('rankingContainer');
