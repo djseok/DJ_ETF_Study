@@ -22,12 +22,15 @@ async function loadPortfolioData(currentTab, forceReload) {
     }
 }
 
-// 1달러 프로젝트(미국 상장, 달러 자산) → 멤버별 달러 보유 목록. 환율은 1달러 마스터시트 A1(또는 A2)
+// 달러 자산 → 멤버별 달러 보유 목록. 환율은 1달러 마스터시트 A1(또는 A2)
+//   토스_보유 탭(토스증권 전체 보유)에 그 멤버 줄이 있으면 그걸 쓰고, 없으면 1달러 탭(1달러 프로젝트 종목만)을 씀
+//   1달러 프로젝트는 토스 보유 중 일부만 뽑아 관리 → 토스 목록에서 1달러 종목은 표시만 따로 함
 //   주의: 원화 환산 원금도 '오늘 환율' 기준 (매수 당시 환율 기록이 없어서) → 달러 자산 수익률은 달러 기준과 같음
 async function fetchDollarHoldings() {
-    const out = { fx: 0, byUser: {}, divPerPay: {}, received: {} };
+    const out = { fx: 0, byUser: {}, divPerPay: {}, received: {}, source: {} };
     try {
-        const [portRes, masterRes] = await Promise.all([fetch(sheetUrl('DOLLAR_PORT')), fetch(sheetUrl('DOLLAR_MASTER'))]);
+        const [portRes, masterRes, tossRes] = await Promise.all([fetch(sheetUrl('DOLLAR_PORT')), fetch(sheetUrl('DOLLAR_MASTER')),
+            APP_CONFIG.SHEETS.TOSS_PORT ? fetch(sheetUrl('TOSS_PORT')).catch(() => null) : Promise.resolve(null)]);
         if (!portRes.ok) return out;
         const num = v => { const n = parseFloat(String(v === undefined ? '' : v).replace(/[^0-9.-]/g, '')); return isFinite(n) ? n : 0; };
         if (masterRes.ok) {
@@ -44,8 +47,28 @@ async function fetchDollarHoldings() {
             const name = String(r[0] || '').trim(), ticker = String(r[1] || '').trim().toUpperCase();
             const qty = num(r[4]), curUsd = num(r[6]), avgUsd = num(r[7]);
             if (!name || !ticker || name.includes('이름') || !(qty > 0)) return;
-            (out.byUser[name] = out.byUser[name] || []).push({ ticker: ticker, label: String(r[2] || '').trim(), qty: qty, avgUsd: avgUsd, curUsd: curUsd || avgUsd });
+            (out.byUser[name] = out.byUser[name] || []).push({ ticker: ticker, label: String(r[2] || '').trim(), qty: qty, avgUsd: avgUsd, curUsd: curUsd || avgUsd, oneDollar: true });
         });
+        Object.keys(out.byUser).forEach(n => { out.source[n] = '1달러'; });
+        // 토스_보유: A 이름 · B 티커 · C 종목명 · D 수량 · E 평단$ · F 현재가$ (티커 USD = 달러 예수금)
+        if (tossRes && tossRes.ok) {
+            const toss = {};
+            parseCsvToMatrix(await tossRes.text()).slice(1).forEach(r => {
+                const name = String(r[0] || '').trim(), ticker = String(r[1] || '').trim().toUpperCase();
+                const qty = num(r[3]), avgUsd = num(r[4]), curUsd = num(r[5]);
+                if (!name || !ticker || name.includes('이름') || !(qty > 0)) return;
+                const cash = ticker === 'USD';
+                (toss[name] = toss[name] || []).push({ ticker: ticker, label: String(r[2] || '').trim() || (cash ? '달러 예수금' : ticker), qty: qty,
+                    avgUsd: cash ? 1 : avgUsd, curUsd: cash ? 1 : (curUsd || avgUsd), cash: cash });
+            });
+            Object.keys(toss).forEach(n => {
+                const one = {};
+                (out.byUser[n] || []).forEach(it => { one[it.ticker] = true; });
+                toss[n].forEach(it => { it.oneDollar = !!one[it.ticker]; });
+                out.byUser[n] = toss[n];
+                out.source[n] = '토스';
+            });
+        }
     } catch (e) { console.warn('1달러 프로젝트(달러 자산)를 불러오지 못해 원화 자산만 표시:', e); }
     return out;
 }
@@ -142,6 +165,7 @@ async function fetchAndParsePortfolio() {
             if (!fx) return; // 환율을 못 받으면 합치지 않음 (잘못된 원화 금액 방지)
             const u = users[name] = users[name] || { name: name, totalInvest: 0, totalCurrent: 0, items: [], krwInvest: 0, krwCurrent: 0 };
             u.usdItems = dollar.byUser[name];
+            u.usdSource = dollar.source[name];
             u.usdItems.forEach(it => { it.divPerPay = dollar.divPerPay[it.ticker] || 0; });
             u.usdInvest = u.usdItems.reduce((s, it) => s + it.avgUsd * it.qty, 0);
             u.usdCurrent = u.usdItems.reduce((s, it) => s + it.curUsd * it.qty, 0);
@@ -215,10 +239,13 @@ function renderPortfolioView(rankArray) {
         const usd = v => (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         let usdHtml = '';
         if (user.usdItems && user.usdItems.length) {
-            usdHtml = `<tr><td colspan="5" class="pt-4 pb-1 text-[11px] font-black text-emerald-700">💵 달러 자산 (1달러 프로젝트 · 환율 ₩${Math.round(user.fx).toLocaleString()})</td></tr>` +
+            const src = user.usdSource === '토스' ? '토스증권 전체' : '1달러 프로젝트';
+            usdHtml = `<tr><td colspan="5" class="pt-4 pb-1 text-[11px] font-black text-emerald-700">💵 달러 자산 (${src} · 환율 ₩${Math.round(user.fx).toLocaleString()})</td></tr>` +
                 user.usdItems.map(it => {
+                    if (it.cash) return `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${escapeHtml(it.label)}</td><td></td><td></td><td></td><td class="py-3 text-right mono font-bold text-slate-800">${usd(it.qty)}<div class="text-[10px] text-slate-400">${won(it.qty * user.fx)}</div></td></tr>`;
                     const r = it.avgUsd > 0 ? (it.curUsd - it.avgUsd) / it.avgUsd * 100 : 0;
-                    return `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${escapeHtml(it.label || it.ticker)} <span class="text-[10px] text-slate-400">${escapeHtml(it.ticker)}</span></td><td class="py-3 text-right mono"><div class="text-[10px] text-slate-400">평단 ${usd(it.avgUsd)}</div><div class="font-bold text-slate-700">현재 ${usd(it.curUsd)}</div></td><td class="py-3 text-right mono text-slate-500">${+it.qty.toFixed(6)}주</td><td class="py-3 text-right mono font-bold ${r>=0?'text-red-500':'text-blue-500'}">${pct(r)}</td><td class="py-3 text-right mono font-bold text-slate-800">${usd(it.curUsd * it.qty)}<div class="text-[10px] text-slate-400">${won(it.curUsd * it.qty * user.fx)}</div></td></tr>`;
+                    const tag = user.usdSource === '토스' && it.oneDollar ? ' <span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">1달러</span>' : '';
+                    return `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${escapeHtml(it.label || it.ticker)} <span class="text-[10px] text-slate-400">${escapeHtml(it.ticker)}</span>${tag}</td><td class="py-3 text-right mono"><div class="text-[10px] text-slate-400">평단 ${usd(it.avgUsd)}</div><div class="font-bold text-slate-700">현재 ${usd(it.curUsd)}</div></td><td class="py-3 text-right mono text-slate-500">${+it.qty.toFixed(6)}주</td><td class="py-3 text-right mono font-bold ${r>=0?'text-red-500':'text-blue-500'}">${pct(r)}</td><td class="py-3 text-right mono font-bold text-slate-800">${usd(it.curUsd * it.qty)}<div class="text-[10px] text-slate-400">${won(it.curUsd * it.qty * user.fx)}</div></td></tr>`;
                 }).join('');
             if (rowsHtml) rowsHtml = `<tr><td colspan="5" class="pb-1 text-[11px] font-black text-slate-500">₩ 원화 자산 (국내 상장)</td></tr>` + rowsHtml;
         }

@@ -5,8 +5,8 @@
  *   ① Gemini 가 종목명 · 보유수량 · 평균단가를 읽고
  *   ② 관리시트 MasterData 의 정식 이름으로 맞춘 뒤 지금 보유 내역과 비교한 '바뀔 내용'을 보여주고
  *   ③ 멤버가 확인을 누르면 개인일기장 '{이름}포토폴리오' 탭 B·D·E 열(종목·평단·수량)을 고칩니다.
- *   · 계좌를 '토스 미국주식(달러)'로 고르면 '1달러 마스터 포토폴리오' 탭 E·H 열(수량·평단 $)만 고치고,
- *     {이름}포토폴리오 · D_실적기록 · D_기록은 건드리지 않습니다.
+ *   · 계좌를 '토스 미국주식(달러)'로 고르면 '토스_보유' 탭(토스 전체 보유)의 수량·평단($)을 고치고,
+ *     '1달러 마스터 포토폴리오'에 이미 있는 종목은 E·H 열도 같이 맞춥니다. {이름}포토폴리오 · D_실적기록 · D_기록은 건드리지 않습니다.
  *   · 이미지는 저장하지 않습니다 (인식 후 버림). 반영 기록만 관리시트 '잔고_업로드_기록' 탭에 남깁니다.
  *   · '마스터 포토폴리오' 탭은 건드리지 않습니다 (QUERY 가 멤버 탭을 자동으로 모음).
  *
@@ -207,31 +207,44 @@ function huGemini_(images, knownNames, dollar) {
 }
 
 // ---------------------------------------------------------
-// 토스 미국주식(달러) → '1달러 마스터 포토폴리오' (수량 · 평단은 달러 그대로, 원화 탭 · D 실적기록은 안 건드림)
+// 토스 미국주식(달러) → '토스_보유'(토스 전체 보유) + '1달러 마스터 포토폴리오'(1달러 프로젝트 종목만)
+//   토스_보유: 그 멤버의 토스 보유를 전부 (새 종목도 추가) · 대시보드 실보유 현황의 달러 자산
+//   1달러 탭: 이미 있는 그 멤버 · 티커 줄의 수량(E) · 평단(H)만 맞춤 (새 줄은 안 만듦 — 1달러 종목은 멤버가 고름)
+//   원화 탭 · D 실적기록은 안 건드림. 수량 · 평단은 달러 그대로
 // ---------------------------------------------------------
-function huDollarCurrent_(member) {
-  var sh = SpreadsheetApp.openById(HU_DIARY_ID).getSheetByName(HU_DOLLAR_TAB);
-  if (!sh) throw new Error(HU_DOLLAR_TAB + ' 탭이 없어요');
+var HU_TOSS_TAB = '토스_보유';  // A 이름 · B 티커 · C 종목명 · D 수량 · E 평단$ · F 현재가$ · G 기록일 (티커 USD = 달러 예수금, 캡처 반영 대상 아님)
+var HU_TOSS_LAYOUT = { tab: HU_TOSS_TAB, name: 2, qty: 3, avg: 4 };
+var HU_DOLLAR_LAYOUT = { tab: HU_DOLLAR_TAB, name: 2, qty: 4, avg: 7 };
+
+function huTabRows_(member, L) {
+  var ss = SpreadsheetApp.openById(HU_DIARY_ID), sh = ss.getSheetByName(L.tab);
+  if (!sh && L.tab === HU_TOSS_TAB) {
+    sh = ss.insertSheet(HU_TOSS_TAB);
+    sh.getRange(1, 1, 1, 7).setValues([['이름', '티커', '종목명', '수량', '평단($)', '현재가($)', '기록일']]); sh.setFrozenRows(1);
+  }
+  if (!sh) throw new Error(L.tab + ' 탭이 없어요');
   var v = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 8).getValues();
   var rows = [], byKey = {}, lastRow = 1;
   for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0]).trim()) lastRow = i + 1; // J~L(누적배당금) 줄은 세지 않음 → A열 기준
+    if (String(v[i][0]).trim()) lastRow = i + 1; // 1달러 탭 J~L(누적배당금) 줄은 세지 않음 → A열 기준
     var t = huTicker_(v[i][1]);
-    if (String(v[i][0]).trim() !== member || !t) continue;
-    var r = { row: i + 1, key: 'T_' + t, ticker: t, name: String(v[i][2]).trim() || t, qty: huNum_(v[i][4]), avg: huNum_(v[i][7]) };
+    if (String(v[i][0]).trim() !== member || !t || t === 'USD') continue;
+    var r = { row: i + 1, key: 'T_' + t, ticker: t, name: String(v[i][L.name]).trim() || t, qty: huNum_(v[i][L.qty]), avg: huNum_(v[i][L.avg]) };
     rows.push(r); byKey[r.key] = r;
   }
   return { sheet: sh, rows: rows, byKey: byKey, lastRow: lastRow };
 }
 
 function huDollarNames_(member) {
-  return huDollarCurrent_(member).rows.map(function (r) { return r.ticker + ' · ' + r.name; });
+  return huTabRows_(member, HU_TOSS_LAYOUT).rows.concat(huTabRows_(member, HU_DOLLAR_LAYOUT).rows)
+    .map(function (r) { return r.ticker + ' · ' + r.name; });
 }
 
 function huRound2_(v) { return Math.round(v * 100) / 100; }
 
 function huDollarCompare_(member, read) {
-  var cur = huDollarCurrent_(member);
+  var cur = huTabRows_(member, HU_TOSS_LAYOUT), one = huTabRows_(member, HU_DOLLAR_LAYOUT);
+  var known = cur.rows.concat(one.rows.filter(function (r) { return !cur.byKey[r.key]; }));
   read = (read || []).slice(0, 200);
   var parsed = {};
   read.forEach(function (x) {
@@ -246,11 +259,12 @@ function huDollarCompare_(member, read) {
     if (String(x.currency || '').toUpperCase() === 'KRW' && avg > 0) {
       var fx = huUsdKrw_(); avg = avg / fx; how = (how ? how + ' · ' : '') + '원화 ÷ 환율 ' + Math.round(fx);
     }
-    // 티커: 화면 값 → 지금 목록의 이름과 같거나 비슷한 종목
+    // 티커: 화면 값 → 토스_보유 · 1달러 탭 이름과 같거나 비슷한 종목
     var t = huTicker_(x.ticker);
+    if (t === 'USD') return;
     if (!t) {
       var k = huNorm_(x.name), best = null, bestS = 0;
-      cur.rows.forEach(function (r) {
+      known.forEach(function (r) {
         var s = (huNorm_(r.name) === k || r.ticker === k) ? 1 : huDice_(k, huNorm_(r.name));
         if (s > bestS) { bestS = s; best = r; }
       });
@@ -261,11 +275,14 @@ function huDollarCompare_(member, read) {
 
   var rows = [], seen = {};
   Object.keys(parsed).forEach(function (k) {
-    var p = parsed[k], c = cur.byKey[k] || null;
-    if (c) { p.name = c.name; seen[c.key] = true; }
+    var p = parsed[k], c = cur.byKey[k] || null, o = one.byKey[k] || null;
+    if (c || o) p.name = (c || o).name;
+    if (c) seen[c.key] = true;
     if (c && p.how && c.avg > 0 && Math.abs(p.avg - c.avg) / c.avg < 0.005) { p.avg = c.avg; p.how = ''; } // 계산 평단 반올림 오차
-    var status = !c ? (p.code ? 'new' : 'needTicker') : ((Math.abs(c.qty - p.qty) > 1e-6 || Math.abs(c.avg - p.avg) >= 0.005) ? 'change' : 'same');
-    rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status, stock: true, usd: true, curKey: c ? c.key : null,
+    // 토스_보유 기준 비교. 같아도 1달러 탭 값이 다르면 '변경'으로 (두 탭을 맞춤)
+    var diff = function (r) { return Math.abs(r.qty - p.qty) > 1e-6 || (p.avg > 0 && Math.abs(r.avg - p.avg) >= 0.005); };
+    var status = !c ? (p.code ? 'new' : 'needTicker') : ((diff(c) || (o && diff(o))) ? 'change' : 'same');
+    rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status, stock: true, usd: true, curKey: c ? c.key : null, oneDollar: !!o,
       oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? c.avg : null, newAvg: p.avg, avgHow: p.how });
   });
   var missing = cur.rows.filter(function (c) { return c.qty > 0 && !seen[c.key]; })
@@ -277,33 +294,50 @@ function huDollarCompare_(member, read) {
 
 // huApply_ 안(잠금 · 확인 번호 처리 뒤)에서 부름
 function huDollarApply_(member, saved, pick, removeMissing, edits) {
-  var cur = huDollarCurrent_(member), sh = cur.sheet, log = [];
+  var cur = huTabRows_(member, HU_TOSS_LAYOUT), one = huTabRows_(member, HU_DOLLAR_LAYOUT), sh = cur.sheet, log = [];
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
   saved.rows.forEach(function (r) {
     var e = edits[r.key];
     if (!e) return;
     if (e.qty !== null && e.qty !== '' && isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty * 1e6) / 1e6;
-    if (e.ticker && !r.curKey) { var tk = huTicker_(e.ticker); if (tk && !/^\d/.test(tk)) { r.code = tk; if (r.status === 'needTicker') r.status = 'new'; } }
+    if (e.ticker && !r.curKey) { var tk = huTicker_(e.ticker); if (tk && !/^\d/.test(tk) && tk !== 'USD') { r.code = tk; if (r.status === 'needTicker') r.status = 'new'; } }
     if (isFinite(e.avg) && e.avg > 0) r.newAvg = huRound2_(e.avg);
     if (r.status === 'same' && (r.newQty !== r.oldQty || r.newAvg !== r.oldAvg)) r.status = 'change';
   });
+  // 1달러 탭: 그 멤버 · 티커 줄이 이미 있을 때만 맞춤
+  var syncOne = function (ticker, qty, avg) {
+    var o = one.byKey['T_' + ticker];
+    if (!o || (Math.abs(o.qty - qty) <= 1e-6 && !(avg > 0 && Math.abs(o.avg - avg) >= 0.005))) return;
+    one.sheet.getRange(o.row, 5).setValue(qty);
+    if (avg > 0) one.sheet.getRange(o.row, 8).setValue(avg);
+    log.push('1달러 탭 ' + ticker + ' 맞춤');
+  };
   var chosen = saved.rows.filter(function (r) { return (r.status === 'change' || r.status === 'new') && (!pick || pick.indexOf(r.key) >= 0); });
   chosen.forEach(function (r) {
     var c = cur.byKey[r.curKey || ('T_' + r.code)];
     if (c) {
-      sh.getRange(c.row, 5).setValue(r.newQty);
-      if (r.newAvg > 0) sh.getRange(c.row, 8).setValue(r.newAvg);
-      log.push(c.ticker + ' ' + c.qty + '→' + r.newQty + '주' + (r.newAvg > 0 && r.newAvg !== c.avg ? ' · 평단 $' + r.newAvg : ''));
+      sh.getRange(c.row, 4).setValue(r.newQty);
+      if (r.newAvg > 0) sh.getRange(c.row, 5).setValue(r.newAvg);
+      sh.getRange(c.row, 7).setValue(today);
+      if (Math.abs(c.qty - r.newQty) > 1e-6 || (r.newAvg > 0 && r.newAvg !== c.avg))
+        log.push(c.ticker + ' ' + c.qty + '→' + r.newQty + '주' + (r.newAvg > 0 && r.newAvg !== c.avg ? ' · 평단 $' + r.newAvg : ''));
+      syncOne(c.ticker, r.newQty, r.newAvg);
     } else {
       var row = cur.lastRow + 1; cur.lastRow = row;
-      sh.getRange(row, 1, 1, 8).setValues([[member, r.code, huSafe_(r.name), '', r.newQty, 0, '=IFERROR(GOOGLEFINANCE($B' + row + ',"price"), 0)', r.newAvg || '']]);
+      sh.getRange(row, 1, 1, 7).setValues([[member, r.code, huSafe_(r.name), r.newQty, r.newAvg || '', '=IFERROR(GOOGLEFINANCE($B' + row + ',"price"),0)', today]]);
       cur.byKey['T_' + r.code] = { row: row, ticker: r.code, qty: r.newQty, avg: r.newAvg };
       log.push('+ ' + r.code + ' ' + r.newQty + '주');
+      syncOne(r.code, r.newQty, r.newAvg);
     }
   });
   if (removeMissing) {
     saved.missing.forEach(function (m) {
       var c = cur.byKey[m.key];
-      if (c && (!pick || pick.indexOf(m.key) >= 0)) { sh.getRange(c.row, 5).setValue(0); log.push(c.ticker + ' ' + c.qty + '→0주'); }
+      if (c && (!pick || pick.indexOf(m.key) >= 0)) {
+        sh.getRange(c.row, 4).setValue(0); sh.getRange(c.row, 7).setValue(today);
+        log.push(c.ticker + ' ' + c.qty + '→0주');
+        syncOne(c.ticker, 0, 0);
+      }
     });
   }
   huLog_(member, log.map(function (s) { return '[토스] ' + s; }));

@@ -83,7 +83,8 @@ function computeLookThrough(user) {
         const krw = it.curUsd * it.qty * (user.fx || 0);
         if (!(krw > 0)) return;
         total += krw;
-        add(lookThroughKey(it.ticker, it.label), it.label || it.ticker, it.ticker, krw, '달러 자산');
+        if (it.cash) add('CASH', '현금·기타', '', krw, '달러 예수금');
+        else add(lookThroughKey(it.ticker, it.label), it.label || it.ticker, it.ticker, krw, '달러 자산');
     });
     const list = Object.values(agg).sort((a, b) => b.amount - a.amount);
     return { list: list, total: total, coveredPct: total > 0 ? covered / total * 100 : 0, missing: missing };
