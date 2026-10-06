@@ -43,6 +43,13 @@
         "etf_url_autofill.gs": {}
       }
     },
+    "toss": {
+      "label": "토스뱅크_동진_자동화시스템 (미국 배당 GET_DIVIDENDS)",
+      "secret": "GAS_ID_TOSS",
+      "enabled": false,
+      "webapp": false,
+      "files": {}
+    },
     "upload": {
       "label": "자동가져오기 (잔고 캡처 웹앱)",
       "secret": "GAS_ID_UPLOAD",
