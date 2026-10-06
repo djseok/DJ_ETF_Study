@@ -3,6 +3,8 @@
 //
 //   node tools/gas_deploy.js check    : 편집기 코드와 저장소 코드 비교만 (아무것도 바꾸지 않음)
 //   node tools/gas_deploy.js deploy   : enabled 인 프로젝트 중 달라진 곳만 올림 (+ 웹 앱은 새 버전으로)
+//   node tools/gas_deploy.js legacy   : 편집기에만 있는 파일이 어디서 쓰이는지 점검 (함수 이름만 로그) + 내용은 내 Google Drive 에 백업 파일로
+//   node tools/gas_deploy.js remove   : REMOVE_FILES(쉼표)에 적은 '편집기에만 있는 파일'을 지움. 지우기 전 프로젝트 버전(스냅숏)을 먼저 만들어 편집기 '프로젝트 기록'에서 되살릴 수 있음
 //
 // 안전장치
 //   · 편집기에만 있는 파일, appsscript.json(권한·시간대·웹앱 설정)은 그대로 둔 채 저장소 파일만 바꿔 끼움
@@ -54,6 +56,33 @@ function topLevelNames(src) {
   let m;
   while ((m = re.exec(normalize(src)))) names.push(m[1]);
   return names;
+}
+
+// 편집기에만 있는 파일(extra)의 함수가 어디서 쓰이는지: 다른 파일에서 이름으로 부르는지, 트리거 등록 문자열에 있는지, 특수 함수인지
+const SPECIAL_FNS = ['onOpen', 'onEdit', 'onChange', 'onInstall', 'onSelectionChange', 'onFormSubmit', 'doGet', 'doPost'];
+function stripComments(src) {
+  return normalize(src).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
+}
+function legacyUsage(extra, allFiles) {
+  return extra.filter(f => f.type === 'SERVER_JS').map(f => {
+    const fns = topLevelNames(f.source);
+    const others = allFiles.filter(o => o.name !== f.name && o.type === 'SERVER_JS').map(o => ({ name: o.name, src: stripComments(o.source) }));
+    const usedBy = {};
+    fns.forEach(n => {
+      const re = new RegExp('(^|[^\\w$.])' + n.replace(/\$/g, '\\$') + '\\s*\\(|[\'"]' + n.replace(/\$/g, '\\$') + '[\'"]');
+      const hits = others.filter(o => re.test(o.src)).map(o => o.name);
+      if (hits.length) usedBy[n] = hits;
+    });
+    return {
+      name: f.name,
+      lines: normalize(f.source).split('\n').length,
+      fns,
+      special: fns.filter(n => SPECIAL_FNS.includes(n)),
+      custom: (f.source.match(/@customfunction/g) || []).length,
+      triggers: (f.source.match(/newTrigger\(\s*['"]([\w$]+)['"]/g) || []).map(t => t.replace(/.*['"]([\w$]+)['"]/, '$1')),
+      usedBy,
+    };
+  });
 }
 
 // remoteFiles: [{name,type,source}] (편집기), repo: { 'x.gs': source }, cfg: deploy.json 의 프로젝트 하나
@@ -138,6 +167,59 @@ function findInHistory(file, source) {
   return null;
 }
 
+// ── 편집기에만 있는 파일 점검·정리 ─────────────────────────────────────────────
+
+async function legacyReport(token, scriptId, cfg, remoteFiles, plan) {
+  const extra = plan.extra.filter(f => f.type === 'SERVER_JS');
+  if (!extra.length) { say('- 편집기에만 있는 스크립트 없음'); return; }
+  const usage = legacyUsage(extra, remoteFiles);
+  // 최근 실행 기록 (트리거·메뉴·직접 실행). 토큰에 권한이 없으면 건너뜀
+  let runs = null;
+  try {
+    const d = await call(token, 'GET', `/processes:listScriptProcesses?scriptId=${scriptId}&pageSize=200`);
+    runs = {};
+    (d.processes || []).forEach(p => { const k = p.functionName; (runs[k] = runs[k] || []).push(`${p.processType || '?'} ${String(p.startTime || '').slice(0, 10)}`); });
+  } catch (e) { say(`- ℹ️ 실행 기록은 못 읽음 (${e.message.slice(0, 80)})`); }
+  usage.forEach(u => {
+    say(`- 📌 ${u.name} (${u.lines}줄) 함수 ${u.fns.length}개: ${u.fns.join(', ') || '없음'}`);
+    if (u.special.length) say(`  - ⚠️ 시트가 자동으로 부르는 함수: ${u.special.join(', ')}`);
+    if (u.custom) say(`  - ⚠️ 시트 수식에서 쓰는 사용자 함수 표시(@customfunction) ${u.custom}개`);
+    if (u.triggers.length) say(`  - 트리거 등록 코드: ${u.triggers.join(', ')}`);
+    Object.keys(u.usedBy).forEach(n => say(`  - ${n} ← ${u.usedBy[n].join(', ')} 에서 부름`));
+    if (runs) {
+      const hit = u.fns.filter(n => runs[n]);
+      say(hit.length ? `  - 최근 실행: ${hit.map(n => `${n} ${runs[n].length}회 (마지막 ${runs[n][0]})`).join(' · ')}` : '  - 최근 실행 기록 없음');
+    }
+  });
+  // 내용은 공개 로그 대신 내 Google Drive 에만 백업 (drive.file 권한: 이 도구가 만든 파일만 접근)
+  try {
+    const name = `${cfg.label}_편집기전용파일_백업_${new Date().toISOString().slice(0, 10)}.txt`;
+    const text = extra.map(f => `===== ${f.name} =====\n${f.source}`).join('\n\n');
+    const boundary = 'gasbackup' + Date.now();
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, mimeType: 'text/plain' })}\r\n--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${text}\r\n--${boundary}--`;
+    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+    if (!r.ok) throw new Error(String(r.status));
+    say(`- 💾 내용 백업: 내 Google Drive '${name}'`);
+  } catch (e) { say(`- ℹ️ Drive 백업 못 함 (${e.message}) — 지울 때 만드는 프로젝트 버전이 백업 역할`); }
+}
+
+async function removeLegacy(token, scriptId, remoteFiles, plan, names, sha) {
+  const extraNames = plan.extra.filter(f => f.type === 'SERVER_JS').map(f => f.name);
+  const targets = names.filter(n => extraNames.includes(n));
+  names.filter(n => !extraNames.includes(n) && remoteFiles.some(f => f.name === n)).forEach(n => say(`- ⛔ ${n} 은 저장소가 맡은 파일이라 지우지 않음`));
+  if (!targets.length) { say('- 이 프로젝트에는 지울 파일 없음'); return 0; }
+  if (plan.problems.length) { say('🛑 점검 문제가 있어 지우지 않음'); return 1; }
+  const keep = remoteFiles.filter(f => !targets.includes(f.name));
+  const problems = [];
+  keep.filter(f => f.type === 'SERVER_JS').forEach(f => { try { new vm.Script(f.source, { filename: f.name }); } catch (e) { problems.push(`${f.name}: ${e.message}`); } });
+  if (problems.length) { say(`🛑 남는 파일에 문법 오류: ${problems.join(' / ')}`); return 1; }
+  const v = await call(token, 'POST', `/projects/${scriptId}/versions`, { description: `옛 파일 정리 전 백업 (${targets.join(', ')}) GitHub ${sha}` });
+  say(`- 💾 지우기 전 버전 ${v.versionNumber} 만듦 → 편집기 '프로젝트 기록'에서 되살릴 수 있음`);
+  await call(token, 'PUT', `/projects/${scriptId}/content`, { files: keep.map(f => ({ name: f.name, type: f.type, source: f.source })) });
+  say(`- 🗑️ 지움: ${targets.join(', ')}`);
+  return 0;
+}
+
 // ── 실행 ───────────────────────────────────────────────────────────────────
 
 const out = [];
@@ -145,7 +227,9 @@ const say = s => { console.log(s); out.push(s); };
 
 async function main() {
   const mode = process.argv[2];
-  if (!['check', 'deploy'].includes(mode)) { console.error('사용법: node tools/gas_deploy.js check|deploy'); process.exit(2); }
+  if (!['check', 'deploy', 'legacy', 'remove'].includes(mode)) { console.error('사용법: node tools/gas_deploy.js check|deploy|legacy|remove'); process.exit(2); }
+  const removeNames = String(process.env.REMOVE_FILES || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (mode === 'remove' && !removeNames.length) { console.error('REMOVE_FILES 에 지울 편집기 파일 이름을 쉼표로 적어 주세요'); process.exit(2); }
   const config = JSON.parse(fs.readFileSync(path.join(GAS_DIR, 'deploy.json'), 'utf8'));
   const repo = {};
   fs.readdirSync(GAS_DIR).filter(f => f.endsWith('.gs')).forEach(f => { repo[f] = fs.readFileSync(path.join(GAS_DIR, f), 'utf8'); });
@@ -185,6 +269,8 @@ async function main() {
       plan.warnings.forEach(w => say(`- ⚠️ ${w}`));
       plan.problems.forEach(p => say(`- ❌ ${p}`));
 
+      if (mode === 'legacy') { await legacyReport(token, scriptId, cfg, content.files || [], plan); continue; }
+      if (mode === 'remove') { failed += await removeLegacy(token, scriptId, content.files || [], plan, removeNames, sha); continue; }
       if (mode === 'check') continue;
       if (!cfg.enabled) { say('⏸️ enabled: false — 점검만 함'); continue; }
       if (plan.problems.length) { failed++; say('🛑 위 문제 때문에 올리지 않음'); continue; }
@@ -225,4 +311,4 @@ if (require.main === module) {
   }, e => { console.error('❌', e.message); process.exit(1); });
 }
 
-module.exports = { normalize, lineDiff, similarity, topLevelNames, planProject, main };
+module.exports = { normalize, lineDiff, similarity, topLevelNames, planProject, legacyUsage, main };

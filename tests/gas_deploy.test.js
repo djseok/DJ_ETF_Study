@@ -3,7 +3,7 @@
 //  · 프로젝트별로 합쳤을 때 같은 이름 선언이 두 번 없는지
 //  · 편집기에만 있는 파일·appsscript.json 은 그대로 두고, 이름이 없는 파일은 올리지 않는지
 const fs = require('fs'), path = require('path'), assert = require('assert');
-const { planProject, lineDiff, topLevelNames } = require('../tools/gas_deploy.js');
+const { planProject, lineDiff, topLevelNames, legacyUsage } = require('../tools/gas_deploy.js');
 
 const config = JSON.parse(fs.readFileSync('gas/deploy.json', 'utf8'));
 const repo = {};
@@ -63,5 +63,13 @@ assert(plan.problems.some(p => p.startsWith('문법 오류')));
 
 assert.deepStrictEqual(lineDiff('a\nb\nc', 'a\nc\nd'), { add: 1, del: 1 });
 assert.deepStrictEqual(topLevelNames('function f() {\n  const x = 1;\n}\nconst Y = 2;\nasync function g() {}'), ['f', 'Y', 'g']);
+
+// 편집기에만 있는 파일 점검: 다른 파일에서 부르는지(주석·메서드 호출 제외), 특수 함수·사용자 함수·트리거 등록
+const lg = legacyUsage([{ name: 'old', type: 'SERVER_JS', source: 'function onOpen() {}\n/** @customfunction */\nfunction ETFX(a) { return a; }\nfunction helper() {}\nfunction inst() { ScriptApp.newTrigger("helper"); }' }],
+  [{ name: 'old', type: 'SERVER_JS', source: 'function helper() {}' }, { name: 'new', type: 'SERVER_JS', source: 'function z() { helper(); }\n// ETFX(1)\nvar q = obj.ETFX(2);' }])[0];
+assert.deepStrictEqual(lg.special, ['onOpen']);
+assert.strictEqual(lg.custom, 1);
+assert.deepStrictEqual(lg.triggers, ['helper']);
+assert.deepStrictEqual(lg.usedBy, { helper: ['new'] });
 
 console.log('✅ Apps Script 배포 설정', Object.keys(config.projects).length + '개 프로젝트 ·', Object.keys(owner).length + '개 파일');

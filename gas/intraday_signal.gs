@@ -31,6 +31,8 @@ function removeIntradayTrigger() {
 }
 
 function intradayCheck_() {
+  // 자동 배포 실패 알림 (deploy_watch.gs, 30분에 한 번만 확인 · 실패해도 장중 신호에는 영향 없음)
+  if (typeof dwCheckDeploy_ === 'function') { try { dwCheckDeploy_(false); } catch (e) { Logger.log('⚠️ 배포 확인 실패: ' + e); } }
   var now = new Date();
   var dow = Number(Utilities.formatDate(now, 'Asia/Seoul', 'u'));
   var hm = Utilities.formatDate(now, 'Asia/Seoul', 'HHmm');
