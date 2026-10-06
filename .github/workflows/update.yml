@@ -16,7 +16,7 @@ jobs:
       - name: ⚙️ 파이썬 환경 세팅
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: 📦 V17.1 크롤링 필수 라이브러리 설치
         run: pip install requests pandas lxml html5lib beautifulsoup4 urllib3

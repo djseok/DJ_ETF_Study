@@ -12,7 +12,7 @@ function taxNorm(s) { return String(s || '').replace(/\s+/g, '').toUpperCase().r
 
 function loadDivHistory() {
     if (!divHistoryPromise) {
-        divHistoryPromise = fetch(sheetUrl('DIV_HISTORY')).then(function (r) { return r.text(); }).then(function (t) {
+        divHistoryPromise = fetch(sheetUrl('DIV_HISTORY')).then(function (r) { return sheetCsvText(r, '배당이력'); }).then(function (t) {
             var m = parseCsvToMatrix(t), map = {};
             m.forEach(function (r) {
                 if (!r || !r[0] || !r[1]) return;
@@ -25,7 +25,7 @@ function loadDivHistory() {
             });
             divHistoryByKey = map;
             return map;
-        }).catch(function (e) { console.warn('배당이력(과세표준) 로드 실패', e); divHistoryByKey = {}; return {}; });
+        }).catch(function (e) { showLoadError(e); divHistoryByKey = {}; return {}; });
     }
     return divHistoryPromise;
 }
