@@ -4,7 +4,7 @@
     "manage": {
       "label": "관리시트",
       "secret": "GAS_ID_MANAGE",
-      "enabled": false,
+      "enabled": true,
       "webapp": false,
       "files": {
         "etf_holdings_sync.gs": {},
@@ -19,7 +19,7 @@
     "diary": {
       "label": "개인일기장 (배당 입력 폼)",
       "secret": "GAS_ID_DIARY",
-      "enabled": false,
+      "enabled": true,
       "webapp": false,
       "files": {
         "dividend_form.gs": { "remote": "Code" },
@@ -30,7 +30,7 @@
     "master": {
       "label": "마스터시트 (배당 봇 웹앱)",
       "secret": "GAS_ID_MASTER",
-      "enabled": false,
+      "enabled": true,
       "webapp": true,
       "files": {
         "dividend_webhook.gs": { "remote": "Code" },
@@ -41,7 +41,7 @@
     "upload": {
       "label": "자동가져오기 (잔고 캡처 웹앱)",
       "secret": "GAS_ID_UPLOAD",
-      "enabled": false,
+      "enabled": true,
       "webapp": true,
       "files": {
         "holdings_upload.gs": {}
