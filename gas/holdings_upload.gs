@@ -5,6 +5,8 @@
  *   ① Gemini 가 종목명 · 보유수량 · 평균단가를 읽고
  *   ② 관리시트 MasterData 의 정식 이름으로 맞춘 뒤 지금 보유 내역과 비교한 '바뀔 내용'을 보여주고
  *   ③ 멤버가 확인을 누르면 개인일기장 '{이름}포토폴리오' 탭 B·D·E 열(종목·평단·수량)을 고칩니다.
+ *   · 계좌를 '토스 미국주식(달러)'로 고르면 '1달러 마스터 포토폴리오' 탭 E·H 열(수량·평단 $)만 고치고,
+ *     {이름}포토폴리오 · D_실적기록 · D_기록은 건드리지 않습니다.
  *   · 이미지는 저장하지 않습니다 (인식 후 버림). 반영 기록만 관리시트 '잔고_업로드_기록' 탭에 남깁니다.
  *   · '마스터 포토폴리오' 탭은 건드리지 않습니다 (QUERY 가 멤버 탭을 자동으로 모음).
  *
@@ -21,6 +23,7 @@
 var HU_DIARY_ID = '1nVnpen14YDDWRxODwt36HVlG7GId-zKzFIyQYn9p7vY';   // 동진ETF공부_개인일기장
 var HU_MANAGE_ID = '1r91WUqYvIfQ1jrehEKiBPUbO7a0iH7iIl3tgNsZoKRc';  // 관리시트
 var HU_LOG_TAB = '잔고_업로드_기록';
+var HU_DOLLAR_TAB = '1달러 마스터 포토폴리오';  // 토스 미국주식(달러): A 이름 · B 티커 · C 종목명 · D 유형 · E 수량 · F 일일모으기 · G 현재가 · H 평단$
 // 전략 실적 기록: 이 멤버가 캡처를 반영하면 개인일기장 해당 탭에 그달 계좌 상태를 한 줄 남김 (D 전략)
 var HU_STRATEGY_TABS = { D: { log: 'D_실적기록', assume: 'D_가정', plan: 'D_매수계획', order: 'D_기록' } };
 
@@ -31,10 +34,11 @@ function doPost(e) {
     var req = JSON.parse(e.postData.contents);
     var member = String(req.member || '').trim();
     huCheckPin_(member, String(req.pin || ''));
-    if (req.action === 'parse') return huJson_(huParse_(member, req.images || []));
+    var toss = req.account === 'toss'; // 토스 미국주식(달러) → 1달러 탭. 반영(apply)은 비교 때 저장한 계좌를 따름
+    if (req.action === 'parse') return huJson_(toss ? huDollarCompare_(member, huGemini_(req.images || [], huDollarNames_(member), true)) : huParse_(member, req.images || []));
     // 휴대폰에서 끊기지 않게: 사진 1장씩 읽고(read) → 마지막에 모아서 비교(compare)
-    if (req.action === 'read') return huJson_({ ok: true, items: huRead_(req.image) });
-    if (req.action === 'compare') return huJson_(huCompare_(member, req.items || []));
+    if (req.action === 'read') return huJson_({ ok: true, items: toss ? huGemini_([req.image], huDollarNames_(member), true) : huRead_(req.image) });
+    if (req.action === 'compare') return huJson_(toss ? huDollarCompare_(member, req.items || []) : huCompare_(member, req.items || []));
     if (req.action === 'apply') return huJson_(huApply_(member, req.token, req.pick || null, !!req.removeMissing, req.edits || {}));
     if (req.action === 'current') return huJson_({ ok: true, holdings: huCurrent_(member).rows });
     throw new Error('알 수 없는 요청');
@@ -78,7 +82,7 @@ function huSafe_(s) {
 // ① 인식 + 비교
 // ---------------------------------------------------------
 function huParse_(member, images) {
-  if (!images.length) throw new Error('이미지를 올려 주세요');
+  if (!images || !images.length) throw new Error('이미지를 올려 주세요');
   if (images.length > 4) throw new Error('한 번에 4장까지 올릴 수 있어요');
   var known = huKnownEtfs_();
   return huCompare_(member, huGemini_(images, Object.keys(known).map(function (k) { return known[k].name; })), known);
@@ -137,13 +141,22 @@ function huCompare_(member, read, known) {
 }
 
 // Gemini 로 잔고 화면 읽기 → [{name, quantity, avg_price}]
-function huGemini_(images, knownNames) {
+function huGemini_(images, knownNames, dollar) {
+  if (!images || !images.length || !images[0]) throw new Error('이미지를 올려 주세요');
+  if (images.length > 4) throw new Error('한 번에 4장까지 올릴 수 있어요');
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('GEMINI_API_KEY');
   if (!key) throw new Error('GEMINI_API_KEY 가 설정되지 않았어요');
   // 모델 이름이 바뀌어도 동작하도록: 속성 값 → 최신 별칭 → 알려진 이름 순서로 시도 (404 면 다음)
   var models = [props.getProperty('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-flash'].filter(Boolean);
-  var parts = [{ text:
+  var parts = [{ text: dollar ?
+    '토스증권 앱의 미국 주식/ETF 잔고 화면 캡처입니다. 화면에 보이는 보유 종목마다 아래 값을 읽어 주세요.\n' +
+    '- name 종목명, ticker 미국 티커(예 MSTY, MRNY. 화면에 없으면 아래 목록에서 같은 종목의 티커, 확실하지 않으면 빈칸)\n' +
+    '- quantity 보유수량(주, 소수점 그대로), avg_price 1주 평균단가(구매가)\n' +
+    '- buy_amount 매입금액(투자원금), eval_amount 평가금액, profit 평가손익(손실이면 음수)\n' +
+    '- 금액이 달러($)로 보이면 달러 값과 currency=USD, 원화(원)로만 보이면 원화 값과 currency=KRW. 두 가지가 다 보이면 달러\n' +
+    '- 화면에 없는 값은 0. 수익률(%)·현재가는 넣지 않기\n- 숫자는 쉼표 없이 숫자로\n- 잘려서 일부만 보이는 줄은 빼기\n' +
+    '- 지금 관리 중인 종목 (티커 · 이름):\n' + knownNames.join(', ') :
     '한국 증권사 앱의 주식/ETF 잔고 화면 캡처입니다. 화면에 보이는 보유 종목마다 아래 값을 읽어 주세요 (원 단위).\n' +
     '- name 종목명, quantity 보유수량(주), avg_price 평균단가(매입단가·매입가)\n' +
     '- buy_amount 매입금액(투자원금·매수금액), eval_amount 평가금액, profit 평가손익(손실이면 음수)\n' +
@@ -194,6 +207,110 @@ function huGemini_(images, knownNames) {
 }
 
 // ---------------------------------------------------------
+// 토스 미국주식(달러) → '1달러 마스터 포토폴리오' (수량 · 평단은 달러 그대로, 원화 탭 · D 실적기록은 안 건드림)
+// ---------------------------------------------------------
+function huDollarCurrent_(member) {
+  var sh = SpreadsheetApp.openById(HU_DIARY_ID).getSheetByName(HU_DOLLAR_TAB);
+  if (!sh) throw new Error(HU_DOLLAR_TAB + ' 탭이 없어요');
+  var v = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 8).getValues();
+  var rows = [], byKey = {}, lastRow = 1;
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]).trim()) lastRow = i + 1; // J~L(누적배당금) 줄은 세지 않음 → A열 기준
+    var t = huTicker_(v[i][1]);
+    if (String(v[i][0]).trim() !== member || !t) continue;
+    var r = { row: i + 1, key: 'T_' + t, ticker: t, name: String(v[i][2]).trim() || t, qty: huNum_(v[i][4]), avg: huNum_(v[i][7]) };
+    rows.push(r); byKey[r.key] = r;
+  }
+  return { sheet: sh, rows: rows, byKey: byKey, lastRow: lastRow };
+}
+
+function huDollarNames_(member) {
+  return huDollarCurrent_(member).rows.map(function (r) { return r.ticker + ' · ' + r.name; });
+}
+
+function huRound2_(v) { return Math.round(v * 100) / 100; }
+
+function huDollarCompare_(member, read) {
+  var cur = huDollarCurrent_(member);
+  read = (read || []).slice(0, 200);
+  var parsed = {};
+  read.forEach(function (x) {
+    var qty = huNum_(x.quantity), avg = huNum_(x.avg_price), how = '';
+    if (!x.name || !(qty >= 0)) return;
+    if (!(avg > 0) && qty > 0) {
+      var buy = huNum_(x.buy_amount), ev = huNum_(x.eval_amount), pl = huNum_(x.profit);
+      if (buy > 0) { avg = buy / qty; how = '매입금액 ÷ 수량'; }
+      else if (ev > 0 && pl !== 0) { avg = (ev - pl) / qty; how = '(평가금액 − 손익) ÷ 수량'; }
+    }
+    // 원화로만 보이는 화면이면 오늘 환율로 나눠 달러로
+    if (String(x.currency || '').toUpperCase() === 'KRW' && avg > 0) {
+      var fx = huUsdKrw_(); avg = avg / fx; how = (how ? how + ' · ' : '') + '원화 ÷ 환율 ' + Math.round(fx);
+    }
+    // 티커: 화면 값 → 지금 목록의 이름과 같거나 비슷한 종목
+    var t = huTicker_(x.ticker);
+    if (!t) {
+      var k = huNorm_(x.name), best = null, bestS = 0;
+      cur.rows.forEach(function (r) {
+        var s = (huNorm_(r.name) === k || r.ticker === k) ? 1 : huDice_(k, huNorm_(r.name));
+        if (s > bestS) { bestS = s; best = r; }
+      });
+      if (best && bestS >= 0.6) t = best.ticker;
+    }
+    parsed[t ? 'T_' + t : 'X_' + x.name] = { raw: huSafe_(x.name), name: huSafe_(String(x.name).trim()), code: t, qty: qty, avg: huRound2_(avg), how: how };
+  });
+
+  var rows = [], seen = {};
+  Object.keys(parsed).forEach(function (k) {
+    var p = parsed[k], c = cur.byKey[k] || null;
+    if (c) { p.name = c.name; seen[c.key] = true; }
+    if (c && p.how && c.avg > 0 && Math.abs(p.avg - c.avg) / c.avg < 0.005) { p.avg = c.avg; p.how = ''; } // 계산 평단 반올림 오차
+    var status = !c ? (p.code ? 'new' : 'needTicker') : ((Math.abs(c.qty - p.qty) > 1e-6 || Math.abs(c.avg - p.avg) >= 0.005) ? 'change' : 'same');
+    rows.push({ key: k, raw: p.raw, name: p.name, code: p.code, status: status, stock: true, usd: true, curKey: c ? c.key : null,
+      oldQty: c ? c.qty : null, newQty: p.qty, oldAvg: c ? c.avg : null, newAvg: p.avg, avgHow: p.how });
+  });
+  var missing = cur.rows.filter(function (c) { return c.qty > 0 && !seen[c.key]; })
+    .map(function (c) { return { key: c.key, name: c.ticker + ' ' + c.name, qty: c.qty }; });
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put('HU_' + token, JSON.stringify({ member: member, account: 'toss', rows: rows, missing: missing }), 900);
+  return { ok: true, account: 'toss', token: token, rows: rows, missing: missing };
+}
+
+// huApply_ 안(잠금 · 확인 번호 처리 뒤)에서 부름
+function huDollarApply_(member, saved, pick, removeMissing, edits) {
+  var cur = huDollarCurrent_(member), sh = cur.sheet, log = [];
+  saved.rows.forEach(function (r) {
+    var e = edits[r.key];
+    if (!e) return;
+    if (e.qty !== null && e.qty !== '' && isFinite(e.qty) && e.qty >= 0) r.newQty = Math.round(e.qty * 1e6) / 1e6;
+    if (e.ticker && !r.curKey) { var tk = huTicker_(e.ticker); if (tk && !/^\d/.test(tk)) { r.code = tk; if (r.status === 'needTicker') r.status = 'new'; } }
+    if (isFinite(e.avg) && e.avg > 0) r.newAvg = huRound2_(e.avg);
+    if (r.status === 'same' && (r.newQty !== r.oldQty || r.newAvg !== r.oldAvg)) r.status = 'change';
+  });
+  var chosen = saved.rows.filter(function (r) { return (r.status === 'change' || r.status === 'new') && (!pick || pick.indexOf(r.key) >= 0); });
+  chosen.forEach(function (r) {
+    var c = cur.byKey[r.curKey || ('T_' + r.code)];
+    if (c) {
+      sh.getRange(c.row, 5).setValue(r.newQty);
+      if (r.newAvg > 0) sh.getRange(c.row, 8).setValue(r.newAvg);
+      log.push(c.ticker + ' ' + c.qty + '→' + r.newQty + '주' + (r.newAvg > 0 && r.newAvg !== c.avg ? ' · 평단 $' + r.newAvg : ''));
+    } else {
+      var row = cur.lastRow + 1; cur.lastRow = row;
+      sh.getRange(row, 1, 1, 8).setValues([[member, r.code, huSafe_(r.name), '', r.newQty, 0, '=IFERROR(GOOGLEFINANCE($B' + row + ',"price"), 0)', r.newAvg || '']]);
+      cur.byKey['T_' + r.code] = { row: row, ticker: r.code, qty: r.newQty, avg: r.newAvg };
+      log.push('+ ' + r.code + ' ' + r.newQty + '주');
+    }
+  });
+  if (removeMissing) {
+    saved.missing.forEach(function (m) {
+      var c = cur.byKey[m.key];
+      if (c && (!pick || pick.indexOf(m.key) >= 0)) { sh.getRange(c.row, 5).setValue(0); log.push(c.ticker + ' ' + c.qty + '→0주'); }
+    });
+  }
+  huLog_(member, log.map(function (s) { return '[토스] ' + s; }));
+  return { ok: true, account: 'toss', changed: log.length, log: log, strategy: '' };
+}
+
+// ---------------------------------------------------------
 // ② 반영
 // ---------------------------------------------------------
 function huApply_(member, token, pick, removeMissing, edits) {
@@ -205,6 +322,7 @@ function huApply_(member, token, pick, removeMissing, edits) {
     var saved = JSON.parse(cache.get('HU_' + token) || 'null');
     if (!saved || saved.member !== member) throw new Error('확인 시간이 지났거나 이미 반영했어요. 다시 올려 주세요 (15분)');
     cache.remove('HU_' + token);
+    if (saved.account === 'toss') return huDollarApply_(member, saved, pick, removeMissing, edits);
     var planBefore = null;
     try { planBefore = huReadPlan_(member); } catch (err) { planBefore = null; } // 반영 전 이번 달 계획 (반영 후엔 수식이 다시 계산되므로 먼저 읽음)
     var cur = huCurrent_(member), sh = cur.sheet, log = [];
