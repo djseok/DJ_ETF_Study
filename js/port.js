@@ -238,6 +238,7 @@ function renderPortfolioView(rankArray) {
     const cardsCont = document.getElementById('personalCardsContainer');
     if(rankCont) rankCont.innerHTML = rankHtml;
     if(cardsCont) cardsCont.innerHTML = cardsHtml;
+    if (typeof renderEtfLinkCheck === 'function') renderEtfLinkCheck(rankArray);
 }
 
 // 메인 화면 보기 선택 (전체 / 멤버 한 명)
