@@ -4,11 +4,11 @@
     "manage": {
       "label": "관리시트",
       "secret": "GAS_ID_MANAGE",
-      "enabled": false,
+      "enabled": true,
       "webapp": false,
       "files": {
         "etf_holdings_sync.gs": {},
-        "premarket_alert.gs": {},
+        "premarket_alert.gs": { "remote": "premarket_alert.gs" },
         "intraday_signal.gs": {},
         "weekly_report.gs": {},
         "dividend_schedule_sync.gs": {},
@@ -19,29 +19,29 @@
     "diary": {
       "label": "개인일기장 (배당 입력 폼)",
       "secret": "GAS_ID_DIARY",
-      "enabled": false,
+      "enabled": true,
       "webapp": false,
       "files": {
-        "dividend_form.gs": {},
-        "dividend_autolog.gs": {},
-        "d_strategy_calculator.gs": {}
+        "dividend_form.gs": { "remote": "Code" },
+        "dividend_autolog.gs": { "remote": "dividend_autolog.gs" },
+        "d_strategy_calculator.gs": { "remote": "D_전략_매수계산기" }
       }
     },
     "master": {
       "label": "마스터시트 (배당 봇 웹앱)",
       "secret": "GAS_ID_MASTER",
-      "enabled": false,
+      "enabled": true,
       "webapp": true,
       "files": {
         "dividend_webhook.gs": { "remote": "Code" },
-        "webhook_security.gs": {},
+        "webhook_security.gs": { "remote": "webhook_security.gs" },
         "etf_url_autofill.gs": {}
       }
     },
     "upload": {
       "label": "자동가져오기 (잔고 캡처 웹앱)",
       "secret": "GAS_ID_UPLOAD",
-      "enabled": false,
+      "enabled": true,
       "webapp": true,
       "files": {
         "holdings_upload.gs": {}
