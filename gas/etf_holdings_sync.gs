@@ -38,8 +38,13 @@ var HS_DEFAULT_PARAMS = { buy: -1.5, sell: 2, beta: 1 }; // 새 ETF 의 기본 �
 var HS_CASH_RE = /(현금|예금|증거금|미수|미지급|원천세|분배금|콜론|\bCASH\b|\bRP\b)/i;
 var HS_DERIV_RE = /(선물|옵션|위클리|FUTURE|\bFUT\b|E-?MINI|\bCALL\b|\bPUT\b|\bINDEX$|\s[CP]\s\d{3,}|\d{2}\/\d{2}\/\d{2,4})/i;
 
-function previewHoldings() { runHoldings_(true); }
-function syncHoldings() { runHoldings_(false); if (typeof wrMarkRun_ === 'function') wrMarkRun_('holdings'); }
+function previewHoldings() { runHoldings_(true); hsDollarTickers_(true); }
+function syncHoldings() { runHoldings_(false); hsDollarTickers_(false); if (typeof wrMarkRun_ === 'function') wrMarkRun_('holdings'); }
+// 1달러 프로젝트 새 미국 티커 → 토스뱅크 시트 관리종목·배당 탭 (dollar_ticker_sync.gs, 실패해도 보유종목 갱신에는 영향 없음)
+function hsDollarTickers_(dryRun) {
+  if (typeof dtSync_ !== 'function') return;
+  try { dtSync_(dryRun); } catch (e) { Logger.log('⚠️ 1달러 새 티커 등록 실패: ' + e); }
+}
 
 function installHoldingsTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
