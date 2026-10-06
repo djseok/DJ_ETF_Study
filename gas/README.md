@@ -180,6 +180,8 @@ GitHub Actions `Tests` 가 PR 마다 `tests/parity.test.js` 로 확인하니, �
 4. 배포 → 새 배포 → 웹 앱 · 실행: 나 · 액세스: 모든 사용자 → URL 을 `js/common.js` 의 `APP_CONFIG.UPLOAD_URL` 에 입력
 5. 멤버에게 `https://djseok.github.io/DJ_ETF_Study/upload.html` 과 각자 비밀번호 전달
 
+**토스 미국주식(달러)**: 1단계에서 계좌를 '토스 미국주식'으로 고르면 개인일기장 `1달러 마스터 포토폴리오` 탭에서 그 멤버 줄의 E(수량)·H(평단 $)만 고칩니다. 새 티커는 A~H에 새 줄로 추가(G = GOOGLEFINANCE 현재가, D 유형·F 일일모으기는 비워 둠)되고, 다음 날 06시 `dollar_ticker_sync` 가 토스뱅크 시트에 등록합니다. `{이름}포토폴리오` · `D_실적기록` · `D_기록` 은 건드리지 않아요. 원화로만 보이는 화면이면 평단을 오늘 환율로 나눠 달러로 바꿉니다. 업로드 서버가 예전 버전이면 페이지가 토스 반영을 막아요 (Apps Script 다시 배포 필요).
+
 ## 🎯 D 전략 매수 계산기 — `d_strategy_calculator.gs` (개인일기장, 배당 입력 폼 프로젝트)
 
 ISA D 전략(TIGER 미국나스닥100레버리지 418660 60 / RISE 미국테크100데일리고정커버드콜 491620 40)의 이번 달 매수 종목·수량.

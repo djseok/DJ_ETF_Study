@@ -60,6 +60,8 @@
       <div><label for="member">멤버</label><select id="member"><option value="D">D</option><option value="S">S</option><option value="J">J</option></select></div>
       <div><label for="pin">비밀번호</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="멤버 비밀번호"></div>
     </div>
+    <label for="account">계좌</label>
+    <select id="account"><option value="isa">한투 ISA (원화 · 멤버 포토폴리오)</option><option value="toss">토스 미국주식 (달러 · 1달러 포토폴리오)</option></select>
     <label style="font-weight:600"><input type="checkbox" id="remember" style="width:auto"> 이 기기에서 기억하기</label>
   </section>
 
@@ -81,7 +83,7 @@
       <label style="font-weight:700;color:var(--warn)"><input type="checkbox" id="removeMissing" style="width:auto"> 캡처에 없는 종목은 모두 판 것으로 (0주)</label>
       <div class="note" id="missingList"></div>
     </div>
-    <p class="note">체크된 줄만 반영돼요. ETF 가 아닌 개별 종목(국내·미국)도 티커로 들어가요 — '티커 필요'면 티커를 적어 주세요(예: 플래닛 랩스 → PL). 금액은 모두 원화 기준이에요.</p>
+    <p class="note" id="note3">체크된 줄만 반영돼요. ETF 가 아닌 개별 종목(국내·미국)도 티커로 들어가요 — '티커 필요'면 티커를 적어 주세요(예: 플래닛 랩스 → PL). 금액은 모두 원화 기준이에요.</p>
     <button class="primary" id="btnApply">반영하기</button>
     <button class="ghost" id="btnBack">다시 올리기</button>
     <div class="msg" id="msg3"></div>
@@ -107,7 +109,11 @@
   try {
     var saved = JSON.parse(localStorage.getItem('djUploadAuth') || 'null');
     if (saved) { $('member').value = saved.member; $('pin').value = saved.pin; $('remember').checked = true; }
+    if (localStorage.getItem('djUploadAcct') === 'toss') $('account').value = 'toss';
   } catch (e) { }
+  if (qs.get('acct') === 'toss') $('account').value = 'toss';
+  var acct = function () { return $('account').value === 'toss' ? 'toss' : 'isa'; };
+  $('account').addEventListener('change', function () { try { localStorage.setItem('djUploadAcct', acct()); } catch (e) { } });
   if (qs.get('m') && Array.prototype.some.call($('member').options, function (o) { return o.value === qs.get('m'); })) {
     if (!saved || saved.member !== qs.get('m')) { $('member').value = qs.get('m'); if (saved && saved.member !== qs.get('m')) $('pin').value = ''; }
   }
@@ -150,34 +156,43 @@
     return a;
   }
   var fmt = function (v) { return v === null || v === undefined ? '–' : Math.round(v).toLocaleString(); };
+  var fmtQty = function (v) { return v === null || v === undefined ? '–' : (+(+v).toFixed(6)).toLocaleString(undefined, { maximumFractionDigits: 6 }); };
+  var shown = 'isa'; // 3단계 화면이 어느 계좌로 비교한 결과인지
   var TAG = { 'new': ['새 종목', 't-new'], change: ['변경', 't-change'], same: ['같음', 't-same'], unknown: ['모름', 't-unknown'], needTicker: ['티커 필요', 't-unknown'] };
 
   $('btnParse').addEventListener('click', function () {
-    var a = auth();
+    var a = auth(), ac = acct();
     if (!a.pin) { $('msg2').innerHTML = '<span class="err">비밀번호를 넣어 주세요</span>'; return; }
     $('btnParse').disabled = true;
     // 사진을 한 장씩 보내 읽고(휴대폰에서 시간 초과 방지) → 모아서 비교
     var all = [], i = 0;
     var next = function () {
-      if (i >= images.length) return call({ action: 'compare', member: a.member, pin: a.pin, items: all });
+      if (i >= images.length) return call({ action: 'compare', account: ac, member: a.member, pin: a.pin, items: all });
       $('msg2').textContent = '읽는 중… ' + (i + 1) + ' / ' + images.length + '장 (장당 10~20초)';
-      return call({ action: 'read', member: a.member, pin: a.pin, image: images[i] }).then(function (j) { all = all.concat(j.items || []); i++; return next(); });
+      return call({ action: 'read', account: ac, member: a.member, pin: a.pin, image: images[i] }).then(function (j) { all = all.concat(j.items || []); i++; return next(); });
     };
     // 서버가 아직 예전 버전이면(1장씩 읽기 없음) 한 번에 보내는 방식으로 자동 전환
     next().catch(function (e) {
       if (!/알 수 없는 요청/.test(e.message)) throw e;
       $('msg2').textContent = '읽는 중… (10~40초)';
-      return call({ action: 'parse', member: a.member, pin: a.pin, images: images });
+      return call({ action: 'parse', account: ac, member: a.member, pin: a.pin, images: images });
     }).then(function (j) {
-      token = j.token;
+      // 업로드 서버가 아직 예전 버전이면 토스 캡처가 원화 포트폴리오로 들어가므로 막음
+      if (ac === 'toss' && j.account !== 'toss') throw new Error('업로드 서버(Apps Script)를 새 버전으로 다시 배포해야 토스 계좌를 쓸 수 있어요');
+      token = j.token; shown = ac;
+      var usd = ac === 'toss';
+      var fmtAvg = function (v) { return v === null || v === undefined ? '–' : (usd ? '$' + (+v).toFixed(2) : fmt(v)); };
+      $('note3').textContent = usd
+        ? "체크된 줄만 반영돼요. '1달러 마스터 포토폴리오'의 수량·평단(달러)만 고치고, 원화 포트폴리오와 D 실적기록은 건드리지 않아요. '티커 필요'면 미국 티커를 적어 주세요(예: MSTY)."
+        : '체크된 줄만 반영돼요. ETF 가 아닌 개별 종목(국내·미국)도 티커로 들어가요 — \'티커 필요\'면 티커를 적어 주세요(예: 플래닛 랩스 → PL). 금액은 모두 원화 기준이에요.';
       $('diff').innerHTML = j.rows.map(function (r) {
         var t = TAG[r.status], can = r.status === 'new' || r.status === 'change' || r.status === 'needTicker';
         // 새 값은 고칠 수 있게 입력칸으로 (여러 증권사 합산 등)
-        var inp = function (cls, v) { return '<input type="text" inputmode="decimal" class="' + cls + '" data-key="' + r.key + '" value="' + (v === null || v === undefined ? '' : (cls === 'eqty' ? +(+v).toFixed(6) : Math.round(v))) + '" style="width:84px;padding:6px;font-size:14px;text-align:right"' + (can ? '' : ' disabled') + '>'; };
+        var inp = function (cls, v) { return '<input type="text" inputmode="decimal" class="' + cls + '" data-key="' + r.key + '" value="' + (v === null || v === undefined ? '' : (cls === 'eqty' ? +(+v).toFixed(6) : (usd ? (+v).toFixed(2) : Math.round(v)))) + '" style="width:84px;padding:6px;font-size:14px;text-align:right"' + (can ? '' : ' disabled') + '>'; };
         // 개별 종목: 티커 표시 (새 종목이면 고칠 수 있게)
-        var tick = r.stock ? '<div class="raw">' + (r.curKey ? '개별 종목' + (r.code ? ' · ' + r.code : '') : '티커 <input type="text" class="eticker" data-key="' + r.key + '" value="' + (r.code || '') + '" placeholder="예: PL · 005930" style="width:96px;padding:4px;font-size:12px;text-transform:uppercase">') + (r.usd ? ' · 달러 평단 확인' : '') + '</div>' : '';
-        var q = (r.oldQty === null ? '' : '<div class="raw">지금 ' + fmt(r.oldQty) + '</div>') + inp('eqty', r.newQty);
-        var p = (r.oldAvg === null ? '' : '<div class="raw">지금 ' + fmt(r.oldAvg) + '</div>') + inp('eavg', r.newAvg)
+        var tick = r.stock ? '<div class="raw">' + (r.curKey ? '개별 종목' + (r.code ? ' · ' + r.code : '') : '티커 <input type="text" class="eticker" data-key="' + r.key + '" value="' + (r.code || '') + '" placeholder="예: PL · 005930" style="width:96px;padding:4px;font-size:12px;text-transform:uppercase">') + (r.usd && !usd ? ' · 달러 평단 확인' : '') + '</div>' : '';
+        var q = (r.oldQty === null ? '' : '<div class="raw">지금 ' + (usd ? fmtQty(r.oldQty) : fmt(r.oldQty)) + '</div>') + inp('eqty', r.newQty);
+        var p = (r.oldAvg === null ? '' : '<div class="raw">지금 ' + fmtAvg(r.oldAvg) + '</div>') + inp('eavg', r.newAvg)
           + (r.avgHow ? '<div class="raw" style="color:var(--warn)">계산: ' + r.avgHow + '</div>' : (r.newAvg ? '' : '<div class="raw" style="color:var(--up)">평단 못 읽음 → 입력</div>'));
         return '<tr><td><input type="checkbox" class="pick" value="' + r.key + '"' + (can ? ' checked' : ' disabled') + '></td>'
           + '<td>' + r.name + '<span class="tag ' + t[1] + '">' + t[0] + '</span>' + (r.raw !== r.name ? '<div class="raw">화면: ' + r.raw + '</div>' : '') + tick + '</td>'
@@ -199,7 +214,7 @@
     document.querySelectorAll('.eqty').forEach(function (x) { var v = String(x.value).replace(/[^0-9.]/g, ''); if (v !== '') (edits[x.dataset.key] = edits[x.dataset.key] || {}).qty = Number(v); }); // 빈칸은 0주가 아니라 '안 고침'
     document.querySelectorAll('.eavg').forEach(function (x) { var v = String(x.value).replace(/[^0-9.]/g, ''); if (v !== '') (edits[x.dataset.key] = edits[x.dataset.key] || {}).avg = Number(v); });
     document.querySelectorAll('.eticker').forEach(function (x) { if (x.value.trim()) (edits[x.dataset.key] = edits[x.dataset.key] || {}).ticker = x.value.trim(); });
-    call({ action: 'apply', member: a.member, pin: a.pin, token: token, pick: pick, edits: edits, removeMissing: $('removeMissing').checked }).then(function (j) {
+    call({ action: 'apply', account: shown, member: a.member, pin: a.pin, token: token, pick: pick, edits: edits, removeMissing: $('removeMissing').checked }).then(function (j) {
       $('s3').classList.add('hidden'); $('s2').classList.add('hidden'); $('s4').classList.remove('hidden');
       $('msg4').innerHTML = (j.changed ? j.log.join('<br>') + '<br><span class="note">대시보드에는 1~5분 뒤 반영돼요 (시트 게시 갱신)</span>' : '바뀐 내용이 없어요') + (j.strategy ? '<br>📈 ' + j.strategy : '');
       if (embed && parent !== window) parent.postMessage({ type: 'upload-done' }, location.origin);
