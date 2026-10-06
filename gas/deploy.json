@@ -13,7 +13,8 @@
         "weekly_report.gs": {},
         "dividend_schedule_sync.gs": {},
         "dollar_dividend_autolog.gs": {},
-        "dollar_ticker_sync.gs": {}
+        "dollar_ticker_sync.gs": {},
+        "yahoo_futures.gs": { "remote": "지수" }
       }
     },
     "diary": {

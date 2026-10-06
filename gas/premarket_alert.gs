@@ -52,7 +52,7 @@ function installPremarketTrigger() {
   Logger.log('✅ 트리거 설치: 평일 07:30 개장 전 알림 · 16:10 실제 시가·종가 기록 · 매일 06:20 선물·EWY 기준값 갱신');
 }
 
-function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmUsSessionFresh_() ? pmEwyInfo_() : { open: 0, close: 0, delta: 0 }; pmUpdateFuturesRows_(info); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
+function futuresRefDaily_() { var info = pmFuturesAll_(); info.EWY = pmUsSessionFresh_() ? pmEwyInfo_() : { open: 0, close: 0, delta: 0 }; pmUpdateFuturesRows_(info); if (typeof yahooFailLogToSheet === 'function') yahooFailLogToSheet(); if (typeof wrMarkRun_ === 'function') wrMarkRun_('futures'); }
 function recordActualsDaily_() {
   var dow = Number(Utilities.formatDate(new Date(), 'Asia/Seoul', 'u'));
   if (dow >= 6 || pmKrHoliday_()) return;
