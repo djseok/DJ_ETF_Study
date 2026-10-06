@@ -23,6 +23,8 @@ jobs:
         run: node tests/parity.test.js
       - name: 🔎 문법 확인
         run: node tests/syntax.test.js
+      - name: 📤 Apps Script 배포 설정
+        run: node tests/gas_deploy.test.js
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

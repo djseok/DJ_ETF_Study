@@ -2,6 +2,41 @@
 
 구글 시트에 붙여서 쓰는 스크립트입니다. 대시보드(GitHub Pages)와는 따로 동작해요.
 
+## 📤 Apps Script 자동 배포 — `deploy.json` + `.github/workflows/gas_deploy.yml`
+
+PR 이 main 에 병합되면 GitHub Actions 가 바뀐 `.gs` 를 Apps Script 편집기에 직접 넣어요 (복사·붙여넣기 대신).
+웹 앱(마스터시트 배당 봇 · 자동가져오기)은 기존 배포를 새 버전으로 바꿔서 주소는 그대로예요.
+
+- 어느 파일이 어느 프로젝트인지는 `deploy.json`. 편집기 파일 이름이 다르면 `remote` 로 적어요 (예: `dividend_webhook.gs` → `Code`)
+- 편집기에만 있는 파일, `appsscript.json`(권한·시간대·웹 앱 설정)은 건드리지 않아요
+- 편집기에 그 이름의 파일이 없거나, 합쳤을 때 같은 함수가 두 번 생기거나, 문법 오류면 올리지 않고 멈춰요
+- 트리거·스크립트 속성은 그대로 유지돼요. **새 트리거가 필요한 함수(`install…Trigger`)는 처음 한 번 편집기에서 직접 실행**
+- `enabled: false` 인 프로젝트는 점검만 해요. 점검 결과가 맞으면 `true` 로 바꿉니다
+
+### 처음 한 번 (PC)
+
+1. https://script.google.com/home/usersettings → **Google Apps Script API** 사용 → 켜기
+2. Node.js LTS 설치 (nodejs.org) → 터미널(명령 프롬프트)에서 `npm install -g @google/clasp` → `clasp login` → 브라우저에서 허용
+3. 홈 폴더의 `.clasprc.json` (Windows `C:\Users\이름\.clasprc.json`, Mac `~/.clasprc.json`) 을 메모장으로 열어 **전체 복사**
+   → 저장소 **Settings → Secrets and variables → Actions → New repository secret** 이름 `CLASPRC_JSON` 에 붙여넣기
+   (Apps Script 를 고칠 수 있는 열쇠예요. 채팅·코드에 붙여넣지 않기)
+4. 각 Apps Script 편집기 **⚙️ 프로젝트 설정 → 스크립트 ID** 를 Secret 으로 등록
+
+   | Secret | 프로젝트 |
+   |---|---|
+   | `GAS_ID_MANAGE` | 관리시트 |
+   | `GAS_ID_DIARY` | 동진ETF공부_개인일기장 (배당 입력 폼) |
+   | `GAS_ID_MASTER` | 동진_웹송출용_마스터시트 (배당 봇) |
+   | `GAS_ID_UPLOAD` | 자동가져오기 (잔고 캡처) |
+
+5. **Actions → Apps Script 배포 → Run workflow → check** → 결과 화면(Summary)에서 파일마다
+   - ✅ 같음 / ✏️ 다름 + "저장소 예전 버전과 같음" → 덮어써도 안전
+   - ✏️ 다름 + "⚠️ 저장소 어느 버전과도 다름" → 편집기에서 직접 고친 부분이 있을 수 있어 먼저 저장소에 옮겨야 함
+   - 📌 편집기에만 있음 → 그대로 둠 / ❌ → 이름이 다르거나 함수가 겹침
+6. 문제가 없으면 `deploy.json` 의 `enabled` 를 `true` 로 → 병합되면 그때부터 자동
+
+`clasp login` 토큰은 비밀번호를 바꾸거나 Google 계정 → 보안 → 서드 파티 액세스에서 clasp 를 지우면 끊겨요. 그러면 2~3번만 다시.
+
 ## 💰 배당금 간편 입력 폼 — `dividend_form.gs`
 
 멤버가 휴대폰에서 폼으로 배당 입금을 적으면, 그 멤버의 `○포토폴리오` 탭 H~L열에 자동으로 한 줄이 추가됩니다.
