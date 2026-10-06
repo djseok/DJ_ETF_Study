@@ -156,3 +156,10 @@ function describePriceError(data) {
     if (data.chart && data.chart.result && data.chart.result.length === 0) return '데이터 없음';
     return '';
 }
+
+// 시트·외부 글자를 화면(innerHTML)에 넣을 때 태그로 해석되지 않게
+function escapeHtml(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}

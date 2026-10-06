@@ -22,8 +22,31 @@ async function loadPortfolioData(currentTab, forceReload) {
     }
 }
 
+// 1달러 프로젝트(미국 상장, 달러 자산) → 멤버별 달러 보유 목록. 환율은 1달러 마스터시트 A1(또는 A2)
+//   주의: 원화 환산 원금도 '오늘 환율' 기준 (매수 당시 환율 기록이 없어서) → 달러 자산 수익률은 달러 기준과 같음
+async function fetchDollarHoldings() {
+    const out = { fx: 0, byUser: {} };
+    try {
+        const [portRes, masterRes] = await Promise.all([fetch(sheetUrl('DOLLAR_PORT')), fetch(sheetUrl('DOLLAR_MASTER'))]);
+        if (!portRes.ok) return out;
+        const num = v => { const n = parseFloat(String(v === undefined ? '' : v).replace(/[^0-9.-]/g, '')); return isFinite(n) ? n : 0; };
+        if (masterRes.ok) {
+            const m = parseCsvToMatrix(await masterRes.text());
+            const c = [m[0] && m[0][0], m[1] && m[1][0]].map(num).find(x => x > 1000 && x < 2500);
+            if (c) out.fx = c;
+        }
+        parseCsvToMatrix(await portRes.text()).slice(1).forEach(r => {
+            const name = String(r[0] || '').trim(), ticker = String(r[1] || '').trim().toUpperCase();
+            const qty = num(r[4]), curUsd = num(r[6]), avgUsd = num(r[7]);
+            if (!name || !ticker || name.includes('이름') || !(qty > 0)) return;
+            (out.byUser[name] = out.byUser[name] || []).push({ ticker: ticker, label: String(r[2] || '').trim(), qty: qty, avgUsd: avgUsd, curUsd: curUsd || avgUsd });
+        });
+    } catch (e) { console.warn('1달러 프로젝트(달러 자산)를 불러오지 못해 원화 자산만 표시:', e); }
+    return out;
+}
+
 async function fetchAndParsePortfolio() {
-        const res = await fetch(PORTFOLIO_CSV_URL);
+        const [res, dollar] = await Promise.all([fetch(PORTFOLIO_CSV_URL), fetchDollarHoldings()]);
         const matrix = parseCsvToMatrix(await res.text());
         
         const users = {}; // A~F 포트폴리오 데이터 보관함
@@ -106,6 +129,21 @@ async function fetchAndParsePortfolio() {
             console.warn("⚠️ 이름(H열)이 비어 있어 집계에서 제외된 배당 기록:", skippedDivRows);
         }
 
+        // 원화 자산(국내 상장) / 달러 자산(1달러 프로젝트, 미국 상장)을 나눠 두고 합계에는 둘 다 넣음
+        //   달러 자산은 items 에 넣지 않음 → 구매 계산기·세금 점검·백테스트 등 원화 ETF 기준 화면은 그대로
+        Object.values(users).forEach(u => { u.krwInvest = u.totalInvest; u.krwCurrent = u.totalCurrent; });
+        const fx = dollar.fx;
+        Object.keys(dollar.byUser).forEach(name => {
+            if (!fx) return; // 환율을 못 받으면 합치지 않음 (잘못된 원화 금액 방지)
+            const u = users[name] = users[name] || { name: name, totalInvest: 0, totalCurrent: 0, items: [], krwInvest: 0, krwCurrent: 0 };
+            u.usdItems = dollar.byUser[name];
+            u.usdInvest = u.usdItems.reduce((s, it) => s + it.avgUsd * it.qty, 0);
+            u.usdCurrent = u.usdItems.reduce((s, it) => s + it.curUsd * it.qty, 0);
+            u.fx = fx;
+            u.totalInvest += u.usdInvest * fx;
+            u.totalCurrent += u.usdCurrent * fx;
+        });
+
         // 수익률 계산 및 명예의 전당(랭킹) 정렬
         portfolioRankArray = Object.values(users).filter(u => u.totalInvest > 0).map(u => {
             u.totalReturnPct = ((u.totalCurrent - u.totalInvest) / u.totalInvest * 100) || 0;
@@ -161,16 +199,27 @@ function renderPortfolioView(rankArray) {
             let returnPct = ((item.current - item.invest) / item.invest * 100) || 0;
             rowsHtml += `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${item.stock}</td><td class="py-3 text-right mono"><div class="text-[10px] text-slate-400">평단 ₩${Math.round(item.avgPrice).toLocaleString()}</div><div class="font-bold text-slate-700">현재 ₩${Math.round(item.currPrice).toLocaleString()}</div></td><td class="py-3 text-right mono text-slate-500">${item.qty}주</td><td class="py-3 text-right mono font-bold ${returnPct>=0?'text-red-500':'text-blue-500'}">${returnPct>0?'+':''}${returnPct.toFixed(2)}%</td><td class="py-3 text-right mono font-bold text-slate-800">₩${Math.round(item.current).toLocaleString()}</td></tr>`;
         });
+        // 달러 자산 (1달러 프로젝트) — 달러 금액과 오늘 환율 원화 환산을 같이
+        const usd = v => (v < 0 ? '−' : '') + '$' + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        let usdHtml = '';
+        if (user.usdItems && user.usdItems.length) {
+            usdHtml = `<tr><td colspan="5" class="pt-4 pb-1 text-[11px] font-black text-emerald-700">💵 달러 자산 (1달러 프로젝트 · 환율 ₩${Math.round(user.fx).toLocaleString()})</td></tr>` +
+                user.usdItems.map(it => {
+                    const r = it.avgUsd > 0 ? (it.curUsd - it.avgUsd) / it.avgUsd * 100 : 0;
+                    return `<tr class="border-b border-slate-50 hover:bg-slate-50 text-xs"><td class="py-3 font-bold text-slate-700">${escapeHtml(it.label || it.ticker)} <span class="text-[10px] text-slate-400">${escapeHtml(it.ticker)}</span></td><td class="py-3 text-right mono"><div class="text-[10px] text-slate-400">평단 ${usd(it.avgUsd)}</div><div class="font-bold text-slate-700">현재 ${usd(it.curUsd)}</div></td><td class="py-3 text-right mono text-slate-500">${+it.qty.toFixed(6)}주</td><td class="py-3 text-right mono font-bold ${r>=0?'text-red-500':'text-blue-500'}">${pct(r)}</td><td class="py-3 text-right mono font-bold text-slate-800">${usd(it.curUsd * it.qty)}<div class="text-[10px] text-slate-400">${won(it.curUsd * it.qty * user.fx)}</div></td></tr>`;
+                }).join('');
+            if (rowsHtml) rowsHtml = `<tr><td colspan="5" class="pb-1 text-[11px] font-black text-slate-500">₩ 원화 자산 (국내 상장)</td></tr>` + rowsHtml;
+        }
         // 요약: 투자원금 · 평가액 · 손익(배당 미포함) · 받은 배당(세후) · 손익(배당 포함)
         const cell = (label, val, sub, cls) => `<div class="p-3 rounded-xl bg-white border border-slate-100"><div class="text-[11px] font-bold text-slate-400">${label}</div><div class="text-base font-black mono ${cls || 'text-slate-800'}">${val}</div>${sub ? `<div class="text-[11px] font-bold mono ${cls || 'text-slate-400'}">${sub}</div>` : ''}</div>`;
         const summary = `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 p-4 bg-slate-50/60 border-b border-slate-100">
             ${cell('투자원금', won(user.totalInvest))}
-            ${cell('평가액', won(user.totalCurrent))}
+            ${cell('평가액', won(user.totalCurrent), user.usdItems ? '원화 ' + won(user.krwCurrent) + ' · 달러 ' + usd(user.usdCurrent) + ' (' + won(user.usdCurrent * user.fx) + ')' : '')}
             ${cell('손익 (배당 미포함)', won(pricePL), pct(user.totalReturnPct), clr(pricePL))}
             ${cell('받은 배당 (세후)', won(dv.net), dv.count ? '세전 ' + won(dv.gross) + ' · ' + dv.count + '회' : '기록 없음', 'text-emerald-600')}
             ${cell('손익 (배당 포함)', won(withDivPL), pct(withDivPct), clr(withDivPL))}
         </div>`;
-        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div>${summary}<div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}</tbody></table></div></div>`;
+        cardsHtml += `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="p-5 bg-slate-50 border-b border-slate-200"><div class="flex items-center justify-between gap-2"><h4 class="font-black text-lg text-slate-800"><i class="fas fa-user-circle text-slate-400 mr-2"></i>투자자 ${user.name}의 실보유 현황</h4><button onclick="openUpload('${user.name}')" class="shrink-0 px-3 py-1.5 rounded-full bg-slate-800 text-white text-xs font-bold hover:bg-slate-700">📸 잔고 업데이트</button></div></div>${summary}<div class="p-4 overflow-x-auto"><table class="w-full text-left whitespace-nowrap"><tbody>${rowsHtml}${usdHtml}</tbody></table></div></div>`;
     });
 
     const rankCont = document.getElementById('rankingContainer');
