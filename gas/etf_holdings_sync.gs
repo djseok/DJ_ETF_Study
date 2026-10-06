@@ -482,10 +482,17 @@ function hsTime_(code) {
 
 // 서버가 그려 주는 표(종목코드 · 종목명 · 수량 · 비중)에서 보유종목 읽기
 function hsHtmlHoldings_(html, code) {
-  // 기준일: '기준일 : 2026.10.02'(HANARO) 또는 '2026.10.02 기준'(TIME). 실시간 '2026-10-06 10:41:15 기준' 은 제외
+  // 기준일: '기준일 : 2026.10.02'(HANARO) · '2026.10.02 기준'(TIME) 후보 중 오늘 이전의 가장 최근 날짜
+  //   (TIME 페이지에는 분배금 '지급기준일 2025.12.30' 같은 옛 날짜도 있어서 첫 번째 것을 쓰면 틀림)
   var text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-  var dm = text.match(/기준일[^0-9]{0,40}(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/) || text.match(/(\d{4})\.(\d{1,2})\.(\d{1,2})\s*기준/);
-  var date = dm ? dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2) : '';
+  var today = hsToday_(), date = '', m;
+  var res = [/기준일[^0-9]{0,40}(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/g, /(\d{4})\.(\d{1,2})\.(\d{1,2})\s*기준/g];
+  res.forEach(function (re) {
+    while ((m = re.exec(text))) {
+      var d = m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+      if (d <= today && d > date) date = d;
+    }
+  });
   var tables = html.match(/<table[\s\S]*?<\/table>/gi) || [];
   for (var i = 0; i < tables.length; i++) {
     var head = (tables[i].match(/<th[\s\S]*?<\/th>/gi) || []).map(hsCellText_);
