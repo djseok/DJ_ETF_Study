@@ -62,7 +62,7 @@
     </div>
     <label for="account">계좌</label>
     <select id="account"><option value="isa">한투 ISA (원화 · 멤버 포토폴리오)</option><option value="toss">토스 미국주식 (달러 · 토스 전체 보유)</option></select>
-    <label style="font-weight:600"><input type="checkbox" id="remember" style="width:auto"> 이 기기에서 기억하기</label>
+    <label style="font-weight:600"><input type="checkbox" id="remember" style="width:auto"> 이 기기에서 멤버 기억하기 (비밀번호는 저장 안 함)</label>
   </section>
 
   <section class="card" id="s2">
@@ -108,7 +108,9 @@
   if (window.ResizeObserver) new ResizeObserver(tellHeight).observe(document.body); else setInterval(tellHeight, 800);
   try {
     var saved = JSON.parse(localStorage.getItem('djUploadAuth') || 'null');
-    if (saved) { $('member').value = saved.member; $('pin').value = saved.pin; $('remember').checked = true; }
+    // 비밀번호는 기기에 남기지 않음: 예전에 저장된 비밀번호가 있으면 지우고 멤버만 기억
+    if (saved && saved.pin !== undefined) { saved = { member: saved.member }; localStorage.setItem('djUploadAuth', JSON.stringify(saved)); }
+    if (saved) { $('member').value = saved.member; $('remember').checked = true; }
     if (localStorage.getItem('djUploadAcct') === 'toss') $('account').value = 'toss';
   } catch (e) { }
   if (qs.get('acct') === 'toss') $('account').value = 'toss';
@@ -152,7 +154,7 @@
   }
   function auth() {
     var a = { member: $('member').value, pin: $('pin').value.trim() };
-    try { if ($('remember').checked) localStorage.setItem('djUploadAuth', JSON.stringify(a)); else localStorage.removeItem('djUploadAuth'); } catch (e) { }
+    try { if ($('remember').checked) localStorage.setItem('djUploadAuth', JSON.stringify({ member: a.member })); else localStorage.removeItem('djUploadAuth'); } catch (e) { }
     return a;
   }
   var fmt = function (v) { return v === null || v === undefined ? '–' : Math.round(v).toLocaleString(); };

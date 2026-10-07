@@ -10,6 +10,20 @@ import sys
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# 실행 결과 집계 → 수집·전송이 실패하면 Actions 를 빨간색으로 (예전엔 오류를 삼켜서 늘 초록)
+ERRORS = []        # 운용사 엔진 오류 (ETF 이름: 내용)
+SEND_FAILS = []    # 시트 기록 실패
+INSECURE = set()   # 인증서 문제로 검증 없이 받은 사이트
+
+def http_get(url, **kw):
+    """TLS 검증을 켜고 받되, 인증서 체인이 불완전한 운용사 사이트만 검증 없이 한 번 더 (기록해 둠)"""
+    try:
+        return requests.get(url, timeout=20, **kw)
+    except requests.exceptions.SSLError:
+        host = url.split('/')[2]
+        INSECURE.add(host)
+        return requests.get(url, timeout=20, verify=False, **kw)
+
 # ==========================================
 # 🎯 1. 마스터 세팅
 # ==========================================
@@ -21,6 +35,9 @@ WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "").strip()
 if not WEBHOOK_URL or not WEBHOOK_TOKEN:
     print("❌ WEBHOOK_URL / WEBHOOK_TOKEN 환경변수가 없습니다. GitHub Secrets 등록을 확인하세요.")
     sys.exit(1)
+
+def code_or(x):
+    return str(x)[-60:]
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
@@ -38,7 +55,7 @@ def engine_tiger(code):
     result = []
     try:
         # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
-        res = requests.get(url, timeout=20, verify=False)
+        res = requests.get(url, timeout=20)
         for item in res.json().get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
@@ -47,14 +64,14 @@ def engine_tiger(code):
                     "dividend": int(item.get('dividendAmt')),
                     "taxBase": int(item.get('taxStandardAmt', 0))
                 })
-    except Exception as e: print(f"  [TIGER 프록시 에러]: {e}")
+    except Exception as e: print(f"  [TIGER 프록시 에러]: {e}"); ERRORS.append(f"TIGER {code_or(url)}: {e}")
     return result
 
 def engine_kiwoom(code):
     url = f"https://www.kiwoometf.com/service/etf/KO02010200M?gcode={code}"
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(res.text, 'html.parser')
         tables = soup.find_all('table')
         for table in tables:
@@ -71,13 +88,13 @@ def engine_kiwoom(code):
                             "taxBase": int(cols[4].replace('원', '').replace(',', ''))
                         })
                 break
-    except Exception as e: print(f"  [KIWOOM 에러]: {e}")
+    except Exception as e: print(f"  [KIWOOM 에러]: {e}"); ERRORS.append(f"KIWOOM {code_or(url)}: {e}")
     return result
 
 def engine_kodex(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
         for item in res.json().get('dividList', []):
             result.append({
                 "recordDate": format_date(item.get('basicD')),
@@ -85,13 +102,13 @@ def engine_kodex(url):
                 "dividend": int(item.get('dividA', 0)),
                 "taxBase": int(item.get('taxDividA', 0))
             })
-    except Exception as e: print(f"  [KODEX 에러]: {e}")
+    except Exception as e: print(f"  [KODEX 에러]: {e}"); ERRORS.append(f"KODEX {code_or(url)}: {e}")
     return result
 
 def engine_rise(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
         for item in res.json().get('history', []):
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
@@ -99,13 +116,13 @@ def engine_rise(url):
                 "dividend": int(float(item.get('amount', 0))),
                 "taxBase": int(float(item.get('tax_standard_amount', 0)))
             })
-    except Exception as e: print(f"  [RISE 에러]: {e}")
+    except Exception as e: print(f"  [RISE 에러]: {e}"); ERRORS.append(f"RISE {code_or(url)}: {e}")
     return result
 
 def engine_ace(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
         for item in res.json().get('dividendList', []):
             result.append({
                 "recordDate": format_date(item.get('std_DT')),
@@ -113,13 +130,13 @@ def engine_ace(url):
                 "dividend": int(item.get('dividend_PRI', 0)),
                 "taxBase": int(item.get('tax_PRI', 0))
             })
-    except Exception as e: print(f"  [ACE 에러]: {e}")
+    except Exception as e: print(f"  [ACE 에러]: {e}"); ERRORS.append(f"ACE {code_or(url)}: {e}")
     return result
 
 def engine_sol(url):
     result = []
     try:
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, verify=False)
+        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
         for item in res.json().get('items', []):
             result.append({
                 "recordDate": format_date(item.get('WORK_DT')),
@@ -127,7 +144,7 @@ def engine_sol(url):
                 "dividend": int(item.get('DIVIDEND_PRI', 0)),
                 "taxBase": int(item.get('WEEK_PRI', 0))
             })
-    except Exception as e: print(f"  [SOL 에러]: {e}")
+    except Exception as e: print(f"  [SOL 에러]: {e}"); ERRORS.append(f"SOL {code_or(url)}: {e}")
     return result
 
 # ==========================================
@@ -196,12 +213,25 @@ if __name__ == "__main__":
                             time.sleep(2)
                         else:
                             print(f"  ❌ 웹훅 전송 실패 (최종 타임아웃): {data['recordDate']}")
+                            SEND_FAILS.append(f"{etf_name} {data['recordDate']} 타임아웃")
                     except Exception as e:
                         print(f"  ❌ 웹훅 통신 에러: {e}")
+                        SEND_FAILS.append(f"{etf_name} {data['recordDate']} {e}")
                         break
                         
                 time.sleep(0.5)
         else:
             print("  ⚠️️ 배당 데이터가 없습니다.")
             
+    summary = [f"운용사 수집 오류 {len(ERRORS)}건 · 시트 기록 실패 {len(SEND_FAILS)}건"]
+    summary += [f"- ⚠️ {x}" for x in ERRORS + SEND_FAILS]
+    if INSECURE:
+        summary.append("- ℹ️ 인증서 문제로 검증 없이 받은 사이트: " + ", ".join(sorted(INSECURE)))
+    print("\n" + "\n".join(summary))
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write("\n".join(summary) + "\n")
+    if ERRORS or SEND_FAILS:
+        print("❌ 일부 수집·기록이 실패했어요 (위 목록). 다음 실행 때 빠진 기록은 다시 채워져요.")
+        sys.exit(1)
     print("\n🎉 모든 종목 크롤링 및 시트 자동 업데이트 완료!")

@@ -102,8 +102,9 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   }
   
-  // 기존 네이버 API 우회 (유지)
+  // 기존 네이버 API 우회 (유지) — 아무나 불러 할당량을 쓰지 않게 토큰 필요
   if (e.parameter.action === 'fetch' && e.parameter.code) {
+    if (!isWebhookAuthorized_(e.parameter.token)) return unauthorizedResponse_();
     const url = "https://m.stock.naver.com/api/stock/" + e.parameter.code + "/dividend";
     const options = { "method": "get", "muteHttpExceptions": true };
     const response = UrlFetchApp.fetch(url, options);
