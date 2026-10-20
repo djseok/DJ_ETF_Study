@@ -2,6 +2,7 @@
  * 📥 배당 봇 Webhook (동진_웹송출용_마스터시트 Apps Script 의 Code.gs 원본 사본)
  * - doPost : 배당 봇(scraper.py)이 보낸 배당 기록을 DB_종목 탭과 마스터데이터 탭에 기록 (토큰 필요)
  * - doGet  : action=tiger → 미래에셋 TIGER 분배 내역을 대신 조회해서 봇에 전달 (토큰 필요)
+ *            action=rise  → KB자산운용 RISE 분배 내역을 대신 조회 (토큰 필요)
  * 배포: 배포 관리 → 기존 배포(AKfycbyQ65…) → 새 버전  /  토큰 함수는 webhook_security.gs
  * 이 파일을 고치면 Apps Script 쪽에도 똑같이 반영하고 새 버전으로 배포해야 합니다.
  */
@@ -102,6 +103,17 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   }
   
+  // RISE(KB자산운용) 분배 내역: kbam.co.kr 이 GitHub(해외) 서버의 접속을 받지 않아 구글이 대신 조회
+  // id 는 kbam 상품 코드(예: 44J2)만 허용 → 다른 주소로는 못 쓰게
+  if (e.parameter.action === 'rise' && e.parameter.id) {
+    if (!isWebhookAuthorized_(e.parameter.token)) return unauthorizedResponse_();
+    const id = String(e.parameter.id);
+    if (!/^[0-9A-Za-z]{1,12}$/.test(id)) return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "bad id" })).setMimeType(ContentService.MimeType.JSON);
+    const res = UrlFetchApp.fetch("https://kbam.co.kr/api/products/etfs/" + id + "/dividend", { muteHttpExceptions: true, headers: { "User-Agent": "Mozilla/5.0" } });
+    if (res.getResponseCode() !== 200) return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "kbam HTTP " + res.getResponseCode() })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(res.getContentText()).setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 기존 네이버 API 우회 (유지) — 아무나 불러 할당량을 쓰지 않게 토큰 필요
   if (e.parameter.action === 'fetch' && e.parameter.code) {
     if (!isWebhookAuthorized_(e.parameter.token)) return unauthorizedResponse_();

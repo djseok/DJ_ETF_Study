@@ -7,6 +7,7 @@ from io import StringIO
 import urllib3
 import os
 import sys
+import re
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -16,13 +17,19 @@ SEND_FAILS = []    # 시트 기록 실패
 INSECURE = set()   # 인증서 문제로 검증 없이 받은 사이트
 
 def http_get(url, **kw):
-    """TLS 검증을 켜고 받되, 인증서 체인이 불완전한 운용사 사이트만 검증 없이 한 번 더 (기록해 둠)"""
-    try:
-        return requests.get(url, timeout=20, **kw)
-    except requests.exceptions.SSLError:
-        host = url.split('/')[2]
-        INSECURE.add(host)
-        return requests.get(url, timeout=20, verify=False, **kw)
+    """TLS 검증을 켜고 받되, 인증서 체인이 불완전한 운용사 사이트만 검증 없이 한 번 더 (기록해 둠)
+    운용사 서버가 잠깐 응답이 없을 때(타임아웃)는 5초 쉬고 한 번만 다시 시도"""
+    for attempt in range(2):
+        try:
+            try:
+                return requests.get(url, timeout=20, **kw)
+            except requests.exceptions.SSLError:
+                host = url.split('/')[2]
+                INSECURE.add(host)
+                return requests.get(url, timeout=20, verify=False, **kw)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            if attempt == 1: raise
+            time.sleep(5)
 
 # ==========================================
 # 🎯 1. 마스터 세팅
@@ -38,6 +45,13 @@ if not WEBHOOK_URL or not WEBHOOK_TOKEN:
 
 def code_or(x):
     return str(x)[-60:]
+
+def redact(msg):
+    """오류 문구에 Webhook 주소·토큰이 섞여 공개 Actions 로그에 남지 않게 가림"""
+    msg = str(msg)
+    for secret in (WEBHOOK_TOKEN, WEBHOOK_URL):
+        if secret: msg = msg.replace(secret, "***")
+    return msg
 
 def format_date(d_str):
     d_str = str(d_str).strip().replace(".", "-")
@@ -64,7 +78,7 @@ def engine_tiger(code):
                     "dividend": int(item.get('dividendAmt')),
                     "taxBase": int(item.get('taxStandardAmt', 0))
                 })
-    except Exception as e: print(f"  [TIGER 프록시 에러]: {e}"); ERRORS.append(f"TIGER {code_or(url)}: {e}")
+    except Exception as e: print(f"  [TIGER 프록시 에러]: {redact(e)}"); ERRORS.append(f"TIGER {code}: {redact(e)}")
     return result
 
 def engine_kiwoom(code):
@@ -106,17 +120,22 @@ def engine_kodex(url):
     return result
 
 def engine_rise(url):
+    """ [RISE] kbam.co.kr 이 GitHub(해외) 서버 접속을 받지 않아(접속 타임아웃) TIGER 처럼 구글 GAS 가 대신 조회 """
     result = []
     try:
-        res = http_get(url, headers={'User-Agent': 'Mozilla/5.0'})
-        for item in res.json().get('history', []):
+        m = re.search(r'/etfs/([0-9A-Za-z]+)/dividend', url)
+        if not m: raise ValueError("RISE 주소에서 상품 코드를 찾지 못했어요")
+        res = http_get(WEBHOOK_URL, params={"action": "rise", "id": m.group(1), "token": WEBHOOK_TOKEN})
+        body = res.json()
+        if 'history' not in body: raise ValueError(f"구글 대리 조회 실패: {body.get('message') or body.get('status') or '응답에 history 없음'}")
+        for item in body['history']:
             result.append({
                 "recordDate": str(item.get('base_date')).strip(),
                 "payDate": str(item.get('payment_date')).strip(),
                 "dividend": int(float(item.get('amount', 0))),
                 "taxBase": int(float(item.get('tax_standard_amount', 0)))
             })
-    except Exception as e: print(f"  [RISE 에러]: {e}"); ERRORS.append(f"RISE {code_or(url)}: {e}")
+    except Exception as e: print(f"  [RISE 에러]: {redact(e)}"); ERRORS.append(f"RISE {code_or(url)}: {redact(e)}")
     return result
 
 def engine_ace(url):
@@ -200,12 +219,18 @@ if __name__ == "__main__":
                             if res_json.get("status") == "unauthorized":
                                 print("  ❌ 토큰 불일치: GAS 스크립트 속성 WEBHOOK_TOKEN 과 GitHub Secret 이 같은지 확인하세요.")
                                 sys.exit(1)
-                            if res_json.get("status") == "duplicate":
-                                print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
-                            else:
-                                print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
-                        except:
+                            status = res_json.get("status")
+                        except ValueError:
+                            status, res_json = None, {}
+                        # 예전엔 시트 쪽 오류(status=error)나 JSON 이 아닌 응답도 '전송 완료'로 찍혔음 → 실패로 집계
+                        if status == "duplicate":
+                            print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
+                        elif status == "success":
                             print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                        else:
+                            why = res_json.get("message") or f"HTTP {res.status_code}, JSON 아님"
+                            print(f"  ❌ 시트 기록 실패: {data['recordDate']} ({why})")
+                            SEND_FAILS.append(f"{etf_name} {data['recordDate']} {why}")
                         break 
                     except requests.exceptions.ReadTimeout:
                         if attempt < max_retries - 1:
@@ -215,8 +240,8 @@ if __name__ == "__main__":
                             print(f"  ❌ 웹훅 전송 실패 (최종 타임아웃): {data['recordDate']}")
                             SEND_FAILS.append(f"{etf_name} {data['recordDate']} 타임아웃")
                     except Exception as e:
-                        print(f"  ❌ 웹훅 통신 에러: {e}")
-                        SEND_FAILS.append(f"{etf_name} {data['recordDate']} {e}")
+                        print(f"  ❌ 웹훅 통신 에러: {redact(e)}")
+                        SEND_FAILS.append(f"{etf_name} {data['recordDate']} {redact(e)}")
                         break
                         
                 time.sleep(0.5)
