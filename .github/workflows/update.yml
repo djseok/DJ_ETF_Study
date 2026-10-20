@@ -25,4 +25,4 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
-        run: python scraper.py
+        run: python -u scraper.py  # -u: 줄마다 바로 찍어서 로그 시간이 실제 진행 시간과 맞게
