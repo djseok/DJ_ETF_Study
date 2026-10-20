@@ -16,17 +16,17 @@ ERRORS = []        # 운용사 엔진 오류 (ETF 이름: 내용)
 SEND_FAILS = []    # 시트 기록 실패
 INSECURE = set()   # 인증서 문제로 검증 없이 받은 사이트
 
-def http_get(url, **kw):
+def http_get(url, timeout=20, **kw):
     """TLS 검증을 켜고 받되, 인증서 체인이 불완전한 운용사 사이트만 검증 없이 한 번 더 (기록해 둠)
     운용사 서버가 잠깐 응답이 없을 때(타임아웃)는 5초 쉬고 한 번만 다시 시도"""
     for attempt in range(2):
         try:
             try:
-                return requests.get(url, timeout=20, **kw)
+                return requests.get(url, timeout=timeout, **kw)
             except requests.exceptions.SSLError:
                 host = url.split('/')[2]
                 INSECURE.add(host)
-                return requests.get(url, timeout=20, verify=False, **kw)
+                return requests.get(url, timeout=timeout, verify=False, **kw)
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             if attempt == 1: raise
             time.sleep(5)
@@ -42,6 +42,8 @@ WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "").strip()
 if not WEBHOOK_URL or not WEBHOOK_TOKEN:
     print("❌ WEBHOOK_URL / WEBHOOK_TOKEN 환경변수가 없습니다. GitHub Secrets 등록을 확인하세요.")
     sys.exit(1)
+
+GAS_TIMEOUT = 60  # 구글 웹앱 대리 조회(TIGER·RISE) 대기 시간
 
 def code_or(x):
     return str(x)[-60:]
@@ -69,7 +71,7 @@ def engine_tiger(code):
     result = []
     try:
         # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
-        res = requests.get(url, timeout=20)
+        res = requests.get(url, timeout=GAS_TIMEOUT)
         for item in res.json().get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
@@ -125,7 +127,8 @@ def engine_rise(url):
     try:
         m = re.search(r'/etfs/([0-9A-Za-z]+)/dividend', url)
         if not m: raise ValueError("RISE 주소에서 상품 코드를 찾지 못했어요")
-        res = http_get(WEBHOOK_URL, params={"action": "rise", "id": m.group(1), "token": WEBHOOK_TOKEN})
+        # 구글 웹앱은 처음 깨어날 때 + kbam 응답까지 20초를 넘기기도 함 (10/21 수동 실행에서 5종목 모두 20초 초과)
+        res = http_get(WEBHOOK_URL, timeout=GAS_TIMEOUT, params={"action": "rise", "id": m.group(1), "token": WEBHOOK_TOKEN})
         body = res.json()
         if 'history' not in body: raise ValueError(f"구글 대리 조회 실패: {body.get('message') or body.get('status') or '응답에 history 없음'}")
         for item in body['history']:
