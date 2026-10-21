@@ -177,3 +177,18 @@ function testTigerFetch() {
     list.slice(0, 3).forEach(function (i) { Logger.log('   ' + JSON.stringify(i)); });
   });
 }
+
+// 🔎 편집기에서 실행: 구글 서버가 kbam.co.kr(RISE)에 접속되는지, 몇 초 걸리는지 확인 (시트에 쓰지 않음)
+// 2026-10-21 배당 봇에서 action=rise 가 60초 넘게 응답 없음 → 막힌 건지 느린 건지 확인용
+function testRiseFetch() {
+  ['44J2', '44H1'].forEach(function (id) {
+    const t0 = Date.now();
+    try {
+      const res = UrlFetchApp.fetch("https://kbam.co.kr/api/products/etfs/" + id + "/dividend", { muteHttpExceptions: true, headers: { "User-Agent": "Mozilla/5.0" } });
+      const body = res.getContentText();
+      Logger.log(id + ' → HTTP ' + res.getResponseCode() + ', ' + ((Date.now() - t0) / 1000).toFixed(1) + '초, ' + body.length + '글자, history ' + ((JSON.parse(body).history || []).length) + '건');
+    } catch (e) {
+      Logger.log(id + ' → 실패 (' + ((Date.now() - t0) / 1000).toFixed(1) + '초): ' + e);
+    }
+  });
+}
