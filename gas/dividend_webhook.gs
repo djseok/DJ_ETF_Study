@@ -215,3 +215,22 @@ function testNaverDividend() {
     });
   });
 }
+
+// 🔎 편집기에서 실행: RISE 과세표준을 받을 수 있는 다른 공시처에 구글 서버가 접속되는지 확인 (시트에 쓰지 않음)
+// kbam.co.kr 은 2026-10-21 기준 해외 서버 차단. 접속되는 곳이 있으면 그곳의 분배금 조회 경로를 이어서 확인
+function testTaxSources() {
+  [
+    "https://www.riseetf.co.kr/",
+    "https://seibro.or.kr/",
+    "https://data.krx.co.kr/",
+    "https://dis.kofia.or.kr/"
+  ].forEach(function (u) {
+    const t0 = Date.now();
+    try {
+      const res = UrlFetchApp.fetch(u, { muteHttpExceptions: true, followRedirects: true, headers: { "User-Agent": "Mozilla/5.0" } });
+      Logger.log(u + ' → HTTP ' + res.getResponseCode() + ', ' + ((Date.now() - t0) / 1000).toFixed(1) + '초, ' + res.getContentText().length + '글자');
+    } catch (e) {
+      Logger.log(u + ' → 실패 (' + ((Date.now() - t0) / 1000).toFixed(1) + '초): ' + e);
+    }
+  });
+}
