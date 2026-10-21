@@ -192,3 +192,26 @@ function testRiseFetch() {
     }
   });
 }
+
+// 🔎 편집기에서 실행: kbam.co.kr 이 해외 서버를 막아서(2026-10-21 testRiseFetch 로 확인) RISE 분배금을 네이버에서 받을 수 있는지 확인
+// 네이버 주소 후보를 그대로 찍어 보고, 응답 모양을 보고 나서 배당 봇에 연결 (시트에 쓰지 않음)
+function testNaverDividend() {
+  const urls = function (code) {
+    return [
+      "https://m.stock.naver.com/api/stock/" + code + "/dividend",
+      "https://m.stock.naver.com/api/stock/" + code + "/dividend/history?pageSize=12&page=1",
+      "https://m.stock.naver.com/api/etf/" + code + "/dividend"
+    ];
+  };
+  ['0094M0', '475720'].forEach(function (code) {
+    urls(code).forEach(function (u) {
+      const t0 = Date.now();
+      try {
+        const res = UrlFetchApp.fetch(u, { muteHttpExceptions: true, headers: { "User-Agent": "Mozilla/5.0" } });
+        Logger.log(u + '\n → HTTP ' + res.getResponseCode() + ', ' + ((Date.now() - t0) / 1000).toFixed(1) + '초\n' + res.getContentText().slice(0, 700));
+      } catch (e) {
+        Logger.log(u + '\n → 실패: ' + e);
+      }
+    });
+  });
+}
