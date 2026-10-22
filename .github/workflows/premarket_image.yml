@@ -21,23 +21,23 @@ jobs:
       - name: 📥 저장소 불러오기
         uses: actions/checkout@v4
 
-      # 글꼴은 캐시에서 꺼내 씀 (2026-10-23 apt 설치가 14분 걸려 07:30 알림이 글자 메시지로 쪼개져 감)
+      # 글꼴은 캐시에서 꺼내 씀. 캐시가 없으면 GitHub 에서 직접 받음 (apt 미러가 느린 날 14분+ 걸려 07:30 알림이 글자로 대체된 적 있음)
       - name: 🔤 한글 글꼴 캐시
         id: font-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/noto-cjk
-          key: noto-cjk-v1
+          key: noto-cjk-kr-v2
 
-      - name: 🔤 한글 글꼴 설치 (캐시 없을 때만)
+      - name: 🔤 한글 글꼴 받기 (캐시 없을 때만)
         if: steps.font-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 8
+        timeout-minutes: 3
         run: |
-          sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null 2>&1 \
-            || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null)
           mkdir -p ~/.cache/noto-cjk
-          cp /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc ~/.cache/noto-cjk/ \
-            || rm -rf ~/.cache/noto-cjk  # 복사 실패 시 빈 캐시가 저장되지 않게
+          for w in Regular Bold; do
+            curl -sSfL --retry 3 -o ~/.cache/noto-cjk/NotoSansCJKkr-$w.otf \
+              https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/Korean/NotoSansCJKkr-$w.otf
+          done
 
       - name: ⚙️ 파이썬
         uses: actions/setup-python@v5

@@ -26,9 +26,10 @@ OUT_DIR = os.path.join(ROOT, "alerts")
 LOGO = os.path.join(ROOT, "assets", "invest_if_logo.png")
 
 # ---------- 글꼴 (Noto Sans CJK: 우분투 fonts-noto-cjk, 또는 Actions 캐시 ~/.cache/noto-cjk) ----------
-for f in glob.glob("/usr/share/fonts/**/NotoSansCJK*.ttc", recursive=True) + glob.glob(os.path.expanduser("~/.cache/noto-cjk/*.ttc")):
+for f in glob.glob("/usr/share/fonts/**/NotoSansCJK*.ttc", recursive=True) + glob.glob(os.path.expanduser("~/.cache/noto-cjk/*.[ot][tt][cf]")):
     fm.fontManager.addfont(f)
-plt.rcParams["font.family"] = "Noto Sans CJK JP"
+_have = {x.name for x in fm.fontManager.ttflist}  # apt 는 JP(.ttc), Actions 캐시는 KR(.otf)
+plt.rcParams["font.family"] = "Noto Sans CJK JP" if "Noto Sans CJK JP" in _have else "Noto Sans CJK KR"
 plt.rcParams["axes.unicode_minus"] = False
 
 # ---------- 색 ----------
