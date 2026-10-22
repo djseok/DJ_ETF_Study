@@ -196,7 +196,9 @@ function runPremarket_(dryRun) {
     Logger.log('ℹ️ GH_DISPATCH_TOKEN 이 없어 이미지 없이 글자 메시지로 보냅니다.');
   }
   if (!sentImages) {
-    pmKakaoMessages_(rows, fut, fx, today, usNote).forEach(function (m) { kakaoSendToMe_(m); Utilities.sleep(400); });
+    // 글자 메시지는 1건 200자 제한이라 여러 건으로 나뉨 → 왜 사진이 아닌지 첫 줄에 표시
+    var textNote = token ? '사진 생성 지연 → 글자로 대신' : '';
+    pmKakaoMessages_(rows, fut, fx, today, [usNote, textNote].filter(String).join(' · ')).forEach(function (m) { kakaoSendToMe_(m); Utilities.sleep(400); });
   }
   Logger.log('✅ 카톡 발송 완료' + (sentImages ? ' (이미지 A·B)' : ' (글자)'));
 }

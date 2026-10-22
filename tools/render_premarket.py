@@ -25,8 +25,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "alerts")
 LOGO = os.path.join(ROOT, "assets", "invest_if_logo.png")
 
-# ---------- 글꼴 (Noto Sans CJK: 우분투 fonts-noto-cjk) ----------
-for f in glob.glob("/usr/share/fonts/**/NotoSansCJK*.ttc", recursive=True):
+# ---------- 글꼴 (Noto Sans CJK: 우분투 fonts-noto-cjk, 또는 Actions 캐시 ~/.cache/noto-cjk) ----------
+for f in glob.glob("/usr/share/fonts/**/NotoSansCJK*.ttc", recursive=True) + glob.glob(os.path.expanduser("~/.cache/noto-cjk/*.ttc")):
     fm.fontManager.addfont(f)
 plt.rcParams["font.family"] = "Noto Sans CJK JP"
 plt.rcParams["axes.unicode_minus"] = False
