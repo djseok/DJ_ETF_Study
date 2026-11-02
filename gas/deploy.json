@@ -17,7 +17,8 @@
         "yahoo_futures.gs": { "remote": "지수" },
         "deploy_watch.gs": { "new": true },
         "etf_holdings_legacy.gs": { "new": true },
-        "price_proxy.gs": { "new": true }
+        "price_proxy.gs": { "new": true },
+        "beta_autotune.gs": { "new": true }
       },
       "retire": ["Code", "ETF_PDF", "ETF_NOW", "auto", "mdd"]
     },

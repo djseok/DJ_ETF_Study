@@ -58,6 +58,7 @@ function recordActualsDaily_() {
   if (dow >= 6 || pmKrHoliday_()) return;
   recordActuals();
   if (typeof wrMarkRun_ === 'function') wrMarkRun_('actuals');
+  if (typeof betaAutotuneWeekly_ === 'function') { try { betaAutotuneWeekly_(); } catch (e) { Logger.log('⚠️ 베타 자동 보정 실패: ' + e); } } // 금요일만 (beta_autotune.gs)
 }
 
 function premarketDaily_() {
