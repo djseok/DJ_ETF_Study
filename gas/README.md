@@ -174,6 +174,14 @@ GitHub Actions(`premarket_image.yml` → `tools/render_premarket.py`)가 그린 
 
 키·토큰은 스크립트 속성에만 두고 코드·채팅에 붙여넣지 않기. 카카오 리프레시 토큰은 매일 쓰면 자동 연장돼요.
 
+## 🎯 베타 자동 보정 — `beta_autotune.gs` (관리시트, premarket_alert 와 같은 프로젝트)
+
+매주 금요일 16:10 실제 시가 기록 직후, **미국 종목 ETF만** `ETF_Quant_Signals` 의 '베타' 값을 조금씩 고칩니다. 국내 ETF는 그대로.
+- 최근 20영업일 `개장전_예측` 기록(시가 = 전일종가 줄 제외)으로 역산 β 를 구하고, 0.5~1.5 로 자른 목표 쪽으로 **한 주 최대 ±0.1**
+- 쓸 수 있는 줄이 10개 미만이면 그 ETF는 그대로
+- 바꾼 내역은 `베타_자동보정` 탭에 쌓이고, 바뀐 게 있으면 카톡 한 줄
+- 새 트리거 설치 필요 없음 (16:10 `recordActualsDaily_` 가 부름) · 미리보기 `previewBetaAutotune` · 즉시 적용 `runBetaAutotune` · 끄기: 스크립트 속성 `BETA_AUTOTUNE` = `off`
+
 ## ⚡ 장중 신호 알림 — `intraday_signal.gs` (관리시트, premarket_alert 와 같은 프로젝트)
 
 평일 09:05~15:25, 10분마다 '본체ETF'의 실제 등락(현재가 ÷ 전일 종가)이 `ETF_Quant_Signals` 기준(매수 % 이하 / 매도 % 이상)을 처음 넘으면 카톡으로 알리고 `장중_신호` 탭에 기록합니다.

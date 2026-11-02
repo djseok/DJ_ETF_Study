@@ -25,6 +25,8 @@ jobs:
         run: node tests/syntax.test.js
       - name: 📤 Apps Script 배포 설정
         run: node tests/gas_deploy.test.js
+      - name: 🎯 베타 자동 보정 계산
+        run: node tests/beta_autotune.test.js
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
