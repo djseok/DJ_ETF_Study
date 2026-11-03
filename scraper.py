@@ -71,8 +71,15 @@ def engine_tiger(code):
     result = []
     try:
         # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
-        res = requests.get(url, timeout=GAS_TIMEOUT)
-        for item in res.json().get('resultList', []):
+        for attempt in range(2):
+            res = requests.get(url, timeout=GAS_TIMEOUT)
+            try:
+                body = res.json(); break
+            except ValueError:
+                # 구글 웹앱이 가끔 JSON 대신 오류 화면을 돌려줌 (10/21 474220) → 한 번 더
+                if attempt == 1: raise ValueError(f"구글 응답이 JSON 아님 (HTTP {res.status_code})")
+                time.sleep(3)
+        for item in body.get('resultList', []):
             if int(item.get('dividendAmt', 0)) > 0:
                 result.append({
                     "recordDate": format_date(item.get('recordDate')),
@@ -230,6 +237,11 @@ if __name__ == "__main__":
                             print(f"  ⏭️ 통과 (중복): {data['recordDate']}")
                         elif status == "success":
                             print(f"  ✅ 전송 완료: {data['recordDate']} ({data['dividend']}원)")
+                        elif status is None and attempt < max_retries - 1:
+                            # 구글 웹앱이 가끔 JSON 대신 오류 화면(HTTP 200/404)을 돌려줌 (10/21 4건) → 잠깐 쉬고 다시
+                            print(f"  ⏳ 구글 응답 이상 (HTTP {res.status_code}), 재시도 중... ({attempt+1}/{max_retries})")
+                            time.sleep(3)
+                            continue
                         else:
                             why = res_json.get("message") or f"HTTP {res.status_code}, JSON 아님"
                             print(f"  ❌ 시트 기록 실패: {data['recordDate']} ({why})")
