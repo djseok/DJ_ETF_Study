@@ -250,6 +250,36 @@ function testTigerRaw() {
   });
 }
 
+// 🔎 편집기에서 실행: 미래에셋이 'overall' 분배 화면을 닫음(2026-11 확인, 403). 남은 'annual' 화면 구조를 확인 (시트에 쓰지 않음)
+// 화면 안의 조회 주소(.ajax/.do), 입력칸 이름, annual/list.ajax 응답을 로그로 남김
+function testTigerAnnual() {
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+  const base = "https://investments.miraeasset.com/tigeretf/ko/distribution/annual/";
+  const strip = function (t) { return String(t).replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(); };
+  const uniq = function (a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); };
+  let cookies = "";
+  try {
+    const page = UrlFetchApp.fetch(base + "list.do", { muteHttpExceptions: true, followRedirects: true, headers: { "User-Agent": UA } });
+    cookies = [].concat(page.getAllHeaders()["Set-Cookie"] || []).map(function (c) { return c.split(";")[0]; }).join("; ");
+    const html = page.getContentText();
+    Logger.log("annual/list.do → HTTP " + page.getResponseCode() + ", " + html.length + "글자");
+    Logger.log("조회 주소: " + uniq(html.match(/[\w\/.-]*\.(?:ajax|do)\b/g) || []).slice(0, 20).join(" | "));
+    Logger.log("입력칸: " + uniq((html.match(/name=["'][\w.-]+["']/g) || []).map(function (x) { return x.slice(6, -1); })).slice(0, 30).join(", "));
+    Logger.log("<tr> " + (html.match(/<tr/g) || []).length + "개, 앞부분: " + strip(html).slice(0, 300));
+  } catch (e) { Logger.log("annual/list.do → 실패: " + e); }
+  const y = String(new Date().getFullYear());
+  try {
+    const res = UrlFetchApp.fetch(base + "list.ajax", {
+      method: "post", muteHttpExceptions: true, followRedirects: false,
+      payload: { pageIndex: "1", firstIndex: "0", listCnt: "20", selectYear: y, q: "486290" },
+      headers: { "User-Agent": UA, "X-Requested-With": "XMLHttpRequest", "Cookie": cookies, "Referer": base + "list.do" }
+    });
+    const t = res.getContentText();
+    Logger.log("annual/list.ajax " + y + " → HTTP " + res.getResponseCode() + ", " + t.length + "글자, <tr> " + (t.match(/<tr/g) || []).length + "개");
+    Logger.log("   앞부분: " + strip(t).slice(0, 400));
+  } catch (e) { Logger.log("annual/list.ajax → 실패: " + e); }
+}
+
 // 🔎 편집기에서 실행: RISE 과세표준을 받을 수 있는 다른 공시처에 구글 서버가 접속되는지 확인 (시트에 쓰지 않음)
 // kbam.co.kr 은 2026-10-21 기준 해외 서버 차단. 접속되는 곳이 있으면 그곳의 분배금 조회 경로를 이어서 확인
 function testTaxSources() {
