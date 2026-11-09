@@ -280,6 +280,48 @@ function testTigerAnnual() {
   } catch (e) { Logger.log("annual/list.ajax → 실패: " + e); }
 }
 
+// 국내 상장 종목코드(6자리) → ISIN (KR7 + 코드 + 00 + 검증숫자)
+function krIsin_(code) {
+  const body = "KR7" + String(code).toUpperCase() + "00";
+  const digits = body.split("").map(function (ch) { return /[0-9]/.test(ch) ? ch : String(ch.charCodeAt(0) - 55); }).join("");
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let n = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 0) { n *= 2; if (n > 9) n -= 9; }
+    sum += n;
+  }
+  return body + String((10 - sum % 10) % 10);
+}
+
+// 🔎 편집기에서 실행: TIGER·RISE 분배금(+과세표준)을 받을 대체 출처 확인 (시트에 쓰지 않음)
+// 미래에셋 분배 화면(overall·annual) 403, 네이버 분배 API 404 확인 뒤(2026-11-06) 다른 경로를 찍어 봄
+function testAltSources() {
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+  const strip = function (t) { return String(t).replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(); };
+  const tiger = krIsin_("486290"), rise = krIsin_("475720");
+  Logger.log("ISIN 486290=" + tiger + ", 475720=" + rise);
+  [
+    "https://www.tigeretf.com/ko/distribution/overall/list.do",
+    "https://investments.miraeasset.com/tigeretf/ko/product/search/detail/refDiv.do?ksdFund=" + tiger + "&pageIndex=1&listCnt=10",
+    "https://investments.miraeasset.com/tigeretf/ko/product/search/detail/index.do?ksdFund=" + tiger,
+    "https://www.funetf.co.kr/product/etf/view/" + tiger,
+    "https://www.funetf.co.kr/product/etf/view/" + rise,
+    "https://www.funetf.co.kr/product/etf/distribution"
+  ].forEach(function (u) {
+    const t0 = Date.now();
+    try {
+      const res = UrlFetchApp.fetch(u, { muteHttpExceptions: true, followRedirects: true, headers: { "User-Agent": UA } });
+      const html = res.getContentText();
+      const text = strip(html);
+      Logger.log(u + "\n → HTTP " + res.getResponseCode() + ", " + ((Date.now() - t0) / 1000).toFixed(1) + "초, " + html.length + "글자, <tr> " + (html.match(/<tr/g) || []).length + "개, '과세표준' " + (text.indexOf("과세표준") >= 0 ? "있음" : "없음") + ", '분배' " + (text.indexOf("분배") >= 0 ? "있음" : "없음"));
+      const i = text.indexOf("과세표준");
+      Logger.log("   " + (i >= 0 ? "과세표준 근처: " + text.slice(Math.max(0, i - 150), i + 250) : "앞부분: " + text.slice(0, 250)));
+    } catch (e) {
+      Logger.log(u + "\n → 실패 (" + ((Date.now() - t0) / 1000).toFixed(1) + "초): " + e);
+    }
+  });
+}
+
 // 🔎 편집기에서 실행: RISE 과세표준을 받을 수 있는 다른 공시처에 구글 서버가 접속되는지 확인 (시트에 쓰지 않음)
 // kbam.co.kr 은 2026-10-21 기준 해외 서버 차단. 접속되는 곳이 있으면 그곳의 분배금 조회 경로를 이어서 확인
 function testTaxSources() {
