@@ -27,6 +27,8 @@ jobs:
         run: node tests/gas_deploy.test.js
       - name: 🎯 베타 자동 보정 계산
         run: node tests/beta_autotune.test.js
+      - name: 📅 배당주기 갱신 접속 실패 처리
+        run: node tests/dividend_schedule.test.js
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

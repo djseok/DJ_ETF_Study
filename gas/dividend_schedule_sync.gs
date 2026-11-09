@@ -25,6 +25,9 @@ var DS_HISTORY_TAB = 'ETF들 배당이력';
 // 'ETF 배당주기' D열을 이 글자로 시작하게 적으면 B열(지급월)은 자동 갱신하지 않음 (배당이력은 계속 갱신)
 //   예) TIGER 증권: 기준일 1·4·7·10월 말이지만 수익이 없으면 건너뛰어 기록만으로는 주기를 알 수 없음
 var DS_LOCK_MARK = '✅ 지급월 고정';
+// Apps Script 한 번 실행 한도는 6분. 조회가 이 시간을 넘기면 남은 종목은 건너뛰고(기존 값 유지) 모은 것만 저장
+//   한 번의 접속이 막히면 최대 100초쯤 걸리므로 여유를 둠
+var DS_TIME_BUDGET_MS = 4 * 60 * 1000;
 var DS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 function previewDividendSchedule() { runDividendSchedule_(true); }
@@ -46,7 +49,8 @@ function runDividendSchedule_(dryRun) {
   var lastRow = schedule.getLastRow();
   var sched = schedule.getRange(2, 1, Math.max(lastRow - 1, 1), 4).getDisplayValues();
 
-  var ctx = { cache: {}, master: SpreadsheetApp.openById(DS_MASTER_SHEET_ID), local: ss };
+  // down: 접속이 막힌 운용사 → 같은 운용사 다른 종목은 바로 건너뜀 (2026-10 RISE 사이트 차단으로 종목마다 100초씩 기다리다 6분 한도를 넘겨 전체가 저장되지 않았음)
+  var ctx = { cache: {}, down: {}, deadline: Date.now() + DS_TIME_BUDGET_MS, master: SpreadsheetApp.openById(DS_MASTER_SHEET_ID), local: ss };
   var today = new Date();
   var from = new Date(today.getTime() - 365 * 864e5), to = new Date(today.getTime() + 40 * 864e5);
   var updated = {}; // 정규화 이름 → { rows, source }
@@ -91,6 +95,7 @@ function runDividendSchedule_(dryRun) {
     else Logger.log('🔄 ' + l.name + ' [' + l.source + '] ' + l.count + '건, 최근 ' + l.lastPay +
       ' | 지급월 ' + l.oldMonths + ' → ' + l.newMonths + ' | 평균 ' + l.oldAvg + ' → ' + l.newAvg);
   });
+  Object.keys(ctx.down).forEach(function (b) { Logger.log('⛔ ' + b + ' 접속 실패 → 이번 실행에서 ' + b + ' 종목은 기존 값 유지: ' + ctx.down[b]); });
   var n = Object.keys(updated).length;
   Logger.log((dryRun ? '[미리보기] ' : '') + '자동 갱신 ' + n + '개 / 유지 ' + (report.length - n) + '개');
   if (dryRun || !n) return;
@@ -142,6 +147,18 @@ function getHistory_(name, ctx) {
     return { source: '마스터시트', rows: v.map(function (r) { return { rec: dsIso_(r[0]), pay: dsIso_(r[1]), amt: dsNum_(r[3]), tax: r[4] === '' ? null : dsNum_(r[4]) }; }).filter(function (x) { return x.pay; }) };
   }
   var brand = name.toUpperCase().split(' ')[0];
+  if (ctx.down && ctx.down[brand]) throw new Error(brand + ' 사이트 접속 실패로 건너뜀 (' + ctx.down[brand] + ')');
+  if (ctx.deadline && Date.now() > ctx.deadline) throw new Error('실행 시간 한도가 가까워 이번엔 건너뜀');
+  try {
+    return officialHistory_(brand, name, ctx);
+  } catch (e) {
+    // 이름을 못 찾은 경우가 아니면 접속 문제로 보고, 이번 실행에서 같은 운용사는 더 조회하지 않음
+    if (ctx.down && !/못 찾음/.test(String(e))) ctx.down[brand] = String(e).slice(0, 80);
+    throw e;
+  }
+}
+
+function officialHistory_(brand, name, ctx) {
   switch (brand) {
     case 'KODEX': return { source: 'KODEX 공식', rows: kodexHistory_(name, ctx) };
     case 'RISE': return { source: 'RISE 공식', rows: riseHistory_(name, ctx) };
