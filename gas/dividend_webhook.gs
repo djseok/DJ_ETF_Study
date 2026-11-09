@@ -16,7 +16,8 @@ function doPost(e) {
     const recordDate = params.recordDate; 
     const payDate = params.payDate;       
     const dividend = Number(params.dividend);
-    const taxBase = Number(params.taxBase);
+    // 과세표준을 운용사가 안 준 경우(null·빈칸)는 0 이 아니라 빈칸으로 둠 (동진님 규칙 2026-10-21)
+    const taxBase = (params.taxBase === null || params.taxBase === undefined || params.taxBase === "") ? "" : Number(params.taxBase);
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const dbSheetName = "DB_" + etfName;
