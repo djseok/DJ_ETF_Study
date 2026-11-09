@@ -43,7 +43,13 @@ if not WEBHOOK_URL or not WEBHOOK_TOKEN:
     print("❌ WEBHOOK_URL / WEBHOOK_TOKEN 환경변수가 없습니다. GitHub Secrets 등록을 확인하세요.")
     sys.exit(1)
 
-GAS_TIMEOUT = 60  # 구글 웹앱 대리 조회(TIGER·RISE) 대기 시간
+
+# 실행 위치
+#  - cloud (기본, GitHub Actions): 해외 서버라 미래에셋(TIGER)·KB(RISE)가 접속을 막음 → 이 둘은 건너뜀
+#  - local (동진님 PC, tools/pc_dividend): 한국 IP 로 TIGER·RISE 만 운용사에서 직접 받음
+#    (2026-11 확인: 두 운용사 모두 GitHub·구글 서버 접속 차단)
+SCRAPER_MODE = os.environ.get("SCRAPER_MODE", "cloud").strip().lower()
+PC_ISSUERS = ("TIGER", "RISE")
 
 def code_or(x):
     return str(x)[-60:]
@@ -61,33 +67,72 @@ def format_date(d_str):
         return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
     return d_str
 
+def tax_or_none(v):
+    """과세표준: 운용사 응답에 값이 없으면 0 이 아니라 None(시트 빈칸). 0 은 실제 0 일 때만 (동진님 규칙 2026-10-21)"""
+    if v is None: return None
+    t = str(v).replace(',', '').replace('원', '').strip()
+    if t in ('', '-', 'None', 'null'): return None
+    try: return int(float(t))
+    except ValueError: return None
+
 # ==========================================
 # 📡 2. 운용사별 6대 크롤링 엔진
 # ==========================================
 
-def engine_tiger(code):
-    """ [TIGER] 해외 IP 차단 방어: 구글 GAS 서버를 스파이로 활용하는 우회 통로 """
-    url = f"{WEBHOOK_URL}?action=tiger&code={code}&token={WEBHOOK_TOKEN}"
+TIGER_BASE = "https://investments.miraeasset.com/tigeretf/ko/distribution/overall/"
+TIGER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
+def engine_tiger_direct(code, months=13):
+    """ [TIGER · PC] 미래에셋 분배 내역을 한국 IP 에서 직접 조회 (gas/dividend_webhook.gs fetchTigerDistributions_ 와 같은 방식)
+    목록 화면에서 쿠키를 받고, 월별 list.ajax 표에서 이 종목 줄만 읽음
+    칸 순서: 종목명(코드) | 유형 | 지급기준일 | 실지급일 | 주당분배금 | 주당과세표준액 | 분배율 """
+    result, seen = [], set()
+    try:
+        ses = requests.Session()
+        ses.headers.update({"User-Agent": TIGER_UA})
+        page = ses.get(TIGER_BASE + "list.do", timeout=20)
+        if page.status_code != 200: raise ValueError(f"목록 화면 HTTP {page.status_code}")
+        y, m = time.localtime().tm_year, time.localtime().tm_mon
+        for i in range(months):
+            yy, mm = (y, m - i) if m - i > 0 else (y - 1, m - i + 12)
+            res = ses.post(TIGER_BASE + "list.ajax", timeout=20,
+                           data={"pageIndex": "1", "firstIndex": "0", "listCnt": "20", "orderC": "", "orderType": "", "orderB": "",
+                                 "selectYear": str(yy), "selectMonth": str(mm), "q": code},
+                           headers={"X-Requested-With": "XMLHttpRequest", "Referer": TIGER_BASE + "list.do"})
+            if res.status_code != 200: raise ValueError(f"{yy}-{mm:02d} 조회 HTTP {res.status_code}")
+            for tr in BeautifulSoup(res.text, "html.parser").find_all("tr"):
+                cells = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
+                if len(cells) < 6 or f"({code})" not in cells[0]: continue
+                rec = cells[2].strip()
+                if not re.match(r"^\d{4}-\d{2}-\d{2}$", rec) or rec in seen: continue
+                div = tax_or_none(cells[4])
+                if not div: continue
+                seen.add(rec)
+                result.append({"recordDate": rec, "payDate": format_date(cells[3]), "dividend": div, "taxBase": tax_or_none(cells[5])})
+            time.sleep(0.3)
+        result.sort(key=lambda x: x["recordDate"], reverse=True)  # 최신순 (아래에서 뒤집어 오래된 것부터 기록)
+        if not result: raise ValueError("최근 13개월 분배 내역 0건 (화면 구조가 바뀌었을 수 있음)")
+    except Exception as e: print(f"  [TIGER 에러]: {e}"); ERRORS.append(f"TIGER {code}: {e}")
+    return result
+
+def engine_rise_direct(url):
+    """ [RISE · PC] kbam.co.kr 분배 API 를 한국 IP 에서 직접 조회 """
     result = []
     try:
-        # 깃허브가 구글 서버(GAS)에게 "대신 다녀와 줘!" 라고 GET 요청을 보냄
-        for attempt in range(2):
-            res = requests.get(url, timeout=GAS_TIMEOUT)
-            try:
-                body = res.json(); break
-            except ValueError:
-                # 구글 웹앱이 가끔 JSON 대신 오류 화면을 돌려줌 (10/21 474220) → 한 번 더
-                if attempt == 1: raise ValueError(f"구글 응답이 JSON 아님 (HTTP {res.status_code})")
-                time.sleep(3)
-        for item in body.get('resultList', []):
-            if int(item.get('dividendAmt', 0)) > 0:
-                result.append({
-                    "recordDate": format_date(item.get('recordDate')),
-                    "payDate": format_date(item.get('paymentDate')),
-                    "dividend": int(item.get('dividendAmt')),
-                    "taxBase": int(item.get('taxStandardAmt', 0))
-                })
-    except Exception as e: print(f"  [TIGER 프록시 에러]: {redact(e)}"); ERRORS.append(f"TIGER {code}: {redact(e)}")
+        res = http_get(url, timeout=30, headers={'User-Agent': 'Mozilla/5.0'})
+        body = res.json()
+        if 'history' not in body: raise ValueError("응답에 history 없음")
+        for item in body['history']:
+            div = tax_or_none(item.get('amount'))
+            if not div: continue
+            result.append({
+                "recordDate": str(item.get('base_date')).strip(),
+                "payDate": str(item.get('payment_date')).strip(),
+                "dividend": div,
+                "taxBase": tax_or_none(item.get('tax_standard_amount'))
+            })
+        if not result: raise ValueError("분배 내역 0건")
+    except Exception as e: print(f"  [RISE 에러]: {e}"); ERRORS.append(f"RISE {code_or(url)}: {e}")
     return result
 
 def engine_kiwoom(code):
@@ -108,7 +153,7 @@ def engine_kiwoom(code):
                             "recordDate": format_date(cols[0]),
                             "payDate": format_date(cols[1]),
                             "dividend": int(cols[2].replace(',', '')),
-                            "taxBase": int(cols[4].replace('원', '').replace(',', ''))
+                            "taxBase": tax_or_none(cols[4])
                         })
                 break
     except Exception as e: print(f"  [KIWOOM 에러]: {e}"); ERRORS.append(f"KIWOOM {code_or(url)}: {e}")
@@ -123,29 +168,9 @@ def engine_kodex(url):
                 "recordDate": format_date(item.get('basicD')),
                 "payDate": format_date(item.get('payD')),
                 "dividend": int(item.get('dividA', 0)),
-                "taxBase": int(item.get('taxDividA', 0))
+                "taxBase": tax_or_none(item.get('taxDividA'))
             })
     except Exception as e: print(f"  [KODEX 에러]: {e}"); ERRORS.append(f"KODEX {code_or(url)}: {e}")
-    return result
-
-def engine_rise(url):
-    """ [RISE] kbam.co.kr 이 GitHub(해외) 서버 접속을 받지 않아(접속 타임아웃) TIGER 처럼 구글 GAS 가 대신 조회 """
-    result = []
-    try:
-        m = re.search(r'/etfs/([0-9A-Za-z]+)/dividend', url)
-        if not m: raise ValueError("RISE 주소에서 상품 코드를 찾지 못했어요")
-        # 구글 웹앱은 처음 깨어날 때 + kbam 응답까지 20초를 넘기기도 함 (10/21 수동 실행에서 5종목 모두 20초 초과)
-        res = http_get(WEBHOOK_URL, timeout=GAS_TIMEOUT, params={"action": "rise", "id": m.group(1), "token": WEBHOOK_TOKEN})
-        body = res.json()
-        if 'history' not in body: raise ValueError(f"구글 대리 조회 실패: {body.get('message') or body.get('status') or '응답에 history 없음'}")
-        for item in body['history']:
-            result.append({
-                "recordDate": str(item.get('base_date')).strip(),
-                "payDate": str(item.get('payment_date')).strip(),
-                "dividend": int(float(item.get('amount', 0))),
-                "taxBase": int(float(item.get('tax_standard_amount', 0)))
-            })
-    except Exception as e: print(f"  [RISE 에러]: {redact(e)}"); ERRORS.append(f"RISE {code_or(url)}: {redact(e)}")
     return result
 
 def engine_ace(url):
@@ -157,7 +182,7 @@ def engine_ace(url):
                 "recordDate": format_date(item.get('std_DT')),
                 "payDate": format_date(item.get('dividend_DT')),
                 "dividend": int(item.get('dividend_PRI', 0)),
-                "taxBase": int(item.get('tax_PRI', 0))
+                "taxBase": tax_or_none(item.get('tax_PRI'))
             })
     except Exception as e: print(f"  [ACE 에러]: {e}"); ERRORS.append(f"ACE {code_or(url)}: {e}")
     return result
@@ -171,7 +196,7 @@ def engine_sol(url):
                 "recordDate": format_date(item.get('WORK_DT')),
                 "payDate": format_date(item.get('DIVIDEND_DT')),
                 "dividend": int(item.get('DIVIDEND_PRI', 0)),
-                "taxBase": int(item.get('WEEK_PRI', 0))
+                "taxBase": tax_or_none(item.get('WEEK_PRI'))
             })
     except Exception as e: print(f"  [SOL 에러]: {e}"); ERRORS.append(f"SOL {code_or(url)}: {e}")
     return result
@@ -180,7 +205,7 @@ def engine_sol(url):
 # 🚀 3. 메인 라우터 
 # ==========================================
 if __name__ == "__main__":
-    print("🤖 V18.4 TIGER 구글 스파이 우회 봇 출동!\n")
+    print(f"🤖 V18.5 배당 봇 출동! (실행 위치: {'PC · TIGER·RISE' if SCRAPER_MODE == 'local' else 'GitHub'})\n")
     
     df_master = pd.read_csv(CSV_URL, header=None)
     
@@ -191,17 +216,20 @@ if __name__ == "__main__":
         
         if etf_name in ["종목명", "이름", "nan"]: continue
         
+        issuer = "TIGER" if "TIGER" in etf_name.upper() else ("RISE" if "kbam" in etf_url else "")
+        if SCRAPER_MODE == "local" and issuer not in PC_ISSUERS:
+            continue  # PC 는 TIGER·RISE 만 (나머지는 GitHub 이 매일 처리)
+        if SCRAPER_MODE != "local" and issuer in PC_ISSUERS:
+            print(f"⏭️ {etf_name}: {issuer} 는 해외 서버 접속이 막혀 동진님 PC 수집(tools/pc_dividend)이 담당해요.")
+            continue
         print(f"🔍 [스캔 중] {etf_name} ({code})")
         extracted_data = []
-        
-        if "TIGER" in etf_name.upper():
-            extracted_data = engine_tiger(code)
+        if SCRAPER_MODE == "local":
+            extracted_data = engine_tiger_direct(code) if issuer == "TIGER" else engine_rise_direct(etf_url)
         elif "KIWOOM" in etf_name.upper():
             extracted_data = engine_kiwoom(code)
         elif "samsungfund" in etf_url:
             extracted_data = engine_kodex(etf_url)
-        elif "kbam" in etf_url:
-            extracted_data = engine_rise(etf_url)
         elif "aceetf" in etf_url:
             extracted_data = engine_ace(etf_url)
         elif "soletf" in etf_url:

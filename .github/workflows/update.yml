@@ -21,6 +21,7 @@ jobs:
       - name: 📦 V17.1 크롤링 필수 라이브러리 설치
         run: pip install requests pandas lxml html5lib beautifulsoup4 urllib3
 
+      # TIGER·RISE 는 해외 서버 차단으로 동진님 PC(tools/pc_dividend)가 수집 → 여기서는 건너뜀
       - name: 🚀 배당금 마스터 봇 출동!
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
