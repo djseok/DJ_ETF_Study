@@ -1,6 +1,8 @@
 /**
  * 📥 배당 봇 Webhook (동진_웹송출용_마스터시트 Apps Script 의 Code.gs 원본 사본)
  * - doPost : 배당 봇(scraper.py)이 보낸 배당 기록을 DB_종목 탭과 마스터데이터 탭에 기록 (토큰 필요)
+ *            rows:[…] 로 한 종목 기록을 한 번에 받으면 중복 확인도 한 번만 (2026-11 종목 62개로 늘면서)
+ *            action=register → 새로 찾은 커버드콜 ETF 를 '관리코드' 탭에 한 줄 추가 (이미 있으면 그대로)
  * - doGet  : action=tiger → 미래에셋 TIGER 분배 내역을 대신 조회해서 봇에 전달 (토큰 필요)
  *            action=rise  → KB자산운용 RISE 분배 내역을 대신 조회 (토큰 필요)
  * 배포: 배포 관리 → 기존 배포(AKfycbyQ65…) → 새 버전  /  토큰 함수는 webhook_security.gs
@@ -11,6 +13,8 @@ function doPost(e) {
   try {
     const params = JSON.parse(e.postData.contents);
     if (!isWebhookAuthorized_(params.token)) return unauthorizedResponse_(); // 🔐 토큰이 맞는 요청만 기록
+    if (params.action === 'register') return jsonOut_(registerEtf_(params));
+    if (Array.isArray(params.rows)) return jsonOut_(writeRows_(params.etfName, params.code, params.rows));
     const etfName = params.etfName;       
     const code = params.code;             
     const recordDate = params.recordDate; 
@@ -54,6 +58,77 @@ function doPost(e) {
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": error.toString()})).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function taxCell_(v) {
+  return (v === null || v === undefined || v === "") ? "" : Number(v);
+}
+
+// 한 종목의 기록 여러 줄을 한 번에: 기존 지급기준일을 한 번만 읽고, 없는 날짜만 아래에 추가
+function writeRows_(etfName, code, rows) {
+  if (!etfName || !code) return { status: "error", message: "etfName/code 없음" };
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dbSheetName = "DB_" + etfName;
+  let dbSheet = ss.getSheetByName(dbSheetName);
+  if (!dbSheet) {
+    dbSheet = ss.insertSheet(dbSheetName);
+    dbSheet.appendRow(["지급기준일", "실지급일", "당일 종가", "1주당 실지급 배당금", "1주당 과세표준액"]);
+    dbSheet.getRange("A1:E1").setFontWeight("bold").setBackground("#D9E1F2");
+    SpreadsheetApp.flush();
+  }
+  ensureMasterRow_(ss, etfName, code, dbSheetName);
+
+  const seen = {};
+  const lastRow = dbSheet.getLastRow();
+  if (lastRow >= 2) {
+    dbSheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function (r) {
+      if (r[0]) seen[Utilities.formatDate(new Date(r[0]), "GMT+9", "yyyy-MM-dd")] = true;
+    });
+  }
+  const added = [];
+  let duplicate = 0;
+  rows.forEach(function (r) {
+    const d = String(r.recordDate || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    if (seen[d]) { duplicate++; return; }
+    seen[d] = true;
+    const newRow = dbSheet.getLastRow() + 1;
+    dbSheet.appendRow([d, r.payDate, "", Number(r.dividend), taxCell_(r.taxBase)]);
+    dbSheet.getRange(newRow, 3).setFormula(`=IFERROR(INDEX(GOOGLEFINANCE("KRX:${code}", "close", WORKDAY(A${newRow}+1, -1)), 2, 2), "")`);
+    added.push(d);
+  });
+  return { status: "batch", added: added, duplicate: duplicate };
+}
+
+// 새 커버드콜 ETF 를 '관리코드' 탭에 등록 (A 이름, B 종목코드 글자 그대로, C 운용사 배당 주소)
+function registerEtf_(p) {
+  const name = String(p.etfName || "").trim();
+  const code = String(p.code || "").trim().toUpperCase();
+  const url = String(p.url || "").trim();
+  if (!name || !/^[0-9A-Z]{6}$/.test(code)) return { status: "error", message: "이름/코드 형식 오류" };
+  if (url && !/^https:\/\/[^\s]+$/.test(url)) return { status: "error", message: "주소 형식 오류" };
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("관리코드");
+  if (!sheet) return { status: "error", message: "관리코드 탭 없음" };
+  const last = sheet.getLastRow();
+  if (last >= 1) {
+    const vals = sheet.getRange(1, 1, last, 3).getDisplayValues();
+    for (let i = 0; i < vals.length; i++) {
+      const c = String(vals[i][1]).trim().toUpperCase();
+      if (c === code || (c && ("000000" + c).slice(-6) === code)) {
+        // 이미 있는 줄: C열이 비어 있을 때만 주소를 채움
+        if (url && !String(vals[i][2]).trim()) { sheet.getRange(i + 1, 3).setValue(url); return { status: "updated" }; }
+        return { status: "exists" };
+      }
+    }
+  }
+  const row = last + 1;
+  sheet.getRange(row, 2).setNumberFormat("@");
+  sheet.getRange(row, 1, 1, 3).setValues([[name, code, url]]);
+  return { status: "registered" };
 }
 
 // 마스터데이터 탭에 종목 줄이 없으면 추가 (시세 실패 시 DB_ 탭의 '가장 최근' 종가로 대체)
